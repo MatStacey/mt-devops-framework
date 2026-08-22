@@ -46,9 +46,11 @@ if [ ! -s "$CONFIG_FILE" ] && [ -f "$TEMPLATE_FILE" ]; then
   mkdir -p "$(dirname "$CONFIG_FILE")"
   cp "$TEMPLATE_FILE" "$CONFIG_FILE"
 
-  # Automatically bind the SYNC_REPO to the directory where install.sh was executed
+  # Automatically bind dotfiles_dir/sync_repo_dir to the directory where
+  # install.sh was executed. Matches on the value itself (not a specific
+  # key) so it rebinds both paths.* keys that default to this same path.
   echo "🔗 Binding sync repository path to extraction directory..."
-  sed -i "s|sync_repo: ~/vcs/personal/mt-devops-framework|sync_repo: $REPO_DIR|g" "$CONFIG_FILE"
+  sed -i "s|~/vcs/personal/mt-devops-framework|$REPO_DIR|g" "$CONFIG_FILE"
 fi
 
 echo "✅ Files successfully synced to home directory."
