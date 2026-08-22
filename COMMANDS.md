@@ -380,6 +380,11 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `terraform` | Terraform: Core wrapper (preserves args) |
 
+### Utilities: Temporary HTTP File Server
+| Command | Description |
+|---|---|
+| `mt-serve` | System: Host the current directory over a temporary HTTP server |
+
 ### Version Control (Git) - AI Workflows
 | Command | Description |
 |---|---|
