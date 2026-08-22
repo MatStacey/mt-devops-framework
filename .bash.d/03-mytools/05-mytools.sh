@@ -532,8 +532,8 @@ mt-help() {
     local raw_data
     raw_data=$(awk -v target="$cmd" '
       BEGIN { flag=0; doc=""; code="" }
-      /^#######################################/ { next }
-      /^#/ {
+      !flag && /^#######################################/ { next }
+      !flag && /^#/ {
           line = substr($0, 2)
           sub(/^[ \t]/, "", line)
           doc = doc line "\n"
