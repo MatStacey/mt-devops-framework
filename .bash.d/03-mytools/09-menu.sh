@@ -152,6 +152,14 @@ __mt_menu_git() {
 }
 
 #######################################
+# System: "General Utilities" submenu
+#######################################
+__mt_menu_utilities() {
+  __mt_menu_submenu "🛠️  General Utilities" \
+    "Serve Current Directory over HTTP (mt-serve)" mt-serve
+}
+
+#######################################
 # System: Launch the interactive master router for the entire framework
 # Usage: mt-menu
 #######################################
@@ -174,7 +182,8 @@ mt-menu() {
       "5. 🐳 Docker Tools"
       "6. ☁️  Cloud & Infra"
       "7. 🌿 Git Workflows"
-      "8. 🚪 Exit"
+      "8. 🛠️  General Utilities"
+      "9. 🚪 Exit"
     )
 
     local choice
@@ -188,6 +197,7 @@ mt-menu() {
       5*) __mt_menu_docker ;;
       6*) __mt_menu_infra ;;
       7*) __mt_menu_git ;;
+      8*) __mt_menu_utilities ;;
       *) return 0 ;;
     esac
   done
