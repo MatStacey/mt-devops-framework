@@ -215,6 +215,26 @@ mt-toggle-format-on-push() {
 }
 
 #######################################
+# Config: Toggle whether mt-get-update pauses to confirm before overwriting
+# local ~/.bash.d modifications that diverge from the downloaded release
+# (true/false). Defaults to false, since most users don't carry local,
+# unpushed changes to their deployed tree and just want updates to apply.
+#######################################
+mt-toggle-update-confirm() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  local current="${CONFIRM_UPDATE_DIVERGENCE:-false}"
+  local next="true"
+  [ "$current" = "true" ] && next="false"
+
+  python3 "$CONFIG_MANAGER" update "core" "confirm_update_divergence" "$next"
+  export CONFIRM_UPDATE_DIVERGENCE="$next"
+  echo "✅ Update-divergence confirmation set to $next."
+}
+
+#######################################
 # Config: Set the upstream repository path for framework updates
 # Arguments:
 #   $1 - The repository path (e.g., "MatStacey/mt-devops-framework")

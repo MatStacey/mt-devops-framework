@@ -180,6 +180,7 @@ __mt_menu_setup() {
     "Set CI/CD Provider (mt-set-cicd)" __mt_menu_pick_cicd \
     "Toggle AI Integration (mt-toggle-ai)" mt-toggle-ai \
     "Toggle Format-on-Push (mt-toggle-format-on-push)" mt-toggle-format-on-push \
+    "Toggle Update-Divergence Confirmation (mt-toggle-update-confirm)" mt-toggle-update-confirm \
     "Set Git Sync URL (mt-add-sync-url)" __mt_menu_add_sync_url \
     "Set Upstream Repo Path (mt-set-upstream-path)" __mt_menu_set_upstream_path \
     "Reload Config from Disk (mt-load-config)" mt-load-config \

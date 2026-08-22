@@ -2,6 +2,7 @@ core:
   theme: default
   default_ide: vscode
   update_check_ttl_sec: 43200
+  confirm_update_divergence: false
   max_parallel_threads: 8
   backup_warning_mb: 500
   log_rotate_bytes: 1048576

@@ -552,12 +552,17 @@ __mt_get_update_download_and_extract() {
 }
 
 #######################################
-# System: Warn about and confirm overwriting local ~/.bash.d modifications
-# that diverge from the downloaded release before it gets installed
+# System: Warn about local ~/.bash.d modifications that diverge from the
+# downloaded release before it gets installed. By default this just warns
+# and proceeds; set CONFIRM_UPDATE_DIVERGENCE=true (mt-toggle-update-confirm)
+# to pause and require an explicit confirmation before overwriting instead.
 # Arguments:
 #   $1 - Path to the extracted release's root directory
+# Globals:
+#   CONFIRM_UPDATE_DIVERGENCE
 # Returns:
-#   0 to proceed with the update, 1 if the user declined
+#   0 to proceed with the update, 1 if the user declined (only possible
+#   when CONFIRM_UPDATE_DIVERGENCE=true)
 #######################################
 __mt_get_update_check_divergence() {
   local ext_root="$1"
@@ -570,8 +575,13 @@ __mt_get_update_check_divergence() {
   mt-log WARN "Applying this update will overwrite local modifications in ~/.bash.d."
   echo -e "${CB_YELLOW}Modified files detected:${C_RESET}"
   diff -r -w -q "$HOME/.bash.d" "${ext_root}/.bash.d" 2> /dev/null | grep -v -E "Only in|data/cache|config/\.env\.cache|data/\.current_version" | awk '{print "  • " $2 " " $4}'
-
   echo ""
+
+  if [ "${CONFIRM_UPDATE_DIVERGENCE:-false}" != "true" ]; then
+    echo -e "${CB_YELLOW}⚠️  Proceeding and overwriting the files above. Run 'mt-toggle-update-confirm' to require confirmation here instead.${C_RESET}"
+    return 0
+  fi
+
   read -r -p "🔍 View detailed diff line-by-line before proceeding? [y/N] " -n 1 -r < /dev/tty
   echo
   if [[ $REPLY =~ ^[Yy]$ ]]; then
