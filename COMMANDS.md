@@ -77,11 +77,6 @@ Shortcuts for common commands and CLI replacements.
 | `gcp-crf-ls` | GCP: Cloud Run Functions - List functions |
 | `gcs-ls` | GCP: Cloud Storage - List buckets or contents |
 
-### General System Utilities
-| Command | Description |
-|---|---|
-| `mt-history` | System: Display history of executed framework commands (Alias) |
-
 ### Modern CLI Replacements
 | Command | Description |
 |---|---|
@@ -104,6 +99,11 @@ Shortcuts for common commands and CLI replacements.
 | Command | Description |
 |---|---|
 | `cd-mt-git-local` | System: Change directory to dotfiles repository root (Alias) |
+
+### Private Aliases (local-only -- never synced to the framework repo)
+| Command | Description |
+|---|---|
+| `mt-history` | System: Display history of executed framework commands (Alias) |
 
 ### System & Navigation Aliases
 | Command | Description |
@@ -275,13 +275,9 @@ Complex bash functions, framework utilities, and automated workflows.
 | Command | Description |
 |---|---|
 | `mt-alias` | System: Interactively create or update an alias |
-| `mt-apply` | System: Safely execute or write clipboard code without terminal paste truncation |
 | `mt-backup` | System: Create an archive backup of the current directory |
-| `mt-cmd-history` | System: Display history of executed framework commands |
-| `mt-jobs` | System: List and manage MT background jobs |
 | `mt-log` | System: Centralized logging for MyTools |
 | `mt-logs` | System: View, filter, and manage framework logs |
-| `mt-restore` | System: Restore framework from a zip backup |
 | `mt-top-files` | System: Display the top largest files in a directory |
 | `mt-vcs-audit` | System: Audit VCS root for unorganized files and directories |
 
@@ -338,6 +334,14 @@ Complex bash functions, framework utilities, and automated workflows.
 | `win-ai-workspace` | AI: Open unified AI workspace in the platform's native file manager (shortcut for `win ai`) |
 | `win-docker` | Docker: Open Docker root directory in the platform's native file manager (shortcut for `win docker`) |
 | `win-sync` | System: Open sync repository in the platform's native file manager (shortcut for `win sync`) |
+
+### Private Aliases (local-only -- never synced to the framework repo)
+| Command | Description |
+|---|---|
+| `mt-apply` | System: Safely execute or write clipboard code without terminal paste truncation |
+| `mt-cmd-history` | System: Display history of executed framework commands |
+| `mt-jobs` | System: List and manage MT background jobs |
+| `mt-restore` | System: Restore framework from a zip backup |
 
 ### System & Environment Bootstrap
 | Command | Description |

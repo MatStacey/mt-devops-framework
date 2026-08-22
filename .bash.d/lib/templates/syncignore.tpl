@@ -20,3 +20,6 @@ Dockerfile
 .gitleaks.toml
 config/github_token.sh
 config/*_token.sh
+*private*.sh
+*.local.sh
+*.local

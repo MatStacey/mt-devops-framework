@@ -383,17 +383,21 @@ mt-logs() {
 
 #######################################
 # System: Interactively create or update an alias
-# Usage: mt-alias [-u alias_name] [-i]
+# Usage: mt-alias [-u alias_name] [-i] [-p]
 # Options:
 #   -u, --update <name>   Update a specific existing alias
 #   -i, --interactive     Select an existing alias to update via fzf
+#   -p, --private         Create the alias in a local-only file that is
+#                         never synced to the framework repo (matches
+#                         install.sh's own *private*.sh protection, so it
+#                         also survives fresh installs and mt-get-update)
 #######################################
 mt-alias() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
-  local update_name="" interactive=false
+  local update_name="" interactive=false private=false
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
       -u | --update)
@@ -402,6 +406,10 @@ mt-alias() {
         ;;
       -i | --interactive)
         interactive=true
+        shift
+        ;;
+      -p | --private)
+        private=true
         shift
         ;;
       *)
@@ -414,12 +422,20 @@ mt-alias() {
     update_name=$(awk -F'\t' '$1 == "alias" { printf "%-24s │ %-20s │ %s\n", $3, $2, $4 }' "$HOME/.bash.d/data/cache/.mt_data.tsv" | fzf --ansi --prompt="Select Alias to Update > " | awk '{print $1}')
     [ -z "$update_name" ] && return 0
   fi
-  local alias_name="$update_name" default_cmd="" default_cat="User Custom" default_desc="" aliases_file="$HOME/.bash.d/02-utilities/20-aliases.sh"
+  local alias_name="$update_name" default_cmd="" default_cat="User Custom" default_desc=""
+  local public_aliases_file="$HOME/.bash.d/02-utilities/20-aliases.sh"
+  local private_aliases_file="$HOME/.bash.d/02-utilities/20-aliases.private.sh"
+  local aliases_file="$public_aliases_file"
+  [ "$private" = true ] && aliases_file="$private_aliases_file"
   echo -e "${CB_BLUE}==========================================================${C_RESET}"
   if [ -n "$alias_name" ]; then
-    if ! grep -qE "^[ \t]*alias ${alias_name}=" "$aliases_file"; then
+    if grep -qE "^[ \t]*alias ${alias_name}=" "$private_aliases_file" 2> /dev/null; then
+      aliases_file="$private_aliases_file"
+    elif ! grep -qE "^[ \t]*alias ${alias_name}=" "$public_aliases_file" 2> /dev/null; then
       echo -e "${CB_RED}🚨 Error: Alias '${alias_name}' not found.${C_RESET}"
       return 1
+    else
+      aliases_file="$public_aliases_file"
     fi
     echo -e "${CB_CYAN} 🛠️  Update Existing Alias: ${alias_name}${C_RESET}"
     default_cmd=$(grep -E "^[ \t]*alias ${alias_name}=" "$aliases_file" | sed -E "s/^[ \t]*alias ${alias_name}=['\"]?//;s/['\"]?$//")
@@ -430,10 +446,10 @@ mt-alias() {
       default_desc=$(echo "$tsv_line" | cut -d'|' -f2)
     fi
   else
-    echo -e "${CB_CYAN} 🛠️  Create New Alias${C_RESET}"
+    echo -e "${CB_CYAN} 🛠️  Create New $([ "$private" = true ] && echo "Private ")Alias${C_RESET}"
     read -r -p "1️⃣  Alias Name (e.g., kgpo)     : " alias_name
     [ -z "$alias_name" ] && return 1
-    if grep -qE "^[ \t]*alias ${alias_name}=" "$aliases_file"; then
+    if grep -qE "^[ \t]*alias ${alias_name}=" "$public_aliases_file" 2> /dev/null || grep -qE "^[ \t]*alias ${alias_name}=" "$private_aliases_file" 2> /dev/null; then
       echo -e "${CB_RED}🚨 Alias already exists. Use -u to update.${C_RESET}"
       return 1
     fi
@@ -460,6 +476,15 @@ while i < len(l):
     o.append(l[i]); i += 1
 while o and o[-1].strip() == '': o.pop()
 with open(p, 'w') as f: f.write('\n'.join(o) + '\n')" "$aliases_file" "$alias_name"
+  fi
+  if [ ! -f "$aliases_file" ]; then
+    cat << HEADEREOF > "$aliases_file"
+# shellcheck shell=bash
+# ------------------------------------------
+# Private Aliases (local-only -- never synced to the framework repo)
+# ------------------------------------------
+# ~/.bash.d/02-utilities/20-aliases.private.sh
+HEADEREOF
   fi
   cat << ALIASEOF >> "$aliases_file"
 
