@@ -310,6 +310,7 @@ __mt_menu_git() {
 __mt_menu_utilities() {
   __mt_menu_submenu "🛠️  General Utilities" \
     "Serve Current Directory over HTTP (mt-serve)" mt-serve \
+    "Run Internet Speed Test (mt-speedtest)" mt-speedtest \
     "Scaffold Repo from Blueprint (mt-blueprint)" mt-blueprint \
     "Encode Text to Base64 (base64-enc)" __mt_menu_base64_encode \
     "Decode Base64 Text (base64-dec)" __mt_menu_base64_decode \

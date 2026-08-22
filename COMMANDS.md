@@ -324,6 +324,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-status` | System: Display a unified health check and status dashboard |
 | `mytools` | MyTools: Primary runner and documentation index |
 
+### Networking: Speed Test Utility
+| Command | Description |
+|---|---|
+| `mt-speedtest` | Networking: Run an internet speed test via the Ookla Speedtest CLI, |
+
 ### Path & URL Launchers (Config-Driven)
 | Command | Description |
 |---|---|
