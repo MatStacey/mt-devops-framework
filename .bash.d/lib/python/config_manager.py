@@ -75,6 +75,11 @@ def load_env():
     export("DEFAULT_IDE", core_cfg.get("default_ide", "vscode"), to_lower=True)
     export("BASH_THEME", core_cfg.get("theme", "default"), to_lower=True)
     export("UPDATE_CHECK_TTL_SEC", core_cfg.get("update_check_ttl_sec", 43200))
+    export(
+        "CONFIRM_UPDATE_DIVERGENCE",
+        core_cfg.get("confirm_update_divergence", False),
+        to_lower=True,
+    )
     export("MAX_PARALLEL_THREADS", core_cfg.get("max_parallel_threads", 8))
     export("BACKUP_WARNING_MB", core_cfg.get("backup_warning_mb", 500))
     export("LOG_ROTATE_BYTES", core_cfg.get("log_rotate_bytes", 1048576))
