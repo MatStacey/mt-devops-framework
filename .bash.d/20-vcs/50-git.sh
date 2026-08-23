@@ -316,7 +316,13 @@ __git_raise_pr_create_or_open() {
 
     echo -e "${CB_GREEN}✅ Pull Request created successfully!${C_RESET}"
 
-    read -r -p "🌐 View Pull Request in browser? [Y/n] " -n 1 < /dev/tty
+    # Opening the browser is a best-effort convenience past this point --
+    # PR creation itself already succeeded and returned above on failure,
+    # so nothing here (a no-tty environment failing this read, or
+    # __open_url failing with no display available) should be allowed to
+    # make the function, and therefore git-raise-pr, report failure for a
+    # PR that was actually created fine.
+    read -r -p "🌐 View Pull Request in browser? [Y/n] " -n 1 < /dev/tty || REPLY="n"
     echo
     if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ] || [ -z "$REPLY" ]; then
       local pr_url
@@ -343,6 +349,7 @@ __git_raise_pr_create_or_open() {
 
     __open_url "$web_url"
   fi
+  return 0
 }
 
 #######################################
