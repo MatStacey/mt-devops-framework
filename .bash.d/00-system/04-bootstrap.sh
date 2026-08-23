@@ -177,6 +177,192 @@ __install_speedtest() {
 }
 
 #######################################
+# System: Install eza (a modern ls replacement) -- absent from a bare
+# Debian/Ubuntu APT repo, so Linux needs the project's own third-party
+# repo added first. macOS already covers this via a plain BREW_DEPENDENCIES
+# entry, since eza is a standard homebrew-core formula there.
+#######################################
+__install_eza() {
+  echo -e "\n📦 Installing eza..."
+
+  if [ "$OS_FAMILY" = "macos" ]; then
+    if command -v brew > /dev/null 2>&1; then
+      brew install eza
+    else
+      echo "🚨 Homebrew is required to install eza on macOS."
+      return 1
+    fi
+
+  elif command -v apt-get > /dev/null 2>&1; then
+    sudo mkdir -p /etc/apt/keyrings
+    if ! curl -fsSL https://raw.githubusercontent.com/eza-community/eza/main/deb.asc | sudo gpg --dearmor -o /etc/apt/keyrings/gierens.gpg; then
+      echo "🚨 Failed to add the eza repository's signing key."
+      return 1
+    fi
+    echo "deb [signed-by=/etc/apt/keyrings/gierens.gpg] http://deb.gierens.de stable main" | sudo tee /etc/apt/sources.list.d/gierens.list > /dev/null
+    sudo chmod 644 /etc/apt/keyrings/gierens.gpg /etc/apt/sources.list.d/gierens.list
+    sudo apt-get update > /dev/null 2>&1
+    if ! sudo apt-get install -y eza; then
+      echo "🚨 eza installation failed."
+      return 1
+    fi
+
+  else
+    echo "🚨 Unsupported platform for eza."
+    return 1
+  fi
+
+  if command -v eza > /dev/null 2>&1; then
+    echo "✅ eza is available at: $(command -v eza)"
+  else
+    echo "🚨 eza installation failed."
+    return 1
+  fi
+}
+
+#######################################
+# System: Install Terraform via HashiCorp's official APT repo (Linux) or
+# the hashicorp/tap Homebrew tap (macOS) -- required since Terraform's
+# BSL license removed it from both apt's default repos and homebrew-core.
+#######################################
+__install_terraform() {
+  echo -e "\n📦 Installing Terraform..."
+
+  if [ "$OS_FAMILY" = "macos" ]; then
+    if command -v brew > /dev/null 2>&1; then
+      brew tap hashicorp/tap
+      brew install hashicorp/tap/terraform
+    else
+      echo "🚨 Homebrew is required to install Terraform on macOS."
+      return 1
+    fi
+
+  elif command -v apt-get > /dev/null 2>&1; then
+    local codename=""
+    [ -f /etc/os-release ] && codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+    if [ -z "$codename" ]; then
+      echo "🚨 Could not detect the OS codename required for HashiCorp's APT repo."
+      return 1
+    fi
+
+    if ! curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg; then
+      echo "🚨 Failed to add HashiCorp's repository signing key."
+      return 1
+    fi
+    echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com ${codename} main" | sudo tee /etc/apt/sources.list.d/hashicorp.list > /dev/null
+    sudo apt-get update > /dev/null 2>&1
+    if ! sudo apt-get install -y terraform; then
+      echo "🚨 Terraform installation failed."
+      return 1
+    fi
+
+  else
+    echo "🚨 Unsupported platform for Terraform."
+    return 1
+  fi
+
+  if command -v terraform > /dev/null 2>&1; then
+    echo "✅ Terraform is available at: $(command -v terraform)"
+  else
+    echo "🚨 Terraform installation failed."
+    return 1
+  fi
+}
+
+#######################################
+# System: Install the Google Cloud CLI via Google's official APT repo
+# (Linux) or the google-cloud-sdk cask (macOS)
+#######################################
+__install_gcloud() {
+  echo -e "\n📦 Installing Google Cloud CLI..."
+
+  if [ "$OS_FAMILY" = "macos" ]; then
+    if command -v brew > /dev/null 2>&1; then
+      brew install --cask google-cloud-sdk
+    else
+      echo "🚨 Homebrew is required to install the Google Cloud CLI on macOS."
+      return 1
+    fi
+
+  elif command -v apt-get > /dev/null 2>&1; then
+    if ! curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg; then
+      echo "🚨 Failed to add Google Cloud's repository signing key."
+      return 1
+    fi
+    echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list > /dev/null
+    sudo apt-get update > /dev/null 2>&1
+    if ! sudo apt-get install -y google-cloud-cli; then
+      echo "🚨 Google Cloud CLI installation failed."
+      return 1
+    fi
+
+  else
+    echo "🚨 Unsupported platform for the Google Cloud CLI."
+    return 1
+  fi
+
+  if command -v gcloud > /dev/null 2>&1; then
+    echo "✅ gcloud is available at: $(command -v gcloud)"
+  else
+    echo "🚨 Google Cloud CLI installation failed."
+    return 1
+  fi
+}
+
+#######################################
+# System: Install kubectl via a direct binary download from Kubernetes'
+# own stable-release endpoint (Linux) or the standard Homebrew formula
+# (macOS) -- avoids pinning to one versioned APT repo, matching the same
+# direct-download approach __bootstrap_yq already uses for yq.
+#######################################
+__install_kubectl() {
+  echo -e "\n📦 Installing kubectl..."
+
+  if [ "$OS_FAMILY" = "macos" ]; then
+    if command -v brew > /dev/null 2>&1; then
+      brew install kubectl
+    else
+      echo "🚨 Homebrew is required to install kubectl on macOS."
+      return 1
+    fi
+
+  elif command -v curl > /dev/null 2>&1; then
+    local arch
+    arch="$(dpkg --print-architecture 2> /dev/null || uname -m)"
+    [ "$arch" = "x86_64" ] && arch="amd64"
+    [ "$arch" = "aarch64" ] && arch="arm64"
+
+    local version
+    version="$(curl -fsSL https://dl.k8s.io/release/stable.txt)"
+    if [ -z "$version" ]; then
+      echo "🚨 Could not resolve the latest stable kubectl version."
+      return 1
+    fi
+
+    local tmpfile
+    tmpfile="$(mktemp)"
+    if ! curl -fsSL -o "$tmpfile" "https://dl.k8s.io/release/${version}/bin/linux/${arch}/kubectl"; then
+      echo "🚨 Failed to download kubectl."
+      rm -f "$tmpfile"
+      return 1
+    fi
+    sudo install -o root -g root -m 0755 "$tmpfile" /usr/local/bin/kubectl
+    rm -f "$tmpfile"
+
+  else
+    echo "🚨 Unsupported platform for kubectl."
+    return 1
+  fi
+
+  if command -v kubectl > /dev/null 2>&1; then
+    echo "✅ kubectl is available at: $(command -v kubectl)"
+  else
+    echo "🚨 kubectl installation failed."
+    return 1
+  fi
+}
+
+#######################################
 # System: Check and report missing external dependencies
 #######################################
 __bootstrap_external() {
@@ -187,6 +373,18 @@ __bootstrap_external() {
     case "$dep" in
       speedtest)
         __install_speedtest
+        ;;
+      eza)
+        __install_eza
+        ;;
+      terraform)
+        __install_terraform
+        ;;
+      gcloud)
+        __install_gcloud
+        ;;
+      kubectl)
+        __install_kubectl
         ;;
       *)
         echo "⚠️ No installer defined for external dependency: $dep"
@@ -205,6 +403,34 @@ __bootstrap_check_complex() {
   if [ ${#missing_complex[@]} -gt 0 ]; then
     echo -e "\n⚠️  The following tools are missing and require manual repo config:"
     for dep in "${missing_complex[@]}"; do echo "  - $dep"; done
+  fi
+}
+
+#######################################
+# System: Install the GitHub CLI and Claude Code if either is missing --
+# shared by bootstrap() and install-wizard.sh so this logic exists once
+#######################################
+__bootstrap_gh_and_claude() {
+  if ! command -v gh > /dev/null 2>&1; then
+    echo -e "${CB_BLUE}📦 Installing GitHub CLI...${C_RESET}"
+    if command -v apt-get > /dev/null 2>&1; then
+      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg > /dev/null 2>&1
+      sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
+      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+      sudo apt-get update > /dev/null 2>&1
+      sudo apt-get install -y gh > /dev/null 2>&1
+    else
+      echo -e "${CB_YELLOW}⚠️ apt-get not found. Please install GitHub CLI manually.${C_RESET}"
+    fi
+  fi
+
+  if ! command -v claude > /dev/null 2>&1; then
+    if command -v npm > /dev/null 2>&1; then
+      echo -e "${CB_BLUE}📦 Installing Claude Code...${C_RESET}"
+      sudo npm install -g @anthropic-ai/claude-code > /dev/null 2>&1
+    else
+      echo -e "${CB_YELLOW}⚠️ npm not found. Skipping Claude Code install. (Please install Node.js first)${C_RESET}"
+    fi
   fi
 }
 
@@ -233,27 +459,7 @@ bootstrap() {
 
   echo -e "\n🎉 Environment bootstrap complete!"
 
-  if ! command -v gh > /dev/null 2>&1; then
-    echo -e "${CB_BLUE}📦 Installing GitHub CLI...${C_RESET}"
-    if command -v apt-get > /dev/null 2>&1; then
-      curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg > /dev/null 2>&1
-      sudo chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg
-      echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
-      sudo apt-get update > /dev/null 2>&1
-      sudo apt-get install -y gh > /dev/null 2>&1
-    else
-      echo -e "${CB_YELLOW}⚠️ apt-get not found. Please install GitHub CLI manually.${C_RESET}"
-    fi
-  fi
-
-  if ! command -v claude > /dev/null 2>&1; then
-    if command -v npm > /dev/null 2>&1; then
-      echo -e "${CB_BLUE}📦 Installing Claude Code...${C_RESET}"
-      sudo npm install -g @anthropic-ai/claude-code > /dev/null 2>&1
-    else
-      echo -e "${CB_YELLOW}⚠️ npm not found. Skipping Claude Code install. (Please install Node.js first)${C_RESET}"
-    fi
-  fi
+  __bootstrap_gh_and_claude
 }
 
 #######################################
