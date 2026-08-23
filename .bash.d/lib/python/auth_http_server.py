@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Static file HTTP server gated by HTTP Basic Auth, for mt-serve -a.
 
 Credentials and port are read from the MT_SERVE_USER / MT_SERVE_PASSWORD /
