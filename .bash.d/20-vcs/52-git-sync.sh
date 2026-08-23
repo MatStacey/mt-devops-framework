@@ -303,13 +303,17 @@ __mt_push_update_commit_and_raise_pr() {
     fi
 
     # Similarly-worded commit messages (e.g. repeated AI-quota-fallback
-    # README summaries) can generate the same slug run after run. A local
-    # or remote branch of that name already existing -- even one from a
-    # long-since-merged PR -- makes git-raise-pr treat it as a dead branch
-    # and abort, since GitHub still remembers that branch name was a PR.
-    # Disambiguating up front avoids that abort entirely instead of
-    # requiring manual recovery after the fact.
-    if git show-ref --verify --quiet "refs/heads/$branch_name" || git ls-remote --exit-code --heads origin "$branch_name" > /dev/null 2>&1; then
+    # README summaries) can generate the same slug run after run. GitHub
+    # remembers a branch NAME's PR history even after the branch itself is
+    # deleted (e.g. via --delete-branch on merge), so checking only
+    # whether the ref still exists isn't enough -- a name whose ref is
+    # long gone can still resolve to a merged/closed PR and make
+    # git-raise-pr treat it as a dead branch and abort. Disambiguating up
+    # front avoids that abort entirely instead of requiring manual
+    # recovery after the fact.
+    if git show-ref --verify --quiet "refs/heads/$branch_name" \
+      || git ls-remote --exit-code --heads origin "$branch_name" > /dev/null 2>&1 \
+      || { command -v gh > /dev/null 2>&1 && [ -n "$(gh pr view "$branch_name" --json state -q .state 2> /dev/null)" ]; }; then
       branch_name="${branch_name}-$(date +%s)"
     fi
 
