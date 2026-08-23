@@ -304,6 +304,7 @@ mt-http-server() {
     cleaned_up=true
     echo -e "\n${CB_YELLOW}🛑 Stopping server...${C_RESET}"
     __mt_http_server_teardown_bridge_if_active
+    rm -f "$HOME/.bash.d/data/cache/.mt_http_server.pid"
   }
 
   echo -e "${CB_BLUE}🚀 Starting temporary HTTP server on port ${port}...${C_RESET}"
@@ -372,7 +373,7 @@ mt-http-server() {
       printf -v part '%q' "$part"
       cmd_string="$cmd_string $part"
     done
-    cmd_string="$cmd_string; __mt_http_server_teardown_bridge_if_active; rm -f '$HOME/.bash.d/data/cache/.mt_http_server_port'"
+    cmd_string="$cmd_string; __mt_http_server_teardown_bridge_if_active; rm -f '$HOME/.bash.d/data/cache/.mt_http_server_port' '$HOME/.bash.d/data/cache/.mt_http_server.pid'"
 
     __mt_bg_run "mt-http-server" "$log_file" "$cmd_string"
     echo -e "${C_DIM}Stop with: mt-http-server --stop${C_RESET}"
