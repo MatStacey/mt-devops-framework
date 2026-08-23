@@ -302,6 +302,17 @@ __mt_push_update_commit_and_raise_pr() {
       pr_title="chore: automated profile synchronization"
     fi
 
+    # Similarly-worded commit messages (e.g. repeated AI-quota-fallback
+    # README summaries) can generate the same slug run after run. A local
+    # or remote branch of that name already existing -- even one from a
+    # long-since-merged PR -- makes git-raise-pr treat it as a dead branch
+    # and abort, since GitHub still remembers that branch name was a PR.
+    # Disambiguating up front avoids that abort entirely instead of
+    # requiring manual recovery after the fact.
+    if git show-ref --verify --quiet "refs/heads/$branch_name" || git ls-remote --exit-code --heads origin "$branch_name" > /dev/null 2>&1; then
+      branch_name="${branch_name}-$(date +%s)"
+    fi
+
     echo "🌿 Creating and checking out branch: $branch_name"
     git checkout -b "$branch_name" > /dev/null 2>&1
   else
@@ -341,7 +352,11 @@ __mt_push_update_commit_and_raise_pr() {
     __mt_push_update_cleanup_merged_branches
   fi
 
-  git-raise-pr -b "$default_branch" -t "$pr_title" -m "$(echo -e "$pr_body")"
+  if ! git-raise-pr -b "$default_branch" -t "$pr_title" -m "$(echo -e "$pr_body")"; then
+    echo -e "${CB_RED}🚨 git-raise-pr failed -- not attempting to auto-merge. Your commit is still on the local branch; resolve the issue above and push it manually.${C_RESET}"
+    exit 1
+  fi
+
   if [ "$auto_merge" = true ] && command -v gh > /dev/null 2>&1; then
     local current_b
     current_b=$(git branch --show-current)
