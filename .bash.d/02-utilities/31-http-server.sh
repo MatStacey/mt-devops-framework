@@ -109,7 +109,7 @@ __mt_http_server_pid() {
 # System: Host the current directory over a temporary HTTP server. Only
 # one instance is supported at a time -- -b refuses to start a second one
 # rather than running multiple concurrent servers.
-# Usage: mt-http-server [-p port] [-w|--no-wsl-bridge] [-a|--no-auth] [-t seconds|--no-idle-timeout] [-b] [--stop] [-l]
+# Usage: mt-http-server [-p port] [-w|--no-wsl-bridge] [-a|--no-auth] [-t seconds|--no-idle-timeout] [-b] [--stop] [-l] [-i]
 # Options:
 #   -p, --port <port>          Specify custom port (default: config server.default_port, else 8000)
 #   -w, --wsl-bridge            (WSL only) Prompt to bridge the server to your LAN
@@ -133,6 +133,7 @@ __mt_http_server_pid() {
 #   --stop                      Stop the running background instance, if any, and
 #                               tear down its LAN bridge if it had one
 #   -l, --status                Show whether a background instance is running
+#   -i, --wizard                Interactively set the config defaults above
 #   -h, --help                  Show this help menu
 # Globals:
 #   OS_FAMILY, HTTP_SERVER_DEFAULT_PORT, HTTP_SERVER_ENABLE_AUTH,
@@ -148,7 +149,7 @@ mt-http-server() {
   local expose_wsl="${HTTP_SERVER_ENABLE_LAN_BRIDGE:-false}"
   local require_auth="${HTTP_SERVER_ENABLE_AUTH:-false}"
   local idle_timeout="${HTTP_SERVER_IDLE_TIMEOUT_SEC:-1800}"
-  local run_background=false do_stop=false do_status=false
+  local run_background=false do_stop=false do_status=false do_wizard=false
   local bridge_state_file="$HOME/.bash.d/data/cache/.mt_http_server_bridge_port"
 
   while [ "$#" -gt 0 ]; do
@@ -197,12 +198,35 @@ mt-http-server() {
         do_status=true
         shift
         ;;
+      -i | --wizard)
+        do_wizard=true
+        shift
+        ;;
       *)
-        echo "Usage: mt-http-server [-p port] [-w|--no-wsl-bridge] [-a|--no-auth] [-t seconds|--no-idle-timeout] [-b] [--stop] [-l]" >&2
+        echo "Usage: mt-http-server [-p port] [-w|--no-wsl-bridge] [-a|--no-auth] [-t seconds|--no-idle-timeout] [-b] [--stop] [-l] [-i]" >&2
         return 1
         ;;
     esac
   done
+
+  if [ "$do_wizard" = true ]; then
+    echo -e "${CB_BLUE}--- HTTP Server Configuration ---${C_RESET}"
+    local val
+    read -r -p "Default Port [${HTTP_SERVER_DEFAULT_PORT:-8000}]: " val
+    [ -n "$val" ] && python3 "$CONFIG_MANAGER" update "server" "default_port" "$val"
+
+    read -r -p "Require Auth by default? (true/false) [${HTTP_SERVER_ENABLE_AUTH:-false}]: " val
+    [ -n "$val" ] && python3 "$CONFIG_MANAGER" update "server" "enable_auth" "$val"
+
+    read -r -p "Enable WSL LAN Bridge by default? (true/false) [${HTTP_SERVER_ENABLE_LAN_BRIDGE:-false}]: " val
+    [ -n "$val" ] && python3 "$CONFIG_MANAGER" update "server" "enable_lan_bridge" "$val"
+
+    read -r -p "Idle Timeout in seconds, 0 to disable [${HTTP_SERVER_IDLE_TIMEOUT_SEC:-1800}]: " val
+    [ -n "$val" ] && python3 "$CONFIG_MANAGER" update "server" "idle_timeout_sec" "$val"
+
+    echo -e "${CB_GREEN}✅ HTTP server config updated.${C_RESET}"
+    return 0
+  fi
 
   if [ "$do_status" = true ]; then
     local status_pid
