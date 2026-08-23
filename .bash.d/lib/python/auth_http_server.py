@@ -1,4 +1,4 @@
-"""Static file HTTP server gated by HTTP Basic Auth, for mt-serve -a.
+"""Static file HTTP server gated by HTTP Basic Auth, for mt-http-server -a.
 
 Credentials and port are read from the MT_SERVE_USER / MT_SERVE_PASSWORD /
 MT_SERVE_PORT environment variables rather than argv, so they never show

@@ -62,6 +62,7 @@ def load_env():
     git_cfg = d.get("git") or {}
     exp_cfg = d.get("llm_exports") or d.get("exports") or {}
     dock_cfg = d.get("docker") or {}
+    srv_cfg = d.get("server") or {}
     cicd_cfg = d.get("cicd") or {}
 
     # CI/CD
@@ -231,6 +232,15 @@ def load_env():
     export(
         "DOCKER_BLOCKLIST",
         dock_cfg.get("restart_blocklist_csv", dock_cfg.get("restart_blocklist", "")),
+    )
+
+    # HTTP Server (mt-http-server)
+    export("HTTP_SERVER_DEFAULT_PORT", srv_cfg.get("default_port", 8000))
+    export("HTTP_SERVER_ENABLE_AUTH", srv_cfg.get("enable_auth", False), to_lower=True)
+    export(
+        "HTTP_SERVER_ENABLE_LAN_BRIDGE",
+        srv_cfg.get("enable_lan_bridge", False),
+        to_lower=True,
     )
 
 
