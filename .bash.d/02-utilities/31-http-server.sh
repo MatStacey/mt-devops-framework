@@ -108,14 +108,17 @@ __mt_http_server_pid() {
 #######################################
 # System: Host the current directory over a temporary HTTP server. Only
 # one instance is supported at a time -- -b refuses to start a second one
-# rather than running multiple concurrent servers.
+# rather than running multiple concurrent servers. Binds to 127.0.0.1 only
+# unless -w/LAN bridge is explicitly confirmed -- plain `mt-http-server`
+# with no flags is never reachable from your network.
 # Usage: mt-http-server [-p port] [-w|--no-wsl-bridge] [-a|--no-auth] [-t seconds|--no-idle-timeout] [-b] [--stop] [-l] [-i]
 # Options:
 #   -p, --port <port>          Specify custom port (default: config server.default_port, else 8000)
-#   -w, --wsl-bridge            (WSL only) Prompt to bridge the server to your LAN
-#                               via a Windows portproxy + firewall rule (requires
-#                               Admin elevation). Default comes from config
-#                               server.enable_lan_bridge.
+#   -w, --wsl-bridge            Prompt to expose the server to your LAN. On WSL this
+#                               also adds a Windows portproxy + firewall rule (requires
+#                               Admin elevation); on macOS/Linux it just binds every
+#                               network interface instead of loopback-only. Default
+#                               comes from config server.enable_lan_bridge.
 #   --no-wsl-bridge             Force the LAN bridge off for this run, overriding a
 #                               config default of true
 #   -a, --auth                  Require HTTP Basic Auth -- generates a random
@@ -155,6 +158,10 @@ mt-http-server() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -p | --port)
+        if ! [[ "$2" =~ ^[0-9]+$ ]] || [ "$2" -lt 1 ] || [ "$2" -gt 65535 ]; then
+          echo "mt-http-server: --port requires an integer between 1 and 65535" >&2
+          return 1
+        fi
         port="$2"
         shift 2
         ;;
@@ -218,7 +225,7 @@ mt-http-server() {
     read -r -p "Require Auth by default? (true/false) [${HTTP_SERVER_ENABLE_AUTH:-false}]: " val
     [ -n "$val" ] && python3 "$CONFIG_MANAGER" update "server" "enable_auth" "$val"
 
-    read -r -p "Enable WSL LAN Bridge by default? (true/false) [${HTTP_SERVER_ENABLE_LAN_BRIDGE:-false}]: " val
+    read -r -p "Expose to your LAN by default? (true/false) [${HTTP_SERVER_ENABLE_LAN_BRIDGE:-false}]: " val
     [ -n "$val" ] && python3 "$CONFIG_MANAGER" update "server" "enable_lan_bridge" "$val"
 
     read -r -p "Idle Timeout in seconds, 0 to disable [${HTTP_SERVER_IDLE_TIMEOUT_SEC:-1800}]: " val
@@ -236,6 +243,9 @@ mt-http-server() {
       [ -f "$bridge_state_file" ] && echo -e "${CB_CYAN}   LAN bridge active on port $(command cat "$bridge_state_file").${C_RESET}"
     else
       echo -e "${CB_YELLOW}⚠️  No background instance is running.${C_RESET}"
+      if [ -f "$bridge_state_file" ]; then
+        echo -e "${CB_RED}🚨 But a LAN bridge state file for port $(command cat "$bridge_state_file") still exists -- the Windows firewall rule/portproxy may still be open even though no server is running (likely left behind by an unclean shutdown). Run 'mt-http-server --stop' to clean it up.${C_RESET}"
+      fi
     fi
     return 0
   fi
@@ -244,7 +254,12 @@ mt-http-server() {
     local wrapper_pid
     wrapper_pid=$(__mt_http_server_running_job)
     if [ -z "$wrapper_pid" ]; then
-      echo -e "${CB_YELLOW}⚠️  No background instance is running.${C_RESET}"
+      if [ -f "$bridge_state_file" ]; then
+        echo -e "${CB_YELLOW}⚠️  No background instance is running, but a LAN bridge state file was left behind -- cleaning it up.${C_RESET}"
+        __mt_http_server_teardown_bridge_if_active
+      else
+        echo -e "${CB_YELLOW}⚠️  No background instance is running.${C_RESET}"
+      fi
       return 0
     fi
 
@@ -282,20 +297,24 @@ mt-http-server() {
     return 1
   fi
 
+  local -x MT_SERVE_BIND_ALL=""
+
   if [ "$expose_wsl" = true ]; then
-    if [ "${OS_FAMILY}" != "wsl" ]; then
-      mt-log WARN "mt-http-server: LAN bridge is only supported on WSL; ignoring."
-      expose_wsl=false
+    echo -e "${CB_YELLOW}⚠️  This will expose port ${port} to every device on your current network -- including public/untrusted Wi-Fi, not just a trusted home network.${C_RESET}"
+    [ "${OS_FAMILY}" = "wsl" ] && echo -e "${CB_YELLOW}   On WSL this also opens a Windows firewall rule and requests Admin elevation.${C_RESET}"
+    if [ "$require_auth" = true ]; then
+      echo -e "${CB_CYAN}   Basic Auth will be required to connect.${C_RESET}"
     else
-      echo -e "${CB_YELLOW}⚠️  This will open port ${port} to your LAN via a Windows firewall rule and request Admin elevation.${C_RESET}"
-      local reply
-      read -r -p "Proceed? [y/N] " -n 1 reply < /dev/tty || reply="n"
-      echo
-      if [[ ! $reply =~ ^[Yy]$ ]]; then
-        echo -e "${CB_YELLOW}🛑 Aborted.${C_RESET}"
-        return 0
-      fi
+      echo -e "${CB_RED}   No authentication -- anyone who can reach this port can browse and download every file here.${C_RESET}"
     fi
+    local reply
+    read -r -p "Proceed? [y/N] " -n 1 reply < /dev/tty || reply="n"
+    echo
+    if [[ ! $reply =~ ^[Yy]$ ]]; then
+      echo -e "${CB_YELLOW}🛑 Aborted.${C_RESET}"
+      return 0
+    fi
+    MT_SERVE_BIND_ALL=1
   fi
 
   local cleaned_up=false
@@ -309,7 +328,7 @@ mt-http-server() {
 
   echo -e "${CB_BLUE}🚀 Starting temporary HTTP server on port ${port}...${C_RESET}"
 
-  if [ "$expose_wsl" = true ]; then
+  if [ "$expose_wsl" = true ] && [ "${OS_FAMILY}" = "wsl" ]; then
     echo -e "${CB_YELLOW}⚠️  Requesting Windows Admin elevation to bridge the connection...${C_RESET}"
     if __mt_http_server_wsl_bridge "Add" "$port"; then
       echo -e "${CB_GREEN}✅ Portproxy established. LAN devices can connect!${C_RESET}"
@@ -319,10 +338,11 @@ mt-http-server() {
       echo -e "${CB_RED}🚨 Failed to establish the LAN bridge (elevation declined or unavailable). Continuing with local-only access.${C_RESET}"
       mt-log ERROR "mt-http-server: failed to establish the WSL portproxy/firewall bridge for port ${port}."
       expose_wsl=false
+      MT_SERVE_BIND_ALL=""
     fi
   fi
 
-  local -a serve_cmd=(python3 -m http.server "$port")
+  local -a serve_cmd=(python3 -m http.server "$port" --bind "$([ "$MT_SERVE_BIND_ALL" = 1 ] && echo "0.0.0.0" || echo "127.0.0.1")")
   local -x MT_SERVE_PORT="$port"
   local -x MT_SERVE_IDLE_TIMEOUT="$idle_timeout"
   # -b needs the custom script regardless of auth/idle-timeout, since
@@ -352,8 +372,10 @@ mt-http-server() {
   [ "$use_custom_script" = true ] && serve_cmd=(python3 "$HOME/.bash.d/lib/python/mt_http_server.py")
 
   echo -e "${CB_CYAN}📡 Listening on:${C_RESET}"
-  if command -v ip > /dev/null 2>&1; then
+  if [ "$MT_SERVE_BIND_ALL" = 1 ] && command -v ip > /dev/null 2>&1; then
     ip -4 addr show | grep inet | awk '{print "   http://" $2}' | sed 's|/.*||' | sed "s|$|:${port}|"
+  else
+    echo "   http://127.0.0.1:${port}"
   fi
 
   if [ "$run_background" = true ]; then
@@ -373,7 +395,12 @@ mt-http-server() {
       printf -v part '%q' "$part"
       cmd_string="$cmd_string $part"
     done
-    cmd_string="$cmd_string; __mt_http_server_teardown_bridge_if_active; rm -f '$HOME/.bash.d/data/cache/.mt_http_server_port' '$HOME/.bash.d/data/cache/.mt_http_server.pid'"
+    # The pidfile removal is guarded by __mt_http_server_pid's own liveness
+    # check rather than an unconditional rm -f: if two `-b` invocations
+    # raced past the single-instance check before either registered, the
+    # loser reaches this tail too, and an unconditional rm here would
+    # delete the winner's still-valid pidfile out from under it.
+    cmd_string="$cmd_string; __mt_http_server_teardown_bridge_if_active; rm -f '$HOME/.bash.d/data/cache/.mt_http_server_port'; [ -z \"\$(__mt_http_server_pid)\" ] && rm -f '$HOME/.bash.d/data/cache/.mt_http_server.pid'"
 
     __mt_bg_run "mt-http-server" "$log_file" "$cmd_string"
     echo -e "${C_DIM}Stop with: mt-http-server --stop${C_RESET}"
