@@ -6,9 +6,10 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-- Fixed a critical bug where cancelling or purging a background `mt-http-server` job via `mt-jobs -i`/`mt-server-manager` killed the wrong process, orphaning a still-running, still-listening server (and any LAN bridge it had opened) with no way to stop or clean it up afterward.
-- Fixed a critical bug where restarting a background `mt-http-server` job via `mt-jobs -i` silently dropped its port, Basic Auth, and idle-timeout settings, bringing the server back on the default port with authentication disabled.
-- Both actions now correctly delegate to `mt-http-server --stop`/`-b`, which target the real server process and re-read its actual configuration.
+- Fixed `mt-http-server` binding to every network interface by default; it now binds loopback-only unless LAN exposure is explicitly confirmed via `-w`, on every platform (previously only WSL gated LAN exposure behind a confirmation -- macOS and native Linux were reachable from the whole network with zero warning).
+- Fixed an orphaned Windows firewall/portproxy rule going undetected after an unclean shutdown (crash, `wsl --shutdown`, sleep) -- `mt-http-server -l`/`--stop` now detect and clean up a leftover LAN bridge even when no server is running.
+- Fixed a race where a second `-b` launch failing to bind a port could corrupt the first instance's PID file; the real PID is now only written after a successful bind.
+- Added `--port` input validation (matching the existing `--idle-timeout` validation) and scoped the Windows LAN-bridge firewall rule to private IP ranges.
 
 ---
 
