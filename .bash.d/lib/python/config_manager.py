@@ -242,6 +242,7 @@ def load_env():
         srv_cfg.get("enable_lan_bridge", False),
         to_lower=True,
     )
+    export("HTTP_SERVER_IDLE_TIMEOUT_SEC", srv_cfg.get("idle_timeout_sec", 1800))
 
 
 def update_yaml(cat_path, key, val):
