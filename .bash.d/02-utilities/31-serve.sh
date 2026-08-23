@@ -43,11 +43,14 @@ __mt_serve_wsl_bridge() {
 
 #######################################
 # System: Host the current directory over a temporary HTTP server
-# Usage: mt-serve [-p port] [-w]
+# Usage: mt-serve [-p port] [-w] [-a]
 # Options:
 #   -p <port>   Specify custom port (default: 8000)
 #   -w          (WSL only) Prompt to bridge the server to your LAN via a
 #               Windows portproxy + firewall rule (requires Admin elevation)
+#   -a          Require HTTP Basic Auth -- generates a random password each
+#               run and prints it once. Keeps casual LAN users out; not a
+#               substitute for TLS if this ever leaves a trusted network.
 #   -h, --help  Show this help menu
 # Globals:
 #   OS_FAMILY
@@ -58,19 +61,25 @@ mt-serve() {
     return 0
   fi
 
-  local port="8000" expose_wsl=false
+  local port="8000" expose_wsl=false require_auth=false
   local OPTIND opt
-  while getopts "p:w" opt; do
+  while getopts "p:wa" opt; do
     case ${opt} in
       p) port="$OPTARG" ;;
       w) expose_wsl=true ;;
+      a) require_auth=true ;;
       \?)
-        echo "Usage: mt-serve [-p port] [-w]" >&2
+        echo "Usage: mt-serve [-p port] [-w] [-a]" >&2
         return 1
         ;;
     esac
   done
   shift $((OPTIND - 1))
+
+  if [ "$require_auth" = true ] && ! command -v openssl > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 openssl is required for -a but was not found.${C_RESET}"
+    return 1
+  fi
 
   if [ "$expose_wsl" = true ]; then
     if [ "${OS_FAMILY}" != "wsl" ]; then
@@ -117,6 +126,20 @@ mt-serve() {
     fi
   fi
 
+  local -a serve_cmd=(python3 -m http.server "$port")
+  if [ "$require_auth" = true ]; then
+    local -x MT_SERVE_USER="mtserve"
+    local -x MT_SERVE_PASSWORD
+    MT_SERVE_PASSWORD=$(openssl rand -hex 8)
+    local -x MT_SERVE_PORT="$port"
+    serve_cmd=(python3 "$HOME/.bash.d/lib/python/auth_http_server.py")
+
+    echo -e "${CB_CYAN}🔐 Basic Auth enabled:${C_RESET}"
+    echo -e "   ${CB_CYAN}Username:${C_RESET} ${MT_SERVE_USER}"
+    echo -e "   ${CB_CYAN}Password:${C_RESET} ${MT_SERVE_PASSWORD}"
+    echo -e "${C_DIM}(Sent as HTTP Basic Auth -- keeps casual LAN users out, not a substitute for TLS)${C_RESET}\n"
+  fi
+
   echo -e "${CB_CYAN}📡 Listening on:${C_RESET}"
   if command -v ip > /dev/null 2>&1; then
     ip -4 addr show | grep inet | awk '{print "   http://" $2}' | sed 's|/.*||' | sed "s|$|:${port}|"
@@ -124,7 +147,7 @@ mt-serve() {
   echo -e "${C_DIM}(Press Ctrl+C to stop)${C_RESET}\n"
 
   trap __mt_serve_cleanup SIGINT
-  python3 -m http.server "$port"
+  "${serve_cmd[@]}"
   __mt_serve_cleanup
   trap - SIGINT
 }
