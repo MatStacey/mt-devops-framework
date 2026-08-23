@@ -389,7 +389,7 @@ Complex bash functions, framework utilities, and automated workflows.
 ### Utilities: Temporary HTTP File Server
 | Command | Description |
 |---|---|
-| `mt-http-server` | System: Host the current directory over a temporary HTTP server |
+| `mt-http-server` | System: Host the current directory over a temporary HTTP server. Only |
 | `mt-serve` | Utilities: Host the current directory over a temporary HTTP server |
 
 ### Version Control (Git) - AI Workflows
