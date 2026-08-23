@@ -164,8 +164,8 @@ Shortcuts for common commands and CLI replacements.
 |---|---|
 | `mt-hard-reload` | System: Forcefully clear and rebuild all background caches and reload profile |
 | `mtindp` | MT-Framework: Update the DevOps-MT-Framework with Shellcheck and Backup Creation |
-| `mtupd` | Version Control (Git) - Profile Synchronisation: Auto-sync framework with Shellcheck, Backup and Auto-Merge |
-| `mtupd-ai` | Version Control (Git) - Update: Update Framework with Shellcheck, Backup, Auto-Merge and AI |
+| `mtupd` | Version Control (Git) - Profile Synchronisation: Auto-sync framework with Shellcheck, Backup, AI Commit-Grouping/README Summary, and Auto-Merge |
+| `mtupd-fast` | Version Control (Git) - Fast Update: Update Framework with Shellcheck, Backup and Auto-Merge, skipping AI commit-grouping/README summarization |
 
 ---
 
