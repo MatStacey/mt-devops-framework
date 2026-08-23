@@ -356,21 +356,23 @@ mt-http-server() {
   fi
 
   if [ "$run_background" = true ]; then
+    echo "$port" > "$HOME/.bash.d/data/cache/.mt_http_server_port"
+
     local log_file
     log_file="${LOG_DIR:-$HOME/.bash.d/data/logs}/http_server_$(date +%s).log"
 
     # Deliberately NOT execed -- this wrapper subshell needs to stay alive
     # after the server process exits (whether via --stop or the server's
-    # own idle-timeout auto-shutdown) so the bridge-cleanup step below
-    # actually runs. --stop targets the server's own PID (from its
-    # pidfile, see __mt_http_server_pid), not this wrapper's PID.
+    # own idle-timeout auto-shutdown) so the cleanup steps below actually
+    # run. --stop targets the server's own PID (from its pidfile, see
+    # __mt_http_server_pid), not this wrapper's PID.
     local cmd_string part
     printf -v cmd_string '%q' "${serve_cmd[0]}"
     for part in "${serve_cmd[@]:1}"; do
       printf -v part '%q' "$part"
       cmd_string="$cmd_string $part"
     done
-    cmd_string="$cmd_string; __mt_http_server_teardown_bridge_if_active"
+    cmd_string="$cmd_string; __mt_http_server_teardown_bridge_if_active; rm -f '$HOME/.bash.d/data/cache/.mt_http_server_port'"
 
     __mt_bg_run "mt-http-server" "$log_file" "$cmd_string"
     echo -e "${C_DIM}Stop with: mt-http-server --stop${C_RESET}"
@@ -383,6 +385,121 @@ mt-http-server() {
   "${serve_cmd[@]}"
   __mt_http_server_cleanup
   trap - SIGINT
+}
+
+#######################################
+# System: Print the port of the currently-running background instance, or
+# nothing if none is running -- verifies via the mt-jobs registry (PID
+# liveness) rather than trusting the port-tracking file alone, since that
+# file could in principle be stale.
+#######################################
+__mt_server_manager_active_port() {
+  [ -n "$(__mt_http_server_running_job)" ] || return 0
+  local port_file="$HOME/.bash.d/data/cache/.mt_http_server_port"
+  [ -f "$port_file" ] && command cat "$port_file"
+}
+
+#######################################
+# System: Print the log file path for the currently-running background
+# instance, or nothing if none is running
+#######################################
+__mt_server_manager_log_path() {
+  local jobs_file="$HOME/.bash.d/data/cache/.mt_jobs.tsv"
+  [ -f "$jobs_file" ] || return 0
+  awk -F'|' '$3 == "mt-http-server" && $6 == "RUNNING" { print $7 }' "$jobs_file" | tail -n 1
+}
+
+__mt_server_manager_start() { mt-http-server -b; }
+__mt_server_manager_stop() { mt-http-server --stop; }
+__mt_server_manager_status() { mt-http-server -l; }
+__mt_server_manager_options() { mt-http-server -i; }
+__mt_server_manager_jobs() { mt-jobs -i; }
+
+#######################################
+# System: Stop the running instance (if any) and start a fresh one --
+# also rotates the Basic Auth password, since a new instance always
+# generates a new one
+#######################################
+__mt_server_manager_restart() {
+  mt-http-server --stop
+  mt-http-server -b
+}
+
+#######################################
+# System: Open the running instance in the default browser via the
+# framework's existing cross-platform __open_url helper
+#######################################
+__mt_server_manager_open() {
+  local port
+  port=$(__mt_server_manager_active_port)
+  if [ -z "$port" ]; then
+    echo -e "${CB_YELLOW}⚠️  No background instance is running.${C_RESET}"
+    return 0
+  fi
+  __open_url "http://127.0.0.1:${port}"
+}
+
+#######################################
+# System: curl the running instance and report its HTTP status
+#######################################
+__mt_server_manager_test() {
+  local port
+  port=$(__mt_server_manager_active_port)
+  if [ -z "$port" ]; then
+    echo -e "${CB_YELLOW}⚠️  No background instance is running.${C_RESET}"
+    return 0
+  fi
+  echo -e "${CB_CYAN}Testing connection to http://127.0.0.1:${port}/ ...${C_RESET}"
+  curl -sS -o /dev/null -w "HTTP status: %{http_code}\n" --max-time 5 "http://127.0.0.1:${port}/"
+}
+
+__mt_server_manager_view_logs() {
+  local log_path
+  log_path=$(__mt_server_manager_log_path)
+  if [ -z "$log_path" ] || [ ! -f "$log_path" ]; then
+    echo -e "${CB_YELLOW}⚠️  No log file found for a running instance.${C_RESET}"
+    return 0
+  fi
+  echo -e "${CB_CYAN}--- LOGS ($log_path) ---${C_RESET}"
+  cat "$log_path"
+}
+
+__mt_server_manager_tail_logs() {
+  local log_path
+  log_path=$(__mt_server_manager_log_path)
+  if [ -z "$log_path" ] || [ ! -f "$log_path" ]; then
+    echo -e "${CB_YELLOW}⚠️  No log file found for a running instance.${C_RESET}"
+    return 0
+  fi
+  echo -e "${C_DIM}(Press Ctrl+C to stop tailing)${C_RESET}"
+  tail -f "$log_path"
+}
+
+#######################################
+# Utilities: Interactive menu to manage the single mt-http-server
+# background instance -- narrowly scoped to genuinely server-specific
+# actions (credentials, connection testing, browser launch); broader job
+# management (cancel, restart, history) is delegated to the existing
+# mt-jobs -i rather than rebuilt here.
+# Usage: mt-server-manager
+#######################################
+mt-server-manager() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  __mt_menu_submenu "🌐 HTTP Server Manager" \
+    "Start Server (background)" __mt_server_manager_start \
+    "Stop Server" __mt_server_manager_stop \
+    "Restart Server" __mt_server_manager_restart \
+    "Status" __mt_server_manager_status \
+    "Open in Web Browser" __mt_server_manager_open \
+    "Test Connection (curl)" __mt_server_manager_test \
+    "View Logs" __mt_server_manager_view_logs \
+    "Tail Logs (live)" __mt_server_manager_tail_logs \
+    "Server Options (wizard)" __mt_server_manager_options \
+    "Manage via mt-jobs" __mt_server_manager_jobs
 }
 
 #######################################

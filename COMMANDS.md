@@ -391,6 +391,7 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `mt-http-server` | System: Host the current directory over a temporary HTTP server. Only |
 | `mt-serve` | Utilities: Host the current directory over a temporary HTTP server |
+| `mt-server-manager` | Utilities: Interactive menu to manage the single mt-http-server |
 
 ### Version Control (Git) - AI Workflows
 | Command | Description |
