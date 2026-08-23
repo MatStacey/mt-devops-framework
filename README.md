@@ -6,9 +6,9 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-- Enabled AI-powered README auto-summarization by default on every `mtupd` push, replacing the previous opt-in `-m`/`--no-ai` behavior.
-- Renamed the old `mtupd-ai` alias to `mtupd-fast`, now serving as the explicit escape hatch for skipping AI commit-grouping/README summarization.
-- Made AI README summarization fail gracefully: if the AI provider hits its quota or rate limit after all retries, the sync now continues and pushes normally instead of aborting the entire update.
+- Fixed a critical bug where cancelling or purging a background `mt-http-server` job via `mt-jobs -i`/`mt-server-manager` killed the wrong process, orphaning a still-running, still-listening server (and any LAN bridge it had opened) with no way to stop or clean it up afterward.
+- Fixed a critical bug where restarting a background `mt-http-server` job via `mt-jobs -i` silently dropped its port, Basic Auth, and idle-timeout settings, bringing the server back on the default port with authentication disabled.
+- Both actions now correctly delegate to `mt-http-server --stop`/`-b`, which target the real server process and re-read its actual configuration.
 
 ---
 
