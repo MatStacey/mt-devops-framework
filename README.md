@@ -6,11 +6,9 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-- Added automated installation support for `eza` (modern `ls` replacement) via Homebrew on macOS and custom APT repository on Debian/Ubuntu.
-- Added official installer functions for `terraform` (via HashiCorp tap/APT repo) and Google Cloud CLI (`gcloud`).
-- Added `kubectl` installation handler supporting Homebrew on macOS and direct binary releases matching system architecture on Linux.
-- Updated system external dependency bootstrap logic (`__bootstrap_external`) to integrate `eza`, `terraform`, `gcloud`, and `kubectl` installers.
-- Added shared `__bootstrap_gh_and_claude` helper function to streamline GitHub CLI and Claude Code setup.
+- Enabled AI-powered README auto-summarization by default on every `mtupd` push, replacing the previous opt-in `-m`/`--no-ai` behavior.
+- Renamed the old `mtupd-ai` alias to `mtupd-fast`, now serving as the explicit escape hatch for skipping AI commit-grouping/README summarization.
+- Made AI README summarization fail gracefully: if the AI provider hits its quota or rate limit after all retries, the sync now continues and pushes normally instead of aborting the entire update.
 
 ---
 
