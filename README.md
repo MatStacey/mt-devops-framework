@@ -6,6 +6,8 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Refactored `99-utils.sh` (previously 1,160 lines, the largest file in the framework) into four focused files by domain: backup/restore (`33-backup.sh`), the background job registry (`34-jobs.sh`), centralized logging (`35-logging.sh`), and general misc utilities remaining in a much smaller `99-utils.sh`. No functional changes -- every function moved verbatim and was verified identical before/after.
+- Also cleaned up several pre-existing corrupted docstring blocks found during the move (`mt-cmd-history` had 6 duplicated docstrings stacked above it, `mt-apply` had corrupted separator lines) that predated this refactor and were confusing `mt-help`'s output.
 - Fixed the README `Recent Updates` section always being wholly replaced by the latest push's summary; it now accumulates a rolling history of the last 8 changes instead, prepending each new entry rather than discarding prior ones.
 - Refactored multi-line conditional logic in `git-sync` script to place `||` operators at the end of lines instead of using explicit backslash continuations, improving bash script readability and code consistency.
 
