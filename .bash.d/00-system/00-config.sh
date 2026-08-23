@@ -209,7 +209,7 @@ mt-toggle-format-on-push() {
   local next="true"
   [ "$current" = "true" ] && next="false"
 
-  python3 "$CONFIG_MANAGER" update "git" "format_on_push" "$next"
+  python3 "$CONFIG_MANAGER" update "git" "enable_format_on_push" "$next"
   export GIT_FORMAT_ON_PUSH="$next"
   echo "✅ Format-on-push set to $next."
 }
@@ -248,7 +248,7 @@ mt-set-upstream-path() {
     echo "Usage: mt-set-upstream-path <MatStacey/mt-devops-framework>"
     return 1
   fi
-  python3 "$CONFIG_MANAGER" update "git" "upstream_repo_path" "$1"
+  python3 "$CONFIG_MANAGER" update "git" "upstream_repo_slug" "$1"
   export UPSTREAM_REPO_PATH="$1"
   echo "✅ Upstream repository path set to $1."
 }
@@ -268,7 +268,7 @@ mt-set-default-ide() {
     echo "Usage: mt-set-default-ide <vscode|intellij>"
     return 1
   fi
-  python3 "$CONFIG_MANAGER" update "system" "default_ide" "$1"
+  python3 "$CONFIG_MANAGER" update "core" "default_ide" "$1"
   export DEFAULT_IDE="$1"
   echo "✅ Default IDE set to $1."
 }
@@ -308,7 +308,7 @@ mt-set-cicd() {
     echo "Usage: mt-set-cicd <github|bitbucket|gitlab|azure|jenkins>"
     return 1
   fi
-  python3 "$CONFIG_MANAGER" update "cicd" "provider" "$1"
+  python3 "$CONFIG_MANAGER" update "cicd" "default_provider" "$1"
   export CICD_PROVIDER="$1"
   echo "✅ CI/CD provider set to $1."
 }
@@ -323,7 +323,7 @@ mt-toggle-ai() {
   fi
   local new_val="true"
   [ "${AI_ENABLED:-true}" = "true" ] && new_val="false"
-  python3 "$CONFIG_MANAGER" update "ai" "enabled" "$new_val"
+  python3 "$CONFIG_MANAGER" update "ai" "enable_ai" "$new_val"
   export AI_ENABLED="$new_val"
   echo "✅ AI integration set to $new_val."
 }
@@ -389,7 +389,7 @@ mt-set-theme() {
     echo "🚨 Invalid theme. Ensure $theme.sh exists in $HOME/.bash.d/config/themes/"
     return 1
   fi
-  python3 "$CONFIG_MANAGER" update "system" "theme" "$theme"
+  python3 "$CONFIG_MANAGER" update "core" "theme" "$theme"
   export BASH_THEME="$theme"
   echo "✅ Terminal theme set to $theme."
 }
@@ -493,11 +493,11 @@ mt-wizard-system() {
   fi
   echo -e "${CB_BLUE}--- System Configuration ---${C_RESET}"
   read -r -p "Default IDE (vscode/intellij) [${DEFAULT_IDE:-vscode}]: " ide
-  [ -n "$ide" ] && python3 "$CONFIG_MANAGER" update "system" "default_ide" "$ide"
+  [ -n "$ide" ] && python3 "$CONFIG_MANAGER" update "core" "default_ide" "$ide"
   read -r -p "Max Parallel Threads [${MAX_PARALLEL_THREADS:-8}]: " threads
-  [ -n "$threads" ] && python3 "$CONFIG_MANAGER" update "system" "max_parallel_threads" "$threads"
+  [ -n "$threads" ] && python3 "$CONFIG_MANAGER" update "core" "max_parallel_threads" "$threads"
   read -r -p "Update Check TTL (seconds) [${UPDATE_CHECK_TTL_SEC:-43200}]: " ttl
-  [ -n "$ttl" ] && python3 "$CONFIG_MANAGER" update "system" "update_check_ttl_sec" "$ttl"
+  [ -n "$ttl" ] && python3 "$CONFIG_MANAGER" update "core" "update_check_ttl_sec" "$ttl"
   echo -e "${CB_GREEN}✅ System config updated.${C_RESET}"
 }
 
@@ -523,25 +523,25 @@ mt-wizard-ai() {
   fi
   echo -e "${CB_BLUE}--- AI Configuration ---${C_RESET}"
   read -r -p "Enable AI Features? (true/false) [${AI_ENABLED:-true}]: " enabled
-  [ -n "$enabled" ] && python3 "$CONFIG_MANAGER" update "ai" "enabled" "$enabled"
+  [ -n "$enabled" ] && python3 "$CONFIG_MANAGER" update "ai" "enable_ai" "$enabled"
   read -r -p "Default Provider (gemini/claude/local) [${DEFAULT_AI:-gemini}]: " prov
   [ -n "$prov" ] && python3 "$CONFIG_MANAGER" update "ai" "default_provider" "$prov"
 
   echo -e "\n${CB_CYAN}Gemini Settings:${C_RESET}"
   read -r -p "Gemini Model Version [${GEMINI_VERSION:-gemini-3.6-flash}]: " g_ver
-  [ -n "$g_ver" ] && python3 "$CONFIG_MANAGER" update "ai.gemini" "version" "$g_ver"
+  [ -n "$g_ver" ] && python3 "$CONFIG_MANAGER" update "ai.providers.gemini" "model" "$g_ver"
   echo -e "  ${C_DIM}🔑 Run 'mt-add-gemini-key' to add/update your key${C_RESET}"
 
   echo -e "\n${CB_CYAN}Claude Settings:${C_RESET}"
   read -r -p "Claude Model Version [${CLAUDE_VERSION:-claude-3-7-sonnet-latest}]: " c_ver
-  [ -n "$c_ver" ] && python3 "$CONFIG_MANAGER" update "ai.claude" "version" "$c_ver"
+  [ -n "$c_ver" ] && python3 "$CONFIG_MANAGER" update "ai.providers.claude" "model" "$c_ver"
   echo -e "  ${C_DIM}🔑 Run 'mt-add-claude-key' to add/update your key${C_RESET}"
 
   echo -e "\n${CB_CYAN}Local AI Settings:${C_RESET}"
   read -r -p "Local AI Base URL [${LOCAL_AI_BASE_URL:-http://localhost:11434/v1}]: " l_url
-  [ -n "$l_url" ] && python3 "$CONFIG_MANAGER" update "ai.local" "base_url" "$l_url"
+  [ -n "$l_url" ] && python3 "$CONFIG_MANAGER" update "ai.providers.local" "base_url" "$l_url"
   read -r -p "Local AI Model [${LOCAL_AI_MODEL:-llama3.2}]: " l_mod
-  [ -n "$l_mod" ] && python3 "$CONFIG_MANAGER" update "ai.local" "model" "$l_mod"
+  [ -n "$l_mod" ] && python3 "$CONFIG_MANAGER" update "ai.providers.local" "model" "$l_mod"
 
   echo -e "${CB_GREEN}✅ AI config updated.${C_RESET}"
 }
@@ -568,11 +568,11 @@ mt-wizard-exports() {
   fi
   echo -e "${CB_BLUE}--- Exports Configuration ---${C_RESET}"
   read -r -p "Auto Cleanup Exports? (true/false) [${AUTO_CLEANUP_EXPORTS:-true}]: " cln
-  [ -n "$cln" ] && python3 "$CONFIG_MANAGER" update "exports" "auto_cleanup" "$cln"
+  [ -n "$cln" ] && python3 "$CONFIG_MANAGER" update "llm_exports" "enable_auto_cleanup" "$cln"
   read -r -p "Auto Cleanup Threshold (days) [${AUTO_CLEANUP_DAYS:-7}]: " days
-  [ -n "$days" ] && python3 "$CONFIG_MANAGER" update "exports" "auto_cleanup_days" "$days"
+  [ -n "$days" ] && python3 "$CONFIG_MANAGER" update "llm_exports" "auto_cleanup_days" "$days"
   read -r -p "Regex Blocklist [${EXPORT_BLOCKLIST}]: " blk
-  [ -n "$blk" ] && python3 "$CONFIG_MANAGER" update "exports" "blocklist" "$blk"
+  [ -n "$blk" ] && python3 "$CONFIG_MANAGER" update "llm_exports" "file_blocklist_regex" "$blk"
   echo -e "${CB_GREEN}✅ Exports config updated.${C_RESET}"
 }
 
@@ -605,25 +605,25 @@ mt-wizard-paths() {
   echo -e "${CB_BLUE}--- Paths Configuration ---${C_RESET}"
   local vcs_root_input
   read -r -p "VCS Root [${VCS_ROOT:-~/vcs}]: " vcs_root_input
-  [ -n "$vcs_root_input" ] && python3 "$CONFIG_MANAGER" update "paths" "vcs_root" "$vcs_root_input"
+  [ -n "$vcs_root_input" ] && python3 "$CONFIG_MANAGER" update "paths" "vcs_root_dir" "$vcs_root_input"
   local vcs_personal_input
   read -r -p "VCS Personal [${VCS_PERSONAL:-~/vcs/personal}]: " vcs_personal_input
-  [ -n "$vcs_personal_input" ] && python3 "$CONFIG_MANAGER" update "paths" "vcs_personal" "$vcs_personal_input"
+  [ -n "$vcs_personal_input" ] && python3 "$CONFIG_MANAGER" update "paths" "vcs_personal_dir" "$vcs_personal_input"
   local vcs_exports_input
   read -r -p "VCS Exports [${VCS_EXPORTS:-~/vcs/personal/exports}]: " vcs_exports_input
-  [ -n "$vcs_exports_input" ] && python3 "$CONFIG_MANAGER" update "paths" "vcs_exports" "$vcs_exports_input"
+  [ -n "$vcs_exports_input" ] && python3 "$CONFIG_MANAGER" update "paths" "vcs_exports_dir" "$vcs_exports_input"
   local dotfiles_dir_input
   read -r -p "Dotfiles Repo [${DOTFILES_DIR:-~/vcs/personal/mt-devops-framework}]: " dotfiles_dir_input
   [ -n "$dotfiles_dir_input" ] && python3 "$CONFIG_MANAGER" update "paths" "dotfiles_dir" "$dotfiles_dir_input"
   local ai_workspace_input
   read -r -p "AI Workspace [${AI_WORKSPACE_DIR:-~/vcs/workspaces/ai}]: " ai_workspace_input
-  [ -n "$ai_workspace_input" ] && python3 "$CONFIG_MANAGER" update "paths" "ai_workspace" "$ai_workspace_input"
+  [ -n "$ai_workspace_input" ] && python3 "$CONFIG_MANAGER" update "paths" "ai_workspace_dir" "$ai_workspace_input"
   local iam_scripts_input
   read -r -p "IAM Scripts [${SCRIPTS_IAM_DIR:-/tmp/scripts/iam}]: " iam_scripts_input
-  [ -n "$iam_scripts_input" ] && python3 "$CONFIG_MANAGER" update "paths" "scripts_iam" "$iam_scripts_input"
+  [ -n "$iam_scripts_input" ] && python3 "$CONFIG_MANAGER" update "paths" "iam_scripts_dir" "$iam_scripts_input"
   local docker_root_input
   read -r -p "Docker Root [${DOCKER_ROOT_DIR:-~/.docker}]: " docker_root_input
-  [ -n "$docker_root_input" ] && python3 "$CONFIG_MANAGER" update "paths" "docker_root" "$docker_root_input"
+  [ -n "$docker_root_input" ] && python3 "$CONFIG_MANAGER" update "paths" "docker_root_dir" "$docker_root_input"
   local export_dir_input
   read -r -p "Export Dir [${EXPORT_DIR:-/tmp/exports}]: " export_dir_input
   [ -n "$export_dir_input" ] && python3 "$CONFIG_MANAGER" update "paths" "export_dir" "$export_dir_input"
@@ -659,16 +659,16 @@ mt-wizard-git() {
   [ -n "$sync_url" ] && python3 "$CONFIG_MANAGER" update "git" "sync_repo_url" "$sync_url"
 
   read -r -p "Upstream Framework Path [${UPSTREAM_REPO_PATH:-MatStacey/mt-devops-framework}]: " upstream
-  [ -n "$upstream" ] && python3 "$CONFIG_MANAGER" update "git" "upstream_repo_path" "$upstream"
+  [ -n "$upstream" ] && python3 "$CONFIG_MANAGER" update "git" "upstream_repo_slug" "$upstream"
 
   read -r -p "Format on Push? (true/false) [${GIT_FORMAT_ON_PUSH:-true}]: " fmt
-  [ -n "$fmt" ] && python3 "$CONFIG_MANAGER" update "git" "format_on_push" "$fmt"
+  [ -n "$fmt" ] && python3 "$CONFIG_MANAGER" update "git" "enable_format_on_push" "$fmt"
 
   read -r -p "Feature Branch Prefix [${GIT_FEATURE_PREFIX:-feature/}]: " prefix
-  [ -n "$prefix" ] && python3 "$CONFIG_MANAGER" update "git" "feature_prefix" "$prefix"
+  [ -n "$prefix" ] && python3 "$CONFIG_MANAGER" update "git" "feature_branch_prefix" "$prefix"
 
   read -r -p "AI Max Diff Bytes [${AI_MAX_DIFF_BYTES:-4000}]: " bytes
-  [ -n "$bytes" ] && python3 "$CONFIG_MANAGER" update "git" "ai_max_diff_bytes" "$bytes"
+  [ -n "$bytes" ] && python3 "$CONFIG_MANAGER" update "ai" "max_context_bytes" "$bytes"
   echo -e "${CB_GREEN}✅ Git config updated.${C_RESET}"
 }
 
@@ -694,7 +694,7 @@ mt-wizard-cicd() {
   fi
   echo -e "${CB_BLUE}--- CI/CD Configuration ---${C_RESET}"
   read -r -p "Default Provider (github/bitbucket/gitlab/azure/jenkins) [${CICD_PROVIDER:-github}]: " prov
-  [ -n "$prov" ] && python3 "$CONFIG_MANAGER" update "cicd" "provider" "$prov"
+  [ -n "$prov" ] && python3 "$CONFIG_MANAGER" update "cicd" "default_provider" "$prov"
   echo -e "${CB_GREEN}✅ CI/CD config updated.${C_RESET}"
 }
 
@@ -720,7 +720,7 @@ mt-wizard-docker() {
   fi
   echo -e "${CB_BLUE}--- Docker Configuration ---${C_RESET}"
   read -r -p "Restart Blocklist (comma-separated) [${DOCKER_BLOCKLIST:-redis,postgres,local-db}]: " blk
-  [ -n "$blk" ] && python3 "$CONFIG_MANAGER" update "docker" "restart_blocklist" "$blk"
+  [ -n "$blk" ] && python3 "$CONFIG_MANAGER" update "docker" "restart_blocklist_csv" "$blk"
   echo -e "${CB_GREEN}✅ Docker config updated.${C_RESET}"
 }
 
