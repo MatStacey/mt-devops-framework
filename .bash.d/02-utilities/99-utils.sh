@@ -536,6 +536,28 @@ __mt_bg_run() {
 }
 
 #######################################
+# System: Stop one background job, dispatching to a job-type-specific stop
+# path when the registered PID is a wrapper rather than the real work
+# process. mt-http-server is the only job type that needs this today --
+# its server runs as an un-exec'd child of the wrapper (see
+# 31-http-server.sh) specifically so the wrapper can run idle-timeout/LAN
+# bridge cleanup after the server exits. SIGKILLing the wrapper PID orphans
+# the still-running, still-listening server instead of stopping it, since
+# SIGKILL can't be trapped and the child is never reparented back to it.
+# Arguments:
+#   $1 - Registered job PID (the wrapper PID for most job types)
+#   $2 - Job name
+#######################################
+__mt_jobs_stop_pid() {
+  local pid="$1" name="$2"
+  if [ "$name" = "mt-http-server" ]; then
+    mt-http-server --stop > /dev/null 2>&1
+  else
+    kill -9 "$pid" 2> /dev/null
+  fi
+}
+
+#######################################
 # System: List and manage MT background jobs
 # Usage: mt-jobs [-i|--interactive] [-p|--purge] [-c|--clean]
 #######################################
@@ -553,7 +575,7 @@ __mt_jobs_purge() {
   while IFS='|' read -r j_id j_pid j_name j_start j_end j_status j_log j_cmd; do
     [ -z "$j_id" ] && continue
     if [ "$j_status" = "RUNNING" ]; then
-      kill -9 "$j_pid" 2> /dev/null
+      __mt_jobs_stop_pid "$j_pid" "$j_name"
       j_status="CANCELLED"
       j_end=$current_time
       ((count++))
@@ -723,7 +745,7 @@ ${CB_BLUE}▶ Selected Job: ${j_name} (${j_id})${C_RESET}"
       ;;
     3*)
       if [ "$j_status" = "RUNNING" ]; then
-        kill -9 "$j_pid" 2> /dev/null
+        __mt_jobs_stop_pid "$j_pid" "$j_name"
         local tmp_m
         tmp_m=$(mktemp)
         awk -F'|' -v id="$j_id" -v e="$current_time" 'BEGIN{OFS="|"}$1==id{$5=e;$6="CANCELLED"}{print $0}' "$jobs_file" > "$tmp_m" && mv "$tmp_m" "$jobs_file"
@@ -731,9 +753,20 @@ ${CB_BLUE}▶ Selected Job: ${j_name} (${j_id})${C_RESET}"
       fi
       ;;
     4*)
-      local new_log
-      new_log="${LOG_DIR:-$HOME/.bash.d/data/logs}/indexer_$(date +%s).log"
-      __mt_bg_run "${j_name}" "$new_log" "$j_cmd"
+      if [ "$j_name" = "mt-http-server" ]; then
+        # The generic replay below only has the captured argv (j_cmd) --
+        # mt-http-server's port/auth/idle-timeout are passed as env vars
+        # that were function-local to the original launch and were never
+        # persisted here, so replaying j_cmd directly would silently come
+        # back on the default port with auth disabled. Its own -b already
+        # re-reads the same config the original run used.
+        mt-http-server --stop
+        mt-http-server -b
+      else
+        local new_log
+        new_log="${LOG_DIR:-$HOME/.bash.d/data/logs}/indexer_$(date +%s).log"
+        __mt_bg_run "${j_name}" "$new_log" "$j_cmd"
+      fi
       ;;
     5*)
       local tmp_m
