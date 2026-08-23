@@ -52,5 +52,10 @@ llm_exports:
 docker:
   restart_blocklist_csv: "redis,postgres,local-db"
 
+server:
+  default_port: 8000
+  enable_auth: false
+  enable_lan_bridge: false
+
 cicd:
   default_provider: github
