@@ -227,11 +227,11 @@ alias mt-hard-reload='mt-load-config && mt-refresh-caches'
 alias mtindp='mt-hub --index -t personal'
 
 #######################################
-# Version Control (Git) - Profile Synchronisation: Auto-sync framework with Shellcheck, Backup and Auto-Merge
+# Version Control (Git) - Profile Synchronisation: Auto-sync framework with Shellcheck, Backup, AI Commit-Grouping/README Summary, and Auto-Merge
 #######################################
-alias mtupd='mt-push-update -s -b -m -g'
+alias mtupd='mt-push-update -s -b -g'
 
 #######################################
-# Version Control (Git) - Update: Update Framework with Shellcheck, Backup, Auto-Merge and AI
+# Version Control (Git) - Fast Update: Update Framework with Shellcheck, Backup and Auto-Merge, skipping AI commit-grouping/README summarization
 #######################################
-alias mtupd-ai='mt-push-update -s -b -g'
+alias mtupd-fast='mt-push-update -s -b -m -g'

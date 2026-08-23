@@ -268,10 +268,9 @@ __mt_push_update_commit_and_raise_pr() {
     echo -e "${C_DIM}⏩ Skipping AI README summarization (-m active)...${C_RESET}"
   else
     __git_sync_ai_update_readme_summary "$repo_dir"
-  fi
-  if [ $? -eq 100 ]; then
-    echo -e "${CB_RED}🚨 Aborting profile sync.${C_RESET}"
-    exit 1
+    if [ $? -eq 100 ]; then
+      echo -e "${CB_YELLOW}⚠️  AI unavailable (quota/rate limit exhausted) -- continuing sync without a README summary this run.${C_RESET}"
+    fi
   fi
 
   git add --all
