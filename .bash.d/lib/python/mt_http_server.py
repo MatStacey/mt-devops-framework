@@ -8,11 +8,17 @@ credentials never show up in `ps` output for other local users to see:
   MT_SERVE_PASSWORD        and MT_SERVE_PASSWORD are both set)
   MT_SERVE_IDLE_TIMEOUT   - seconds of inactivity before shutting down
                              (auto-shutdown disabled if unset or 0)
+  MT_SERVE_BIND_ALL      - "1" to bind every network interface (LAN-
+                             reachable); anything else binds 127.0.0.1 only
 
 Serves the current working directory, matching `python3 -m http.server`'s
-own default. Writes its own PID to ~/.bash.d/data/cache/.mt_http_server.pid
-on startup so `mt-http-server --stop` can target the real server process
-directly, rather than whatever wrapper launched it.
+own default. Once the port is successfully bound, writes its own PID to
+~/.bash.d/data/cache/.mt_http_server.pid so `mt-http-server --stop` can
+target the real server process directly rather than whatever wrapper
+launched it -- writing the PID only after a successful bind (rather than
+before) means a second instance that loses a port-conflict race exits
+before ever touching the pidfile, instead of clobbering the winner's PID
+with its own before crashing.
 
 Basic Auth sends credentials base64-encoded, not encrypted -- this keeps
 casual LAN users out, it is not a substitute for TLS if the server is
@@ -94,18 +100,19 @@ def main():
     username = os.environ.get("MT_SERVE_USER", "")
     password = os.environ.get("MT_SERVE_PASSWORD", "")
     idle_timeout = int(os.environ.get("MT_SERVE_IDLE_TIMEOUT", "0") or "0")
+    bind_host = "" if os.environ.get("MT_SERVE_BIND_ALL") == "1" else "127.0.0.1"
 
     expected_header = None
     if username and password:
         token = base64.b64encode(f"{username}:{password}".encode()).decode()
         expected_header = f"Basic {token}"
 
-    os.makedirs(os.path.dirname(PID_FILE), exist_ok=True)
-    with open(PID_FILE, "w", encoding="utf-8") as f:
-        f.write(str(os.getpid()))
-
     handler = build_handler(expected_header)
-    with http.server.ThreadingHTTPServer(("", port), handler) as httpd:
+    with http.server.ThreadingHTTPServer((bind_host, port), handler) as httpd:
+        os.makedirs(os.path.dirname(PID_FILE), exist_ok=True)
+        with open(PID_FILE, "w", encoding="utf-8") as f:
+            f.write(str(os.getpid()))
+
         if idle_timeout > 0:
             watcher = threading.Thread(
                 target=_watch_idle, args=(httpd, idle_timeout), daemon=True
