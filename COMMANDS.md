@@ -276,9 +276,6 @@ Complex bash functions, framework utilities, and automated workflows.
 | Command | Description |
 |---|---|
 | `mt-alias` | System: Interactively create or update an alias |
-| `mt-backup` | System: Create an archive backup of the current directory |
-| `mt-log` | System: Centralized logging for MyTools |
-| `mt-logs` | System: View, filter, and manage framework logs |
 | `mt-top-files` | System: Display the top largest files in a directory |
 | `mt-vcs-audit` | System: Audit VCS root for unorganized files and directories |
 
@@ -346,8 +343,6 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `mt-apply` | System: Safely execute or write clipboard code without terminal paste truncation |
 | `mt-cmd-history` | System: Display history of executed framework commands |
-| `mt-jobs` | System: List and manage MT background jobs |
-| `mt-restore` | System: Restore framework from a zip backup |
 
 ### System & Environment Bootstrap
 | Command | Description |
@@ -385,6 +380,23 @@ Complex bash functions, framework utilities, and automated workflows.
 | Command | Description |
 |---|---|
 | `terraform` | Terraform: Core wrapper (preserves args) |
+
+### Utilities: Background Job Registry
+| Command | Description |
+|---|---|
+| `mt-jobs` | System: List and manage MT background jobs |
+
+### Utilities: Backup & Restore
+| Command | Description |
+|---|---|
+| `mt-backup` | System: Create an archive backup of the current directory |
+| `mt-restore` | System: Restore framework from a zip backup |
+
+### Utilities: Centralized Framework Logging
+| Command | Description |
+|---|---|
+| `mt-log` | System: Centralized logging for MyTools |
+| `mt-logs` | System: View, filter, and manage framework logs |
 
 ### Utilities: Temporary HTTP File Server
 | Command | Description |
