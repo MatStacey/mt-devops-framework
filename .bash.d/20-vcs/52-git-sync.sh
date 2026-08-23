@@ -311,9 +311,9 @@ __mt_push_update_commit_and_raise_pr() {
     # git-raise-pr treat it as a dead branch and abort. Disambiguating up
     # front avoids that abort entirely instead of requiring manual
     # recovery after the fact.
-    if git show-ref --verify --quiet "refs/heads/$branch_name" \
-      || git ls-remote --exit-code --heads origin "$branch_name" > /dev/null 2>&1 \
-      || { command -v gh > /dev/null 2>&1 && [ -n "$(gh pr view "$branch_name" --json state -q .state 2> /dev/null)" ]; }; then
+    if git show-ref --verify --quiet "refs/heads/$branch_name" ||
+      git ls-remote --exit-code --heads origin "$branch_name" > /dev/null 2>&1 ||
+      { command -v gh > /dev/null 2>&1 && [ -n "$(gh pr view "$branch_name" --json state -q .state 2> /dev/null)" ]; }; then
       branch_name="${branch_name}-$(date +%s)"
     fi
 

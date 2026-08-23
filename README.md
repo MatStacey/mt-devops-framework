@@ -6,8 +6,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-- Fixed `mt-push-update` silently reporting success when it actually failed to auto-merge: auto-generated branch names that collide with an old, already-merged PR branch are now disambiguated with a timestamp suffix before use, and the auto-merge step now checks `git-raise-pr`'s exit code instead of running unconditionally.
-- Fixed the underlying cause of a related false failure: `git-raise-pr` was reporting failure after successfully creating a PR whenever the "view in browser?" prompt had no terminal to read from, because that prompt's exit status was leaking into the whole function's return value.
+* Refactored multi-line conditional logic in `git-sync` script to place `||` operators at the end of lines instead of using explicit backslash continuations, improving bash script readability and code consistency.
 
 ---
 
