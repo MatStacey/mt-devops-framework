@@ -42,10 +42,34 @@ __mt_http_server_wsl_bridge() {
 }
 
 #######################################
+# System: Tear down the WSL LAN-exposure bridge if the bridge-state file
+# says one is active, then remove that state file. A no-op if no bridge
+# was ever established. Called both from the foreground Ctrl+C trap and
+# appended to the background command string, so it also runs when a
+# backgrounded server exits on its own via idle-timeout auto-shutdown --
+# nothing else would ever notice that happened otherwise.
+#######################################
+__mt_http_server_teardown_bridge_if_active() {
+  local bridge_state_file="$HOME/.bash.d/data/cache/.mt_http_server_bridge_port"
+  [ -f "$bridge_state_file" ] || return 0
+
+  local bridge_port
+  bridge_port=$(command cat "$bridge_state_file")
+  echo -e "${CB_YELLOW}🧹 Removing Windows portproxy and firewall rule for port ${bridge_port}...${C_RESET}"
+  if __mt_http_server_wsl_bridge "Remove" "$bridge_port"; then
+    mt-log INFO "mt-http-server: WSL bridge for port ${bridge_port} removed."
+  else
+    mt-log ERROR "mt-http-server: failed to remove WSL bridge for port ${bridge_port} -- clean up manually via 'netsh interface portproxy show v4tov4' and Windows Firewall if needed."
+  fi
+  rm -f "$bridge_state_file"
+}
+
+#######################################
 # System: Look up a currently-running mt-http-server background job in the
 # shared mt-jobs registry, verifying the PID is actually alive rather than
-# trusting a possibly-stale RUNNING status (e.g. after a `kill -9` from
-# outside mt-jobs, or a crash that never updated its own registry row)
+# trusting a possibly-stale RUNNING status (e.g. after a crash that never
+# updated its own registry row). This is the wrapper's PID, not
+# necessarily the real server process -- see __mt_http_server_pid for that.
 # Outputs:
 #   Prints the PID to STDOUT if one is genuinely running; nothing otherwise
 #######################################
@@ -63,32 +87,56 @@ __mt_http_server_running_job() {
 }
 
 #######################################
+# System: Read the real server process's PID from its own pidfile
+# (written by mt_http_server.py on startup), verifying it's actually
+# alive. This is deliberately not the same PID mt-jobs tracks -- the
+# server always runs as a child of the mt-jobs wrapper subshell (never
+# execed into it), so that wrapper can run bridge cleanup after the
+# server exits, for any reason. --stop needs the real PID to target the
+# actual server.
+# Outputs:
+#   Prints the PID to STDOUT if alive; nothing otherwise
+#######################################
+__mt_http_server_pid() {
+  local pid_file="$HOME/.bash.d/data/cache/.mt_http_server.pid"
+  [ -f "$pid_file" ] || return 0
+  local pid
+  pid=$(command cat "$pid_file")
+  [ -n "$pid" ] && kill -0 "$pid" 2> /dev/null && echo "$pid"
+}
+
+#######################################
 # System: Host the current directory over a temporary HTTP server. Only
 # one instance is supported at a time -- -b refuses to start a second one
 # rather than running multiple concurrent servers.
-# Usage: mt-http-server [-p port] [-w|--no-wsl-bridge] [-a|--no-auth] [-b] [--stop] [-l]
+# Usage: mt-http-server [-p port] [-w|--no-wsl-bridge] [-a|--no-auth] [-t seconds|--no-idle-timeout] [-b] [--stop] [-l]
 # Options:
-#   -p, --port <port>   Specify custom port (default: config server.default_port, else 8000)
-#   -w, --wsl-bridge     (WSL only) Prompt to bridge the server to your LAN via
-#                        a Windows portproxy + firewall rule (requires Admin
-#                        elevation). Default comes from config server.enable_lan_bridge.
-#   --no-wsl-bridge      Force the LAN bridge off for this run, overriding a
-#                        config default of true
-#   -a, --auth           Require HTTP Basic Auth -- generates a random password
-#                        each run and prints it once. Default comes from config
-#                        server.enable_auth.
-#   --no-auth            Force auth off for this run, overriding a config
-#                        default of true
-#   -b, --background     Run detached via the mt-jobs background registry
-#                        instead of blocking the terminal. Refuses to start
-#                        if an instance is already running.
-#   --stop               Stop the running background instance, if any, and
-#                        tear down its LAN bridge if it had one
-#   -l, --status         Show whether a background instance is running
-#   -h, --help           Show this help menu
+#   -p, --port <port>          Specify custom port (default: config server.default_port, else 8000)
+#   -w, --wsl-bridge            (WSL only) Prompt to bridge the server to your LAN
+#                               via a Windows portproxy + firewall rule (requires
+#                               Admin elevation). Default comes from config
+#                               server.enable_lan_bridge.
+#   --no-wsl-bridge             Force the LAN bridge off for this run, overriding a
+#                               config default of true
+#   -a, --auth                  Require HTTP Basic Auth -- generates a random
+#                               password each run and prints it once. Default
+#                               comes from config server.enable_auth.
+#   --no-auth                   Force auth off for this run, overriding a config
+#                               default of true
+#   -t, --idle-timeout <secs>   Auto-shutdown after this many seconds with no
+#                               requests. Default comes from config
+#                               server.idle_timeout_sec (1800 = 30 minutes).
+#   --no-idle-timeout           Disable auto-shutdown for this run
+#   -b, --background            Run detached via the mt-jobs background registry
+#                               instead of blocking the terminal. Refuses to start
+#                               if an instance is already running.
+#   --stop                      Stop the running background instance, if any, and
+#                               tear down its LAN bridge if it had one
+#   -l, --status                Show whether a background instance is running
+#   -h, --help                  Show this help menu
 # Globals:
 #   OS_FAMILY, HTTP_SERVER_DEFAULT_PORT, HTTP_SERVER_ENABLE_AUTH,
-#   HTTP_SERVER_ENABLE_LAN_BRIDGE
+#   HTTP_SERVER_ENABLE_LAN_BRIDGE, HTTP_SERVER_IDLE_TIMEOUT_SEC
 #######################################
 mt-http-server() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -99,6 +147,7 @@ mt-http-server() {
   local port="${HTTP_SERVER_DEFAULT_PORT:-8000}"
   local expose_wsl="${HTTP_SERVER_ENABLE_LAN_BRIDGE:-false}"
   local require_auth="${HTTP_SERVER_ENABLE_AUTH:-false}"
+  local idle_timeout="${HTTP_SERVER_IDLE_TIMEOUT_SEC:-1800}"
   local run_background=false do_stop=false do_status=false
   local bridge_state_file="$HOME/.bash.d/data/cache/.mt_http_server_bridge_port"
 
@@ -124,6 +173,18 @@ mt-http-server() {
         require_auth=false
         shift
         ;;
+      -t | --idle-timeout)
+        if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+          echo "mt-http-server: --idle-timeout requires a non-negative integer (seconds)" >&2
+          return 1
+        fi
+        idle_timeout="$2"
+        shift 2
+        ;;
+      --no-idle-timeout)
+        idle_timeout=0
+        shift
+        ;;
       -b | --background)
         run_background=true
         shift
@@ -137,7 +198,7 @@ mt-http-server() {
         shift
         ;;
       *)
-        echo "Usage: mt-http-server [-p port] [-w|--no-wsl-bridge] [-a|--no-auth] [-b] [--stop] [-l]" >&2
+        echo "Usage: mt-http-server [-p port] [-w|--no-wsl-bridge] [-a|--no-auth] [-t seconds|--no-idle-timeout] [-b] [--stop] [-l]" >&2
         return 1
         ;;
     esac
@@ -156,33 +217,29 @@ mt-http-server() {
   fi
 
   if [ "$do_stop" = true ]; then
-    local stop_pid
-    stop_pid=$(__mt_http_server_running_job)
-    if [ -z "$stop_pid" ]; then
+    local wrapper_pid
+    wrapper_pid=$(__mt_http_server_running_job)
+    if [ -z "$wrapper_pid" ]; then
       echo -e "${CB_YELLOW}⚠️  No background instance is running.${C_RESET}"
       return 0
     fi
 
-    if [ -f "$bridge_state_file" ]; then
-      local bridge_port
-      bridge_port=$(command cat "$bridge_state_file")
-      echo -e "${CB_YELLOW}🧹 Removing Windows portproxy and firewall rule for port ${bridge_port}...${C_RESET}"
-      if __mt_http_server_wsl_bridge "Remove" "$bridge_port"; then
-        mt-log INFO "mt-http-server: WSL bridge for port ${bridge_port} removed."
-      else
-        mt-log ERROR "mt-http-server: failed to remove WSL bridge for port ${bridge_port} -- clean up manually via 'netsh interface portproxy show v4tov4' and Windows Firewall if needed."
-      fi
-      rm -f "$bridge_state_file"
-    fi
+    local server_pid
+    server_pid=$(__mt_http_server_pid)
+    [ -n "$server_pid" ] && kill "$server_pid" 2> /dev/null
 
-    kill -9 "$stop_pid" 2> /dev/null
-    local jobs_file="$HOME/.bash.d/data/cache/.mt_jobs.tsv"
-    if [ -f "$jobs_file" ]; then
-      local tmp_jobs
-      tmp_jobs=$(mktemp)
-      awk -F'|' -v pid="$stop_pid" -v e="$(date +%s)" 'BEGIN{OFS="|"} $2==pid && $6=="RUNNING" { $5=e; $6="CANCELLED" } { print $0 }' "$jobs_file" > "$tmp_jobs" && mv "$tmp_jobs" "$jobs_file"
+    echo -e "${CB_YELLOW}⏳ Stopping (may take a moment if a LAN bridge needs to be torn down)...${C_RESET}"
+    local waited=0
+    while kill -0 "$wrapper_pid" 2> /dev/null && [ "$waited" -lt 30 ]; do
+      sleep 0.5
+      waited=$((waited + 1))
+    done
+
+    if kill -0 "$wrapper_pid" 2> /dev/null; then
+      echo -e "${CB_YELLOW}⚠️  Still shutting down in the background -- check 'mt-http-server -l' shortly.${C_RESET}"
+    else
+      echo -e "${CB_GREEN}✅ Background mt-http-server stopped.${C_RESET}"
     fi
-    echo -e "${CB_GREEN}✅ Background mt-http-server stopped.${C_RESET}"
     return 0
   fi
 
@@ -222,14 +279,7 @@ mt-http-server() {
     [ "$cleaned_up" = true ] && return 0
     cleaned_up=true
     echo -e "\n${CB_YELLOW}🛑 Stopping server...${C_RESET}"
-    if [ "$expose_wsl" = true ]; then
-      echo -e "${CB_YELLOW}🧹 Removing Windows portproxy and firewall rule...${C_RESET}"
-      if __mt_http_server_wsl_bridge "Remove" "$port"; then
-        mt-log INFO "mt-http-server: WSL bridge for port ${port} removed."
-      else
-        mt-log ERROR "mt-http-server: failed to remove WSL bridge for port ${port} -- clean up manually via 'netsh interface portproxy show v4tov4' and Windows Firewall if needed."
-      fi
-    fi
+    __mt_http_server_teardown_bridge_if_active
   }
 
   echo -e "${CB_BLUE}🚀 Starting temporary HTTP server on port ${port}...${C_RESET}"
@@ -239,7 +289,7 @@ mt-http-server() {
     if __mt_http_server_wsl_bridge "Add" "$port"; then
       echo -e "${CB_GREEN}✅ Portproxy established. LAN devices can connect!${C_RESET}"
       mt-log INFO "mt-http-server: WSL bridge for port ${port} established."
-      [ "$run_background" = true ] && echo "$port" > "$bridge_state_file"
+      echo "$port" > "$bridge_state_file"
     else
       echo -e "${CB_RED}🚨 Failed to establish the LAN bridge (elevation declined or unavailable). Continuing with local-only access.${C_RESET}"
       mt-log ERROR "mt-http-server: failed to establish the WSL portproxy/firewall bridge for port ${port}."
@@ -248,18 +298,33 @@ mt-http-server() {
   fi
 
   local -a serve_cmd=(python3 -m http.server "$port")
+  local -x MT_SERVE_PORT="$port"
+  local -x MT_SERVE_IDLE_TIMEOUT="$idle_timeout"
+  # -b needs the custom script regardless of auth/idle-timeout, since
+  # --stop targets the PID it writes to a pidfile -- plain
+  # `python3 -m http.server` writes no such file, leaving --stop with
+  # nothing to kill.
+  local use_custom_script=false
+  [ "$idle_timeout" -gt 0 ] && use_custom_script=true
+  [ "$run_background" = true ] && use_custom_script=true
+
   if [ "$require_auth" = true ]; then
     local -x MT_SERVE_USER="mtserve"
     local -x MT_SERVE_PASSWORD
     MT_SERVE_PASSWORD=$(openssl rand -hex 8)
-    local -x MT_SERVE_PORT="$port"
-    serve_cmd=(python3 "$HOME/.bash.d/lib/python/auth_http_server.py")
+    use_custom_script=true
 
     echo -e "${CB_CYAN}🔐 Basic Auth enabled:${C_RESET}"
     echo -e "   ${CB_CYAN}Username:${C_RESET} ${MT_SERVE_USER}"
     echo -e "   ${CB_CYAN}Password:${C_RESET} ${MT_SERVE_PASSWORD}"
     echo -e "${C_DIM}(Sent as HTTP Basic Auth -- keeps casual LAN users out, not a substitute for TLS)${C_RESET}\n"
   fi
+
+  if [ "$idle_timeout" -gt 0 ]; then
+    echo -e "${CB_CYAN}⏱️  Auto-shutdown after ${idle_timeout}s of inactivity.${C_RESET}"
+  fi
+
+  [ "$use_custom_script" = true ] && serve_cmd=(python3 "$HOME/.bash.d/lib/python/mt_http_server.py")
 
   echo -e "${CB_CYAN}📡 Listening on:${C_RESET}"
   if command -v ip > /dev/null 2>&1; then
@@ -270,17 +335,18 @@ mt-http-server() {
     local log_file
     log_file="${LOG_DIR:-$HOME/.bash.d/data/logs}/http_server_$(date +%s).log"
 
-    # exec replaces __mt_bg_run's subshell process image with the server
-    # itself, so the server inherits the exact PID recorded in the jobs
-    # registry -- without it, `eval` forks the server as a child process,
-    # and killing the registered PID (--stop) leaves that child running
-    # as an orphan instead of actually stopping the server.
+    # Deliberately NOT execed -- this wrapper subshell needs to stay alive
+    # after the server process exits (whether via --stop or the server's
+    # own idle-timeout auto-shutdown) so the bridge-cleanup step below
+    # actually runs. --stop targets the server's own PID (from its
+    # pidfile, see __mt_http_server_pid), not this wrapper's PID.
     local cmd_string part
-    cmd_string="exec"
-    for part in "${serve_cmd[@]}"; do
+    printf -v cmd_string '%q' "${serve_cmd[0]}"
+    for part in "${serve_cmd[@]:1}"; do
       printf -v part '%q' "$part"
       cmd_string="$cmd_string $part"
     done
+    cmd_string="$cmd_string; __mt_http_server_teardown_bridge_if_active"
 
     __mt_bg_run "mt-http-server" "$log_file" "$cmd_string"
     echo -e "${C_DIM}Stop with: mt-http-server --stop${C_RESET}"

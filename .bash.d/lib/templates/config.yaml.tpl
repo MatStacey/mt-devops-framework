@@ -56,6 +56,7 @@ server:
   default_port: 8000
   enable_auth: false
   enable_lan_bridge: false
+  idle_timeout_sec: 1800
 
 cicd:
   default_provider: github
