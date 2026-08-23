@@ -6,10 +6,8 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-- Fixed `mt-http-server` binding to every network interface by default; it now binds loopback-only unless LAN exposure is explicitly confirmed via `-w`, on every platform (previously only WSL gated LAN exposure behind a confirmation -- macOS and native Linux were reachable from the whole network with zero warning).
-- Fixed an orphaned Windows firewall/portproxy rule going undetected after an unclean shutdown (crash, `wsl --shutdown`, sleep) -- `mt-http-server -l`/`--stop` now detect and clean up a leftover LAN bridge even when no server is running.
-- Fixed a race where a second `-b` launch failing to bind a port could corrupt the first instance's PID file; the real PID is now only written after a successful bind.
-- Added `--port` input validation (matching the existing `--idle-timeout` validation) and scoped the Windows LAN-bridge firewall rule to private IP ranges.
+- Fixed `mt-push-update` silently reporting success when it actually failed to auto-merge: auto-generated branch names that collide with an old, already-merged PR branch are now disambiguated with a timestamp suffix before use, and the auto-merge step now checks `git-raise-pr`'s exit code instead of running unconditionally.
+- Fixed the underlying cause of a related false failure: `git-raise-pr` was reporting failure after successfully creating a PR whenever the "view in browser?" prompt had no terminal to read from, because that prompt's exit status was leaking into the whole function's return value.
 
 ---
 
