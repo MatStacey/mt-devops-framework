@@ -88,7 +88,7 @@ def load_env():
     # AI
     export(
         "AI_ENABLED",
-        core_cfg.get("enable_ai", ai_cfg.get("enabled", True)),
+        ai_cfg.get("enable_ai", ai_cfg.get("enabled", True)),
         to_lower=True,
     )
     export("DEFAULT_AI", ai_cfg.get("default_provider", "gemini"), to_lower=True)
