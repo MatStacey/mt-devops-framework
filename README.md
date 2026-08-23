@@ -6,7 +6,8 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-* Refactored multi-line conditional logic in `git-sync` script to place `||` operators at the end of lines instead of using explicit backslash continuations, improving bash script readability and code consistency.
+- Fixed the README `Recent Updates` section always being wholly replaced by the latest push's summary; it now accumulates a rolling history of the last 8 changes instead, prepending each new entry rather than discarding prior ones.
+- Refactored multi-line conditional logic in `git-sync` script to place `||` operators at the end of lines instead of using explicit backslash continuations, improving bash script readability and code consistency.
 
 ---
 
