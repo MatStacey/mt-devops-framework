@@ -68,6 +68,8 @@ Execute the installation script. This safely backs up your default `.bashrc`, co
 
 ```
 
+**Prefer a guided setup?** Run `./install-wizard.sh` instead. It does everything `install.sh` does, then walks you through choosing an install type (Full, or Custom to pick individual optional tools like Terraform, the Google Cloud CLI, kubectl, and Speedtest), configuring each settings category, and setting up AI -- all via simple prompts, no extra dependencies required to run the wizard itself.
+
 ### 3. Automated Bootstrapping
 
 At the end of the installation, you will be prompted to bootstrap system dependencies:
@@ -85,7 +87,7 @@ mt-setup
 
 ```
 
-The interactive wizard will seamlessly guide you through setting your default IDE, AI provider, and Git synchronization repository. It will prompt you to add your AI provider's API key, but only ever points you to `~/vcs/secrets/secrets.sh` to enter it directly — the wizard itself never touches the key value.
+The interactive wizard will seamlessly guide you through setting your default IDE, AI provider, and Git synchronization repository. To add your AI provider's API key, run `mt-add-gemini-key` or `mt-add-claude-key` — both write directly and safely to `~/vcs/secrets/secrets.sh` (created with restrictive permissions, entirely outside the git-tracked repo), so your key is never typed into a git-visible file.
 
 ### 5. Keeping Your Profile Updated
 
