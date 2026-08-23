@@ -6,17 +6,11 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-A senior-engineering audit pass across the framework: five oversized functions were split into focused helpers, a shell-injection surface was closed, `config.yaml` was made the true single source of truth for previously hardcoded values, and a new `mt` subcommand dispatcher landed alongside a safe, fully-featured export-cleanup command.
-
-- **Function Decomposition**: `mt-export`, `mt-push-update`, `mt-jobs`, `mt-backup`, `git-raise-pr`, `mt-ai-quota`, `mt-get-update`, `__git_sync_ai_commit`, and `__mt_hub_index` were each split into small, single-purpose helpers — flattening deep nesting and cutting cyclomatic complexity throughout.
-- **Security**: Removed an unnecessary `eval` in `mt-export`'s file listing that made the `-d`/target-directory argument a shell-injection surface.
-- **Config as Source of Truth**: `mt-backup` and `cd-win-docker` no longer bypass `config_manager.py` with ad-hoc `python3 -c` reads; AI retry counts, file-count thresholds, and the log-rotation size moved out of hardcoded values into `config.yaml`.
-- **Cache Bug Fix**: `mt-refresh-caches` was writing to a legacy `.env.cache` path the framework no longer reads at startup, silently breaking any config value that depended on it.
-- **`mt-export-cleanup`**: New command to safely purge stale `mt-export` output — validates filenames before deleting, previews a pre-flight table, and supports `-f/-q/-b/-B/-i` (force, quiet, backup, background via `mt-jobs`, interactive fzf menu).
-- **`mt` Subcommand Dispatcher**: Framework commands can now be run as `mt <name>` instead of `mt-<name>` (e.g. `mt export -i`), with tab-completion for subcommands and flags.
-- **Reliability Fixes**: `git-raise-pr` and `mt-push-update`'s branch-reconciliation prompts no longer hang indefinitely in non-interactive/background shells — they now read from `/dev/tty` and fail safely (declining any destructive action) instead of blocking forever.
-- **Naming & Docs**: Resolved the `mt-set-*`/`mt-setup-*` naming collision (`mt-setup-*` now delegates to canonical `mt-wizard-*` names), added the missing `mt-set-cicd`, and documented the `gcl-`/`gcp-`/`gce-`/`gcs-`/`bq-` GCP prefix convention.
-- **Documentation Pipeline**: `COMMANDS.md` generation was incorrectly gated behind AI summarization (`-m`/`--no-ai`) even though it's a purely local, deterministic step — it now always regenerates on every sync. Fixed a `mt-dump` bug where the generated `TECHNICAL_REFERENCE.md` header showed literal `$(date)` text instead of the actual date.
+- Added automated installation support for `eza` (modern `ls` replacement) via Homebrew on macOS and custom APT repository on Debian/Ubuntu.
+- Added official installer functions for `terraform` (via HashiCorp tap/APT repo) and Google Cloud CLI (`gcloud`).
+- Added `kubectl` installation handler supporting Homebrew on macOS and direct binary releases matching system architecture on Linux.
+- Updated system external dependency bootstrap logic (`__bootstrap_external`) to integrate `eza`, `terraform`, `gcloud`, and `kubectl` installers.
+- Added shared `__bootstrap_gh_and_claude` helper function to streamline GitHub CLI and Claude Code setup.
 
 ---
 

@@ -55,35 +55,42 @@ fi
 
 echo "✅ Files successfully synced to home directory."
 
-# 4. Check dependencies and conditionally prompt for bootstrap
-echo "🔍 Checking for missing system dependencies..."
+# 4. Source OS detection + bootstrap helpers. Always runs -- both this
+# script's own dependency check below and install-wizard.sh (which
+# sources this file with MT_INSTALL_WIZARD=1 to reuse the sync above
+# while driving its own interactive dependency selection instead) need
+# OS_FAMILY/the dependency arrays/the installer functions available.
 source "$TARGET_BASHD/00-system/00-os.sh"
 source "$TARGET_BASHD/00-system/04-bootstrap.sh"
 
-MISSING_DEPS_CHECK=()
-if [ "$OS_FAMILY" = "macos" ]; then
-  MISSING_DEPS_CHECK=("${BREW_DEPENDENCIES[@]}")
-else
-  MISSING_DEPS_CHECK=("${APT_DEPENDENCIES[@]}")
-  MISSING_DEPS_CHECK+=("yq:yq") # Linux manually checks yq since it bypasses APT
-fi
-MISSING_DEPS_CHECK+=("${PYTHON_DEPENDENCIES[@]}" "${COMPLEX_DEPENDENCIES[@]}")
-
-# Utilize the framework's native checker
-MISSING_LIST=($(__get_missing_deps "${MISSING_DEPS_CHECK[@]}"))
-
-if [ ${#MISSING_LIST[@]} -gt 0 ]; then
-  echo -e "\n\033[1;33m⚠️ Missing required dependencies detected: ${MISSING_LIST[*]}\033[0m"
-  read -p "🔍 Would you like to run 'bootstrap' to install them now? [Y/n] " -n 1 -r
-  echo
-  if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
-    bootstrap
-  else
-    echo "💡 You can run 'bootstrap' anytime later from your terminal."
-  fi
-else
-  echo "✅ All system dependencies are already satisfied."
-fi
-
 mkdir -p "$HOME/.bash.d/data/cache" "$HOME/.bash.d/data/logs" "$HOME/.bash.d/config"
-echo -e "\n🎉 Installation complete! Run 'source ~/.bashrc' or open a new terminal session to activate your environment."
+
+if [ -z "${MT_INSTALL_WIZARD:-}" ]; then
+  echo "🔍 Checking for missing system dependencies..."
+  MISSING_DEPS_CHECK=()
+  if [ "$OS_FAMILY" = "macos" ]; then
+    MISSING_DEPS_CHECK=("${BREW_DEPENDENCIES[@]}")
+  else
+    MISSING_DEPS_CHECK=("${APT_DEPENDENCIES[@]}")
+    MISSING_DEPS_CHECK+=("yq:yq") # Linux manually checks yq since it bypasses APT
+  fi
+  MISSING_DEPS_CHECK+=("${PYTHON_DEPENDENCIES[@]}" "${COMPLEX_DEPENDENCIES[@]}")
+
+  # Utilize the framework's native checker
+  MISSING_LIST=($(__get_missing_deps "${MISSING_DEPS_CHECK[@]}"))
+
+  if [ ${#MISSING_LIST[@]} -gt 0 ]; then
+    echo -e "\n\033[1;33m⚠️ Missing required dependencies detected: ${MISSING_LIST[*]}\033[0m"
+    read -p "🔍 Would you like to run 'bootstrap' to install them now? [Y/n] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+      bootstrap
+    else
+      echo "💡 You can run 'bootstrap' anytime later from your terminal."
+    fi
+  else
+    echo "✅ All system dependencies are already satisfied."
+  fi
+
+  echo -e "\n🎉 Installation complete! Run 'source ~/.bashrc' or open a new terminal session to activate your environment."
+fi
