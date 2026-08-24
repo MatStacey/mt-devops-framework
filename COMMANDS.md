@@ -116,10 +116,16 @@ Shortcuts for common commands and CLI replacements.
 | `reload` | System: Reload Bash profile and caches |
 | `sys-update-install` | System: Update, Upgrade, Boostrap, and Reload |
 
+### Terraform & Kubernetes Wrappers
+| Command | Description |
+|---|---|
+| `tf-scan` | Terraform: Scan local terraform directory (./terraform) with Checkov |
+
 ### Terraform Aliases
 | Command | Description |
 |---|---|
 | `tf` | Terraform: Core Execution |
+| `tf-refresh` | Terraform: Refresh state without applying changes (Modern) |
 | `tfa` | Terraform: Apply changes |
 | `tfap` | Terraform: Apply the saved plan file |
 | `tfay` | Terraform: Apply changes (Auto-Approve) |
@@ -133,7 +139,6 @@ Shortcuts for common commands and CLI replacements.
 | `tfp` | Terraform: Generate execution plan |
 | `tfpd` | Terraform: Generate destruction plan |
 | `tfpo` | Terraform: Generate a saved plan file (tfplan) |
-| `tf-refresh` | Terraform: Refresh state without applying changes (Modern) |
 | `tfs` | Terraform: State management commands |
 | `tfsh` | Terraform: Show current state or plan |
 | `tfsls` | Terraform: List resources in state |
@@ -148,11 +153,6 @@ Shortcuts for common commands and CLI replacements.
 | `tfwst` | Terraform: Select an existing workspace |
 | `tfwsw` | Terraform: Show the current workspace name |
 | `tfy` | Terraform: Shortcut alias for tf-yaml |
-
-### Terraform & Kubernetes Wrappers
-| Command | Description |
-|---|---|
-| `tf-scan` | Terraform: Scan local terraform directory (./terraform) with Checkov |
 
 ### Version Control (Git) - Core Helpers
 | Command | Description |
@@ -193,7 +193,6 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-become-collaborator` | Config: Interactive one-time setup wizard for collaborators who don't |
 | `mt-get-gemini-status` | AI: Print current Gemini API model version and extended reasoning mode toggle |
 | `mt-load-config` | Config: Forcefully re-parse config.yaml and reload environment variables |
-| `mt-migrate-config` | Config: Detect and clean up legacy config.yaml keys left behind by past |
 | `mt-open-config` | Config: Open bash.d directory and config.yaml in IDE |
 | `mt-set-cicd` | Config: Set default CI/CD provider |
 | `mt-set-default-ai` | Config: Set default AI model provider |
@@ -363,11 +362,6 @@ Complex bash functions, framework utilities, and automated workflows.
 | `sys-install` | System: Updates system packages and clears pending-update marker |
 | `sys-update` | System: Updates system packages (APT on Debian/WSL, Homebrew on macOS) |
 
-### System: Interactive Master Menu
-| Command | Description |
-|---|---|
-| `mt-menu` | System: Launch the interactive master router for the entire framework. |
-
 ### System & Navigation Aliases
 | Command | Description |
 |---|---|
@@ -376,10 +370,20 @@ Complex bash functions, framework utilities, and automated workflows.
 | `win-export` | System: Open ~/vcs/personal/exports in the platform's native file manager (shortcut for `win export`) |
 | `win-vcs` | System: Open ~/vcs in the platform's native file manager (shortcut for `win vcs`) |
 
+### System: Interactive Master Menu
+| Command | Description |
+|---|---|
+| `mt-menu` | System: Launch the interactive master router for the entire framework. |
+
 ### Terraform & AI Integrations
 | Command | Description |
 |---|---|
 | `tf-iam` | AI: Analyze Terraform codebase for IAM requirements and optionally generate script |
+
+### Terraform & Kubernetes Wrappers
+| Command | Description |
+|---|---|
+| `terraform` | Terraform: Core wrapper (preserves args) |
 
 ### Terraform Aliases
 | Command | Description |
@@ -387,11 +391,6 @@ Complex bash functions, framework utilities, and automated workflows.
 | `tf-clean` | Terraform: Aggressively clean local caching (.terraform, locks, plans) |
 | `tf-replace` | Terraform: Replace a specific resource (Modern alternative to taint) |
 | `tf-yaml` | Terraform: Execute Terraform using a YAML config file for variables |
-
-### Terraform & Kubernetes Wrappers
-| Command | Description |
-|---|---|
-| `terraform` | Terraform: Core wrapper (preserves args) |
 
 ### Utilities: Background Job Registry
 | Command | Description |
