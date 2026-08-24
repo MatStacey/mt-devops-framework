@@ -622,10 +622,18 @@ __mt_get_update_check_divergence() {
 }
 
 #######################################
-# System: Run a downloaded release's install.sh and record its version
+# System: Run a downloaded release's install.sh, record its version, and
+# reconcile any legacy config.yaml keys against the newly-installed
+# schema. install.sh only ever deploys .bash.d/lib/templates/config.yaml.tpl
+# -- it never touches an existing config.yaml -- so this is the one place
+# a stale config.yaml (still holding keys from before a schema rename)
+# reliably gets cleaned up, right as the release that changed the schema
+# lands. See mt-migrate-config for the full explanation.
 # Arguments:
 #   $1 - Path to the extracted release's root directory
 #   $2 - Tag name to record as the new current version
+# Globals:
+#   CONFIG_MANAGER, CONFIG_FILE
 # Returns:
 #   0 on success, 1 if install.sh is missing from the release
 #######################################
@@ -641,6 +649,10 @@ __mt_get_update_install() {
   )
   mkdir -p "$HOME/.bash.d/data/cache" "$HOME/.bash.d/data/logs" "$HOME/.bash.d/config"
   echo "$tag_name" > "$HOME/.bash.d/data/.current_version"
+
+  if [ -f "$CONFIG_MANAGER" ] && [ -f "$CONFIG_FILE" ]; then
+    python3 "$CONFIG_MANAGER" migrate
+  fi
 }
 
 #######################################
