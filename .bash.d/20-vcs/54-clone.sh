@@ -333,18 +333,24 @@ __mt_clone_run_wizard() {
 # intercepts every `clone` call and redirects it into a flat $VCS_ROOT,
 # which mt-clone doesn't want since it already computes its own,
 # more specific target directory.
+# NOTE: Bitbucket's git-over-HTTPS auth requires the static literal
+# username "x-bitbucket-api-token-auth" paired with the API token --
+# unlike the REST API (clone_wizard.py's _bitbucket_auth_header), which
+# correctly uses the account email instead. Sending the email here
+# causes every clone to fail with a generic "may not have access"
+# error even though the same token works fine for the repo listing.
 # Arguments:
 #   $1 - HTTPS clone URL
 #   $2 - Target directory
 # Globals:
-#   BITBUCKET_EMAIL, BITBUCKET_API_KEY
+#   BITBUCKET_API_KEY
 # Returns:
 #   0 on success, git clone's own exit code otherwise
 #######################################
 __mt_clone_bitbucket_repo() {
   local clone_url="$1" target_dir="$2"
   local auth_header
-  auth_header="Basic $(printf '%s:%s' "$BITBUCKET_EMAIL" "$BITBUCKET_API_KEY" | base64 | tr -d '\n')"
+  auth_header="Basic $(printf '%s:%s' "x-bitbucket-api-token-auth" "$BITBUCKET_API_KEY" | base64 | tr -d '\n')"
 
   GIT_CONFIG_COUNT=1 \
     GIT_CONFIG_KEY_0="http.extraHeader" \
