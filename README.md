@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-- **Configuration Migration (`mt-migrate-config`)**: Added utility to clean up legacy keys in `config.yaml` caused by schema updates, including automated backups prior to migration.
-- **System Diagnostics (`mt-doctor`)**: Introduced comprehensive diagnostic checks for framework versioning, sync repository configurations, GitHub CLI authentication, and repository Git states.
-- **Removed Legacy Configuration Migration:** Removed `mt-migrate-config` shell function, interactive menu entry, and automated migration logic previously executed during updates.
-- **Streamlined Config Manager:** Cleaned up `config_manager.py` by removing deprecated schema migration functions, leaf/section rename maps, and related helper methods.
-- Introduced `mt-migrate-config` command and interactive menu entry to detect and clean up legacy configuration keys in `config.yaml` left behind by schema renames.
-- Automated config schema reconciliation during framework releases (`mt-get-update`), preserving existing user settings while removing deprecated options.
-- Enhanced `config_manager.py` with section- and leaf-level schema mapping logic, including automatic backup creation before modifying `config.yaml`.
-- **Resolved Git Sync Data Discard Issue**: Removed the `-u` (`--update`) flag from the `rsync` operation in `__git_sync_copy_files()` to ensure local edits in `$HOME/.bash.d/` are reliably copied to the repository directory.
+- Refactored repository initialization logic to ensure remote `origin` URL reconciliation runs on existing local checkouts.
+- Fixed an issue where mismatched or updated `SYNC_REPO_URL` values caused `403` push errors on pre-existing git repositories.
+- Updated internal function documentation to clarify remote origin synchronization behavior.
+- **Added System Diagnostics (`mt-doctor`)**: Introduced `.bash.d/00-system/03-doctor.sh` to perform automated health checks on environment configuration and status.
+- **Version Check Integration**: Added checks against cached version data to report outdated installations and prompt updates.
+- **Sync Configuration & GitHub CLI Validation**: Added checks to verify `SYNC_REPO_URL` setup, GitHub CLI authentication status, and local repository origin alignment.
+- **Git Repository State Inspection**: Implemented detection for active merges, dirty working directories, unpushed commits, and PR status tracking on non-default branches.
+- **Configuration Schema Verification**: Integrated read-only schema checks via `config_manager.py` to identify legacy keys requiring migration.
 
 ---
 

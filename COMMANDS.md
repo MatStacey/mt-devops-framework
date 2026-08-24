@@ -356,6 +356,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-add-gemini-key` | AI: Interactively add or update your Gemini API key |
 | `mt-secrets` | System: Interactive menu for managing the framework's supported |
 
+### System Diagnostics ("mt-doctor")
+| Command | Description |
+|---|---|
+| `mt-doctor` | System: Diagnostic health-check for the framework's environment -- |
+
 ### System & Environment Bootstrap
 | Command | Description |
 |---|---|
