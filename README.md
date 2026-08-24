@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Resolved Git Sync Data Discard Issue**: Removed the `-u` (`--update`) flag from the `rsync` operation in `__git_sync_copy_files()` to ensure local edits in `$HOME/.bash.d/` are reliably copied to the repository directory.
+- **Fixed Timestamp Precedence Bug**: Prevented fresh git checkouts/pulls in the repository folder from stamping newer timestamps that previously caused `rsync` to skip and lose local configuration changes.
 - **Centralized Secrets Management**: Relocated externalized secrets out of `~/vcs` into a dedicated `~/secrets` directory, introducing `SECRETS_DIR` and `SECRETS_FILE` global constants.
 - **Refactored Secret Scripts**: Refactored `00-config.sh` and `01-secrets.sh` to dynamically reference `$SECRETS_FILE` and `$SECRETS_DIR` rather than using hardcoded paths.
 - **Updated Path Defaults**: Adjusted the default AI Workspace path setting in `mt-wizard-paths` to `~/workspaces/ai` (previously `~/vcs/workspaces/ai`).
 - **Improved User Feedback**: Updated interactive API key prompts (Gemini, Claude) and output messaging to reflect the new `~/secrets/secrets.sh` storage location.
 - **Refactored Submenu Navigation**: Updated `fzf` submenus to match options by exact label instead of numeric prefixes, fixing fuzzy-search matching bugs and adding support for visual section headers.
 - **Reorganized Setup & Config Menu**: Grouped tools into structured categories (*Guided Wizards*, *Quick Setters*, *Secrets*, *Terminal & Display*, and *Maintenance*) and consolidated the standalone *Terminal UI* submenu.
-- **Added Visual Safety Warnings**: Prominently flagged broad-impact actions (such as restarting all containers and nuking resources) in the Docker menu with `⚠️` indicators.
-- **Streamlined GCP/Kubernetes Menu**: Removed redundant individual config commands in favor of the unified `gcl-config` display action.
 
 ---
 
