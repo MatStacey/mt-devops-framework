@@ -200,6 +200,7 @@ __mt_menu_setup() {
     "Change Theme (mt-set-theme)" __mt_menu_pick_theme \
     "Gemini Status (mt-get-gemini-status)" mt-get-gemini-status \
     "── 🔧 Maintenance & View ──" "" \
+    "Run Diagnostics (mt-doctor)" mt-doctor \
     "Reload Config from Disk (mt-load-config)" mt-load-config \
     "Clean Up Legacy config.yaml Keys (mt-migrate-config)" mt-migrate-config \
     "Open config.yaml in IDE (mt-open-config)" mt-open-config \
