@@ -10,6 +10,14 @@ SECRETS_MANAGER="$HOME/.bash.d/lib/python/secrets_manager.py"
 ENV_CACHE="$HOME/.bash.d/data/cache/.env.cache"
 YAML_TEMPLATE="$HOME/.bash.d/lib/templates/config.yaml.tpl"
 
+# The framework's source-of-truth repository. Intentionally a hardcoded
+# constant, not a config.yaml setting: it's where mt-get-update pulls
+# releases from and where git-raise-pr/mt-push-update raise PRs against.
+# Collaborators point their OWN pushes at a fork via SYNC_REPO_URL
+# (mt-add-sync-url / mt-become-collaborator) -- this value only changes if
+# the maintainer moves the repo itself.
+UPSTREAM_REPO_PATH="MatStacey/mt-devops-framework"
+
 if [ ! -s "$CONFIG_FILE" ]; then
   mkdir -p "$(dirname "$CONFIG_FILE")"
   if [ -f "$YAML_TEMPLATE" ]; then
@@ -133,25 +141,6 @@ mt-toggle-update-confirm() {
   python3 "$CONFIG_MANAGER" update "core" "confirm_update_divergence" "$next"
   export CONFIRM_UPDATE_DIVERGENCE="$next"
   echo "✅ Update-divergence confirmation set to $next."
-}
-
-#######################################
-# Config: Set the upstream repository path for framework updates
-# Arguments:
-#   $1 - The repository path (e.g., "MatStacey/mt-devops-framework")
-#######################################
-mt-set-upstream-path() {
-  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
-    mt-help "${FUNCNAME[0]}"
-    return 0
-  fi
-  if [ -z "$1" ]; then
-    echo "Usage: mt-set-upstream-path <MatStacey/mt-devops-framework>"
-    return 1
-  fi
-  python3 "$CONFIG_MANAGER" update "git" "upstream_repo_slug" "$1"
-  export UPSTREAM_REPO_PATH="$1"
-  echo "✅ Upstream repository path set to $1."
 }
 
 #######################################
@@ -377,12 +366,19 @@ __mt_setup_quick() {
   read -r -p "3️⃣ CI/CD Provider (github/bitbucket/gitlab/azure/jenkins) [${CICD_PROVIDER:-github}]: " cicd
   [ -n "$cicd" ] && mt-set-cicd "$cicd"
 
-  local default_sync="${UPSTREAM_REPO_PATH:-MatStacey/mt-devops-framework}"
-  read -r -p "4️⃣ Git Sync Repo URL [${SYNC_REPO_URL:-$default_sync}]: " sync_url
-  if [ -n "$sync_url" ]; then
-    mt-add-sync-url "$sync_url"
-  elif [ -z "$SYNC_REPO_URL" ]; then
-    mt-add-sync-url "$default_sync"
+  echo -e "4️⃣ Git Sync Repo:"
+  echo -e "   ${C_DIM}This is where 'mt-push-update' pushes your config changes and raises PRs from.${C_RESET}"
+  if [ -n "$SYNC_REPO_URL" ] && [ "$SYNC_REPO_URL" != "YOUR_SYNC_REPO_URL" ]; then
+    read -r -p "   Sync Repo URL [${SYNC_REPO_URL}]: " sync_url
+    [ -n "$sync_url" ] && mt-add-sync-url "$sync_url"
+  else
+    local is_maintainer
+    read -r -p "   Do you have direct write access to ${UPSTREAM_REPO_PATH}? (y/N): " is_maintainer
+    if [[ "$is_maintainer" =~ ^[Yy]$ ]]; then
+      mt-add-sync-url "git@github.com:${UPSTREAM_REPO_PATH}.git"
+    else
+      echo -e "   ${C_DIM}No problem -- run 'mt-become-collaborator' any time to fork the repo and configure this automatically.${C_RESET}"
+    fi
   fi
 }
 
@@ -557,12 +553,9 @@ mt-wizard-git() {
     return 0
   fi
   echo -e "${CB_BLUE}--- Git Configuration ---${C_RESET}"
-  local default_sync="${UPSTREAM_REPO_PATH:-MatStacey/mt-devops-framework}"
-  read -r -p "Sync Repo URL [${SYNC_REPO_URL:-$default_sync}]: " sync_url
+  echo -e "${C_DIM}💡 Not the maintainer? Run 'mt-become-collaborator' instead -- it forks ${UPSTREAM_REPO_PATH} and sets this up for you automatically.${C_RESET}"
+  read -r -p "Sync Repo URL [${SYNC_REPO_URL:-Not set}]: " sync_url
   [ -n "$sync_url" ] && python3 "$CONFIG_MANAGER" update "git" "sync_repo_url" "$sync_url"
-
-  read -r -p "Upstream Framework Path [${UPSTREAM_REPO_PATH:-MatStacey/mt-devops-framework}]: " upstream
-  [ -n "$upstream" ] && python3 "$CONFIG_MANAGER" update "git" "upstream_repo_slug" "$upstream"
 
   read -r -p "Format on Push? (true/false) [${GIT_FORMAT_ON_PUSH:-true}]: " fmt
   [ -n "$fmt" ] && python3 "$CONFIG_MANAGER" update "git" "enable_format_on_push" "$fmt"
@@ -691,4 +684,92 @@ mt-add-sync-url() {
   python3 "$CONFIG_MANAGER" update "git" "sync_repo_url" "$1"
   export SYNC_REPO_URL="$1"
   echo "✅ Sync repository URL set to $1."
+}
+
+#######################################
+# Config: Ensure the GitHub CLI is authenticated, offering to run
+# 'gh auth login' interactively if it isn't yet. Used by
+# mt-become-collaborator so a brand-new collaborator doesn't need to know
+# to authenticate before forking.
+# Returns:
+#   0 if 'gh' ends up authenticated, 1 if the user declined or login failed
+#######################################
+__mt_collab_ensure_gh_auth() {
+  gh auth status > /dev/null 2>&1 && return 0
+
+  echo -e "${CB_YELLOW}⚠️  You're not authenticated with the GitHub CLI yet.${C_RESET}"
+  read -r -p "Authenticate now via 'gh auth login'? [Y/n] " -n 1 < /dev/tty || REPLY="n"
+  echo
+  if [ "$REPLY" != "y" ] && [ "$REPLY" != "Y" ] && [ -n "$REPLY" ]; then
+    echo -e "${CB_RED}🚨 Aborted. Run 'gh auth login' manually, then re-run 'mt-become-collaborator'.${C_RESET}"
+    return 1
+  fi
+
+  gh auth login
+
+  if ! gh auth status > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 GitHub CLI still isn't authenticated. Aborting.${C_RESET}"
+    return 1
+  fi
+  echo -e "${CB_GREEN}✅ Authenticated with GitHub CLI.${C_RESET}"
+}
+
+#######################################
+# Config: Interactive one-time setup wizard for collaborators who don't
+# have direct write access to the upstream repository. Verifies (and, if
+# needed, bootstraps) 'gh' authentication, forks UPSTREAM_REPO_PATH under
+# the user's own GitHub account, and points SYNC_REPO_URL at that fork via
+# mt-add-sync-url -- so 'mt-push-update' raises PRs against the upstream
+# repo straight from the fork with no manual URL typing required. Safe to
+# re-run at any time (both the fork and the sync-URL update are idempotent).
+# Usage: mt-become-collaborator
+# Globals:
+#   UPSTREAM_REPO_PATH
+#######################################
+mt-become-collaborator() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  echo -e "${CB_BLUE}==========================================================${C_RESET}"
+  echo -e "${CB_BLUE}       BECOME A COLLABORATOR -- FORK SETUP WIZARD         ${C_RESET}"
+  echo -e "${CB_BLUE}==========================================================${C_RESET}"
+  echo -e "This forks ${CB_CYAN}${UPSTREAM_REPO_PATH}${C_RESET} to your GitHub account and points"
+  echo -e "'mt-push-update' at your fork, so your changes land as Pull Requests"
+  echo -e "against the upstream repo instead of failing to push directly.\n"
+
+  if ! command -v gh > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 GitHub CLI ('gh') is required but not installed.${C_RESET}"
+    echo -e "Install it from ${CB_CYAN}https://cli.github.com${C_RESET} and re-run this command."
+    return 1
+  fi
+
+  __mt_collab_ensure_gh_auth || return 1
+
+  local username
+  username=$(gh api user -q .login 2> /dev/null)
+  if [ -z "$username" ]; then
+    echo -e "${CB_RED}🚨 Could not determine your GitHub username via 'gh api user'.${C_RESET}"
+    return 1
+  fi
+
+  echo -e "${CB_BLUE}🍴 Forking ${UPSTREAM_REPO_PATH} to ${username}/... (safe to re-run if you're already forked)${C_RESET}"
+  if ! gh repo fork "$UPSTREAM_REPO_PATH" --clone=false; then
+    echo -e "${CB_RED}🚨 Fork failed. See the error above.${C_RESET}"
+    return 1
+  fi
+
+  local repo_name="${UPSTREAM_REPO_PATH#*/}"
+  local protocol
+  protocol=$(gh config get git_protocol 2> /dev/null || echo ssh)
+  local fork_url="git@github.com:${username}/${repo_name}.git"
+  [ "$protocol" = "https" ] && fork_url="https://github.com/${username}/${repo_name}.git"
+
+  mt-add-sync-url "$fork_url"
+
+  echo -e "\n${CB_GREEN}✅ You're set up as a collaborator!${C_RESET}"
+  echo -e "${C_DIM}Your fork: https://github.com/${username}/${repo_name}${C_RESET}"
+  echo -e "${C_DIM}Sync URL:  ${fork_url}${C_RESET}"
+  echo -e "\n💡 Run ${CB_CYAN}mt-push-update${C_RESET} any time to sync your local config changes and raise a PR against ${UPSTREAM_REPO_PATH}."
 }

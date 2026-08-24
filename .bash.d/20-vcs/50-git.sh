@@ -278,12 +278,9 @@ __git_raise_pr_push_branch() {
   echo -e "${CB_BLUE}🚀 Pushing ${current_branch} to origin...${C_RESET}"
   if ! git push -u origin "$current_branch"; then
     echo -e "\n${CB_RED}🚨 Error: Failed to push branch to origin.${C_RESET}"
-    if [[ "$origin_url" == *"${UPSTREAM_REPO_PATH:-MatStacey/mt-devops-framework}"* ]]; then
+    if [[ "$origin_url" == *"${UPSTREAM_REPO_PATH}"* ]]; then
       echo -e "${CB_YELLOW}💡 External Developer Detected: You do not have write access to the upstream repository.${C_RESET}"
-      echo -e "To contribute updates, you must push to your own fork. Please run the following commands:"
-      echo -e "  1. ${CB_CYAN}gh repo fork ${UPSTREAM_REPO_PATH:-MatStacey/mt-devops-framework} --remote=false${C_RESET}"
-      echo -e "  2. ${CB_CYAN}mt-add-sync-url git@github.com:<your-username>/mt-devops-framework.git${C_RESET}"
-      echo -e "  3. ${CB_CYAN}mt-push-update${C_RESET}"
+      echo -e "To contribute updates, run ${CB_CYAN}mt-become-collaborator${C_RESET} to fork the repo and configure your sync URL automatically."
     fi
     return 1
   fi
@@ -300,7 +297,7 @@ __git_raise_pr_create_or_open() {
     echo -e "${CB_BLUE}🛠️  Creating Pull Request via GitHub CLI...${C_RESET}"
 
     local repo_flag=()
-    [ -n "${UPSTREAM_REPO_PATH:-}" ] && repo_flag=("--repo" "$UPSTREAM_REPO_PATH")
+    [ -n "$UPSTREAM_REPO_PATH" ] && repo_flag=("--repo" "$UPSTREAM_REPO_PATH")
 
     local pr_success=0
     if [ -n "$pr_title" ]; then

@@ -494,7 +494,7 @@ mt-push-update() {
 #######################################
 __mt_get_update_resolve_release() {
   local target_version="$1"
-  local repo_path="${UPSTREAM_REPO_PATH:-MatStacey/mt-devops-framework}"
+  local repo_path="$UPSTREAM_REPO_PATH"
 
   local api_url="https://api.github.com/repos/${repo_path}/releases/latest"
   [ -n "$target_version" ] && api_url="https://api.github.com/repos/${repo_path}/releases/tags/${target_version}"
@@ -719,7 +719,7 @@ mt-download-release() {
 
   echo -e "${CB_BLUE}⬇️ Fetching release information...${C_RESET}"
 
-  local repo_path="${UPSTREAM_REPO_PATH:-MatStacey/mt-devops-framework}"
+  local repo_path="$UPSTREAM_REPO_PATH"
 
   local api_url="https://api.github.com/repos/${repo_path}/releases/latest"
   if [ -n "$target_version" ]; then
