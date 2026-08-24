@@ -4,6 +4,7 @@
 
 # Secrets & Configuration
 .bash.d/config/config.yaml
+.bash.d/config/secrets_metadata.yaml
 .bash.d/data/cache/.env.cache
 
 # Framework Caches & State Variables

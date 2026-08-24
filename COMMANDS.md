@@ -189,8 +189,6 @@ Complex bash functions, framework utilities, and automated workflows.
 ### Configuration Management
 | Command | Description |
 |---|---|
-| `mt-add-claude-key` | AI: Interactively add or update your Claude API key |
-| `mt-add-gemini-key` | AI: Interactively add or update your Gemini API key |
 | `mt-add-sync-url` | Config: Set the sync repository URL |
 | `mt-get-gemini-status` | AI: Print current Gemini API model version and extended reasoning mode toggle |
 | `mt-load-config` | Config: Forcefully re-parse config.yaml and reload environment variables |
@@ -343,6 +341,14 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `mt-apply` | System: Safely execute or write clipboard code without terminal paste truncation |
 | `mt-cmd-history` | System: Display history of executed framework commands |
+
+### Secrets Management
+| Command | Description |
+|---|---|
+| `mt-add-bitbucket-secret` | System: Interactively add or update your Bitbucket API token, paired |
+| `mt-add-claude-key` | AI: Interactively add or update your Claude API key |
+| `mt-add-gemini-key` | AI: Interactively add or update your Gemini API key |
+| `mt-secrets` | System: Interactive menu for managing the framework's supported |
 
 ### System & Environment Bootstrap
 | Command | Description |

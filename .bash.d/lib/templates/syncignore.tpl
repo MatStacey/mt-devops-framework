@@ -1,4 +1,5 @@
 config/config.yaml
+config/secrets_metadata.yaml
 data/cache/
 .mt_cache*
 .update_check_cache

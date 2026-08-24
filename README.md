@@ -6,6 +6,10 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Modularized secrets management functions by moving them from `00-config.sh` into a dedicated `01-secrets.sh` script.
+- Integrated Python-backed `secrets_manager.py` to handle registration and unregistration of secret key metadata upon updates or removal.
+- Added `__mt_delete_secret` utility function to purge secret exports from `secrets.sh`, clear active environment variables, and unregister metadata.
+- Improved secret writing reliability in `__mt_write_secret` by properly handling missing trailing newlines to prevent file corruption.
 - Refactored `99-utils.sh` (previously 1,160 lines, the largest file in the framework) into four focused files by domain: backup/restore (`33-backup.sh`), the background job registry (`34-jobs.sh`), centralized logging (`35-logging.sh`), and general misc utilities remaining in a much smaller `99-utils.sh`. No functional changes -- every function moved verbatim and was verified identical before/after.
 - Also cleaned up several pre-existing corrupted docstring blocks found during the move (`mt-cmd-history` had 6 duplicated docstrings stacked above it, `mt-apply` had corrupted separator lines) that predated this refactor and were confusing `mt-help`'s output.
 - Fixed the README `Recent Updates` section always being wholly replaced by the latest push's summary; it now accumulates a rolling history of the last 8 changes instead, prepending each new entry rather than discarding prior ones.
