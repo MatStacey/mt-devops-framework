@@ -676,6 +676,37 @@ mt-load-config() {
 alias mt-reload-config='mt-load-config'
 
 #######################################
+# Config: Detect and clean up legacy config.yaml keys left behind by past
+# schema renames. config.yaml is only ever created once, from
+# config.yaml.tpl, the first time a shell starts with none present -- it
+# is never otherwise migrated across framework updates. So when a later
+# release renames a setting (e.g. paths.vcs_root -> paths.vcs_root_dir),
+# every wizard/update call-site only knows the current canonical name and
+# writes it alongside the old one instead of replacing it, and
+# config.yaml quietly accumulates both the legacy and canonical key for
+# every rename it has lived through. Backs up config.yaml to
+# BACKUP_DIR/config-migrations/ before making any change, and is a safe
+# no-op if nothing legacy is found. Also runs automatically at the end
+# of every 'mt-get-update' install.
+# Globals:
+#   CONFIG_MANAGER
+#######################################
+mt-migrate-config() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  if [ ! -f "$CONFIG_MANAGER" ]; then
+    echo -e "${CB_RED}🚨 Error: config_manager.py not found.${C_RESET}"
+    return 1
+  fi
+
+  python3 "$CONFIG_MANAGER" migrate
+  mt-load-config
+}
+
+#######################################
 # Config: Set the sync repository URL
 # Arguments:
 #   $1 - Remote repository URL

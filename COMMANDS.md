@@ -193,6 +193,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-become-collaborator` | Config: Interactive one-time setup wizard for collaborators who don't |
 | `mt-get-gemini-status` | AI: Print current Gemini API model version and extended reasoning mode toggle |
 | `mt-load-config` | Config: Forcefully re-parse config.yaml and reload environment variables |
+| `mt-migrate-config` | Config: Detect and clean up legacy config.yaml keys left behind by past |
 | `mt-open-config` | Config: Open bash.d directory and config.yaml in IDE |
 | `mt-set-cicd` | Config: Set default CI/CD provider |
 | `mt-set-default-ai` | Config: Set default AI model provider |
