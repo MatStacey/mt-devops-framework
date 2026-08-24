@@ -2,7 +2,7 @@
 Tracks metadata for the framework's "supported secrets" registry (Gemini,
 Claude, Bitbucket, ...) -- system, description, created/expiry/last-used
 dates only. NEVER the secret values themselves, which live exclusively in
-~/vcs/secrets/secrets.sh and are never read or printed by this script.
+~/secrets/secrets.sh and are never read or printed by this script.
 
 The registry of supported secret types is a static, framework-defined
 constant (SUPPORTED_SECRETS) -- extend it here to add a new supported
@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 import yaml
 
 METADATA_FILE = os.path.expanduser("~/.bash.d/config/secrets_metadata.yaml")
-SECRETS_FILE = os.path.expanduser("~/vcs/secrets/secrets.sh")
+SECRETS_FILE = os.path.expanduser("~/secrets/secrets.sh")
 EXPIRY_WARNING_DAYS = 30
 
 SUPPORTED_SECRETS = {

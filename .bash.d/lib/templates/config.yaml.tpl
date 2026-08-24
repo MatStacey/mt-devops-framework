@@ -13,7 +13,7 @@ paths:
   vcs_exports_dir: ~/vcs/personal/exports
   dotfiles_dir: ~/vcs/personal/mt-devops-framework
   sync_repo_dir: ~/vcs/personal/mt-devops-framework
-  ai_workspace_dir: ~/vcs/workspaces/ai
+  ai_workspace_dir: ~/workspaces/ai
   iam_scripts_dir: /tmp/scripts/iam
   docker_root_dir: ~/.docker
   export_dir: /tmp/exports

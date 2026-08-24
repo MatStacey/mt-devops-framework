@@ -6,53 +6,53 @@
 
 #######################################
 # System: Safely write or update one exported variable inside
-# ~/vcs/secrets/secrets.sh, preserving every other line already in the
-# file. Creates the file/directory (with restrictive permissions) if
-# they don't exist yet.
+# $SECRETS_FILE (~/secrets/secrets.sh), preserving every other line
+# already in the file. Creates the file/directory (with restrictive
+# permissions) if they don't exist yet.
 # Arguments:
 #   $1 - Variable name (e.g. GEMINI_API_KEY)
 #   $2 - Value to store
+# Globals:
+#   SECRETS_DIR, SECRETS_FILE
 #######################################
 __mt_write_secret() {
   local var_name="$1" value="$2"
-  local secrets_dir="$HOME/vcs/secrets"
-  local secrets_file="$secrets_dir/secrets.sh"
 
-  mkdir -p "$secrets_dir"
-  chmod 700 "$secrets_dir" 2> /dev/null
+  mkdir -p "$SECRETS_DIR"
+  chmod 700 "$SECRETS_DIR" 2> /dev/null
 
-  if [ ! -f "$secrets_file" ]; then
-    cat << 'HDR' > "$secrets_file"
+  if [ ! -f "$SECRETS_FILE" ]; then
+    cat << 'HDR' > "$SECRETS_FILE"
 #!/usr/bin/env bash
 # Externalized MT DevOps Secrets
 # Sourced by ~/.bash.d/00-system/00-config.sh on every shell startup and
 # whenever config.yaml changes. Never tracked in git -- this directory
-# lives outside ~/vcs/personal/mt-devops-framework entirely.
+# lives outside ~/vcs entirely.
 HDR
   fi
-  chmod 600 "$secrets_file"
+  chmod 600 "$SECRETS_FILE"
 
   local quoted_value
   printf -v quoted_value '%q' "$value"
   local new_line="export ${var_name}=${quoted_value}"
 
-  if grep -q "^export ${var_name}=" "$secrets_file" 2> /dev/null; then
+  if grep -q "^export ${var_name}=" "$SECRETS_FILE" 2> /dev/null; then
     local tmp_file
     tmp_file=$(mktemp)
     awk -v pat="^export ${var_name}=" -v line="$new_line" '
       $0 ~ pat { print line; next }
       { print }
-    ' "$secrets_file" > "$tmp_file" && mv "$tmp_file" "$secrets_file"
+    ' "$SECRETS_FILE" > "$tmp_file" && mv "$tmp_file" "$SECRETS_FILE"
   else
     # A missing trailing newline on the file's last line would otherwise
     # make this append land on the SAME physical line as it -- bash then
     # concatenates the two adjacent tokens with no separator, silently
     # corrupting whatever secret was already on that line.
-    [ -s "$secrets_file" ] && [ -n "$(tail -c1 "$secrets_file")" ] && echo >> "$secrets_file"
-    echo "$new_line" >> "$secrets_file"
+    [ -s "$SECRETS_FILE" ] && [ -n "$(tail -c1 "$SECRETS_FILE")" ] && echo >> "$SECRETS_FILE"
+    echo "$new_line" >> "$SECRETS_FILE"
   fi
 
-  chmod 600 "$secrets_file"
+  chmod 600 "$SECRETS_FILE"
 }
 
 #######################################
@@ -63,17 +63,18 @@ HDR
 # Arguments:
 #   $1 - Secret variable name
 #   $2 - Paired variable name, if any (empty string if none)
+# Globals:
+#   SECRETS_FILE
 #######################################
 __mt_delete_secret() {
   local name="$1" paired="$2"
-  local secrets_file="$HOME/vcs/secrets/secrets.sh"
 
-  if [ -f "$secrets_file" ]; then
+  if [ -f "$SECRETS_FILE" ]; then
     local tmp_file
     tmp_file=$(mktemp)
-    grep -v -E "^export (${name}|${paired})=" "$secrets_file" > "$tmp_file"
-    mv "$tmp_file" "$secrets_file"
-    chmod 600 "$secrets_file"
+    grep -v -E "^export (${name}|${paired})=" "$SECRETS_FILE" > "$tmp_file"
+    mv "$tmp_file" "$SECRETS_FILE"
+    chmod 600 "$SECRETS_FILE"
   fi
 
   unset "${name?}"
@@ -86,7 +87,7 @@ __mt_delete_secret() {
 # AI: Interactively add or update your Gemini API key
 # Usage: mt-add-gemini-key
 # Globals:
-#   Writes to ~/vcs/secrets/secrets.sh (never touches config.yaml or git)
+#   Writes to ~/secrets/secrets.sh (never touches config.yaml or git)
 #   and exports GEMINI_API_KEY into the current shell immediately.
 #######################################
 mt-add-gemini-key() {
@@ -107,14 +108,14 @@ mt-add-gemini-key() {
   __mt_write_secret "GEMINI_API_KEY" "$key"
   export GEMINI_API_KEY="$key"
   python3 "$SECRETS_MANAGER" register "GEMINI_API_KEY"
-  echo -e "${CB_GREEN}✅ Gemini API key saved to ~/vcs/secrets/secrets.sh and loaded into this shell.${C_RESET}"
+  echo -e "${CB_GREEN}✅ Gemini API key saved to ~/secrets/secrets.sh and loaded into this shell.${C_RESET}"
 }
 
 #######################################
 # AI: Interactively add or update your Claude API key
 # Usage: mt-add-claude-key
 # Globals:
-#   Writes to ~/vcs/secrets/secrets.sh (never touches config.yaml or git)
+#   Writes to ~/secrets/secrets.sh (never touches config.yaml or git)
 #   and exports CLAUDE_API_KEY into the current shell immediately.
 #######################################
 mt-add-claude-key() {
@@ -135,7 +136,7 @@ mt-add-claude-key() {
   __mt_write_secret "CLAUDE_API_KEY" "$key"
   export CLAUDE_API_KEY="$key"
   python3 "$SECRETS_MANAGER" register "CLAUDE_API_KEY"
-  echo -e "${CB_GREEN}✅ Claude API key saved to ~/vcs/secrets/secrets.sh and loaded into this shell.${C_RESET}"
+  echo -e "${CB_GREEN}✅ Claude API key saved to ~/secrets/secrets.sh and loaded into this shell.${C_RESET}"
 }
 
 #######################################
@@ -146,7 +147,7 @@ mt-add-claude-key() {
 # collected and stored together.
 # Usage: mt-add-bitbucket-secret
 # Globals:
-#   Writes to ~/vcs/secrets/secrets.sh (never touches config.yaml or git)
+#   Writes to ~/secrets/secrets.sh (never touches config.yaml or git)
 #   and exports BITBUCKET_API_KEY/BITBUCKET_EMAIL into the current shell
 #   immediately.
 #######################################
@@ -183,7 +184,7 @@ mt-add-bitbucket-secret() {
   export BITBUCKET_EMAIL="$email"
   export BITBUCKET_API_KEY="$key"
   python3 "$SECRETS_MANAGER" register "BITBUCKET_API_KEY" "$expiry"
-  echo -e "${CB_GREEN}🎉 Bitbucket credentials saved to ~/vcs/secrets/secrets.sh and loaded into this shell.${C_RESET}"
+  echo -e "${CB_GREEN}🎉 Bitbucket credentials saved to ~/secrets/secrets.sh and loaded into this shell.${C_RESET}"
 }
 
 #######################################
