@@ -5,16 +5,24 @@
 # ~/.bash.d/03-mytools/09-menu.sh
 
 #######################################
-# System: Generic fzf submenu loop -- shows a numbered list of labeled
-# actions, runs the selected one, and redisplays the same list until the
-# user backs out (empty selection or the trailing "Back" entry)
+# System: Generic fzf submenu loop -- shows a list of labeled actions,
+# runs the selected one, and redisplays the same list until the user
+# backs out (empty selection or the trailing "Back" entry). Dispatch is
+# by exact label match rather than a numeric index, since fzf's fuzzy
+# search matches selected TEXT, not a position -- a numbered prefix here
+# would be a false affordance (typing "1" fuzzy-matches every label
+# containing that digit, not just item 1). A pair whose command is the
+# empty string ("") renders as a non-actionable section-header row --
+# selecting one just redisplays the menu, used to visually group related
+# items in a long submenu.
 # Arguments:
 #   $1   - Submenu title, shown as the fzf prompt
 #   $@   - Remaining args: alternating "label" "command" pairs. Each
 #          command is a single already-defined command/function name
 #          (no inline arguments) -- anything needing flags or prompted
 #          input should be wrapped in its own tiny __mt_menu_* function
-#          first, matching the pattern used elsewhere in this file.
+#          first, matching the pattern used elsewhere in this file. Pass
+#          "" as the command for a section-header label.
 #######################################
 __mt_menu_submenu() {
   local title="$1"
@@ -25,27 +33,26 @@ __mt_menu_submenu() {
     commands+=("$2")
     shift 2
   done
-  local back_idx=$((${#labels[@]} + 1))
 
   while true; do
-    local -a options=()
-    local i
-    for i in "${!labels[@]}"; do
-      options+=("$((i + 1)). ${labels[$i]}")
-    done
-    options+=("${back_idx}. ⬅  Back")
+    local -a options=("${labels[@]}" "⬅  Back")
 
     local choice
-    choice=$(printf '%s\n' "${options[@]}" | fzf --prompt="${title} > " --height=~15 --layout=reverse --border)
+    choice=$(printf '%s\n' "${options[@]}" | fzf --prompt="${title} > " --height=~20 --layout=reverse --border)
     [ -z "$choice" ] && return 0
+    [ "$choice" = "⬅  Back" ] && return 0
 
-    local idx="${choice%%.*}"
-    [ "$idx" -eq "$back_idx" ] && return 0
-
-    "${commands[$((idx - 1))]}"
-
-    echo -e "\n${C_DIM}Press Enter to continue...${C_RESET}"
-    read -r < /dev/tty
+    local i
+    for i in "${!labels[@]}"; do
+      if [ "${labels[$i]}" = "$choice" ]; then
+        if [ -n "${commands[$i]}" ]; then
+          "${commands[$i]}"
+          echo -e "\n${C_DIM}Press Enter to continue...${C_RESET}"
+          read -r < /dev/tty
+        fi
+        break
+      fi
+    done
   done
 }
 
@@ -162,10 +169,14 @@ __mt_menu_base64_encode() { __mt_menu_prompt_arg "Text to encode" base64-enc; }
 __mt_menu_base64_decode() { __mt_menu_prompt_arg "Base64 text to decode" base64-dec; }
 
 #######################################
-# System: "Setup & Config" submenu
+# System: "Setup & Config" submenu -- grouped into Guided Wizards (full
+# multi-question flows), Quick Setters & Toggles (single-value changes
+# for when you don't want to walk through an unrelated wizard question),
+# Secrets & Collaboration, Terminal & Display, and Maintenance & View.
 #######################################
 __mt_menu_setup() {
   __mt_menu_submenu "⚙️  Setup & Config" \
+    "── 🧙 Guided Wizards ──" "" \
     "System Configuration (mt-wizard-system)" mt-wizard-system \
     "AI Provider Configuration (mt-wizard-ai)" mt-wizard-ai \
     "Git Configuration (mt-wizard-git)" mt-wizard-git \
@@ -173,9 +184,7 @@ __mt_menu_setup() {
     "Docker Configuration (mt-wizard-docker)" mt-wizard-docker \
     "Exports Configuration (mt-wizard-exports)" mt-wizard-exports \
     "Paths Configuration (mt-wizard-paths)" mt-wizard-paths \
-    "Add Gemini API Key (mt-add-gemini-key)" mt-add-gemini-key \
-    "Add Claude API Key (mt-add-claude-key)" mt-add-claude-key \
-    "Manage All Secrets (mt-secrets)" mt-secrets \
+    "── ⚡ Quick Setters & Toggles ──" "" \
     "Set Default AI Provider (mt-set-default-ai)" __mt_menu_pick_default_ai \
     "Set Default IDE (mt-set-default-ide)" __mt_menu_pick_default_ide \
     "Set CI/CD Provider (mt-set-cicd)" __mt_menu_pick_cicd \
@@ -183,7 +192,14 @@ __mt_menu_setup() {
     "Toggle Format-on-Push (mt-toggle-format-on-push)" mt-toggle-format-on-push \
     "Toggle Update-Divergence Confirmation (mt-toggle-update-confirm)" mt-toggle-update-confirm \
     "Set Git Sync URL (mt-add-sync-url)" __mt_menu_add_sync_url \
+    "── 🔐 Secrets & Collaboration ──" "" \
+    "Add Gemini API Key (mt-add-gemini-key)" mt-add-gemini-key \
+    "Add Claude API Key (mt-add-claude-key)" mt-add-claude-key \
     "Become a Collaborator / Fork Setup (mt-become-collaborator)" mt-become-collaborator \
+    "── 🎨 Terminal & Display ──" "" \
+    "Change Theme (mt-set-theme)" __mt_menu_pick_theme \
+    "Gemini Status (mt-get-gemini-status)" mt-get-gemini-status \
+    "── 🔧 Maintenance & View ──" "" \
     "Reload Config from Disk (mt-load-config)" mt-load-config \
     "Open config.yaml in IDE (mt-open-config)" mt-open-config \
     "View Active Configuration (mt-config)" mt-config
@@ -211,15 +227,6 @@ __mt_menu_exports() {
 }
 
 #######################################
-# System: "Terminal UI" submenu
-#######################################
-__mt_menu_ui() {
-  __mt_menu_submenu "🎨 Terminal UI" \
-    "Change Theme (mt-set-theme)" __mt_menu_pick_theme \
-    "Gemini Status (mt-get-gemini-status)" mt-get-gemini-status
-}
-
-#######################################
 # System: "Search & Docs" submenu
 #######################################
 __mt_menu_docs() {
@@ -234,7 +241,9 @@ __mt_menu_docs() {
 }
 
 #######################################
-# System: "Docker Tools" submenu
+# System: "Docker Tools" submenu -- broad-impact actions (restart-all,
+# nuke) are flagged with a ⚠️ label prefix so the warning is visible
+# before the item is even selected, not just after.
 #######################################
 __mt_menu_docker() {
   __mt_menu_submenu "🐳 Docker Tools" \
@@ -242,12 +251,16 @@ __mt_menu_docker() {
     "Shell into Container (docker-shell)" docker-shell \
     "Launch Throwaway Sandbox (docker-sandbox)" docker-sandbox \
     "Tail Container Logs (docker-tail)" docker-tail \
-    "Restart All Running Containers (docker-reboot-all)" docker-reboot-all \
-    "Nuke Unused Resources (docker-nuke)" docker-nuke
+    "⚠️  Restart All Running Containers (docker-reboot-all)" docker-reboot-all \
+    "⚠️  Nuke Unused Resources (docker-nuke)" docker-nuke
 }
 
 #######################################
-# System: "GCP & Kubernetes" submenu
+# System: "GCP & Kubernetes" submenu -- the individual "show active
+# project/region/zone/user" one-liners were removed since 'gcl-config'
+# (gcloud config list) already prints all of them together in one view;
+# 'gcl-get-project-number' is kept since it makes its own distinct API
+# call for data 'config list' doesn't have.
 #######################################
 __mt_menu_gcp() {
   __mt_menu_submenu "☁️  GCP & Kubernetes" \
@@ -255,11 +268,7 @@ __mt_menu_gcp() {
     "Get/Set Kube Namespace (kns)" kns \
     "List gcloud Config (gcl-config)" gcl-config \
     "Export Project Vars (gcl-export-vars)" gcl-export-vars \
-    "Show Active Project (gcl-get-project)" gcl-get-project \
     "Show Project Number (gcl-get-project-number)" gcl-get-project-number \
-    "Show Active Region (gcl-get-region)" gcl-get-region \
-    "Show Active User (gcl-get-user)" gcl-get-user \
-    "Show Active Zone (gcl-get-zone)" gcl-get-zone \
     "List Org Policies (gcl-org-policies)" gcl-org-policies \
     "Update gcloud CLI (gcl-update)" gcl-update \
     "gcloud Auth Login (gcp-login)" gcp-login \
@@ -286,42 +295,52 @@ __mt_menu_terraform() {
 }
 
 #######################################
-# System: "Git Workflows" submenu
+# System: "Git Workflows" submenu -- ordered to match how a workflow
+# actually unfolds (start a branch/bring repos in -> do the work ->
+# finish with a PR -> maintenance -> read-only utilities), with the
+# destructive hard-reset flagged and pushed to the very end.
 #######################################
 __mt_menu_git() {
   __mt_menu_submenu "🌿 Git Workflows" \
-    "Raise a Pull Request (git-raise-pr)" git-raise-pr \
-    "Clean Merged Branches (git-clean-merged)" git-clean-merged \
-    "AI-Grouped Push (git-ai-push-all)" git-ai-push-all \
-    "Rebase onto Default Branch (git-default-rebase)" git-default-rebase \
-    "Hard-Reset to Upstream (git-nuke)" git-nuke \
-    "Show Pretty Log Graph (git-pretty-log)" git-pretty-log \
-    "Open Remote URL (git-view-remote)" git-view-remote \
     "New Feature Branch (git-new-feature)" __mt_menu_git_new_feature \
-    "Stage, Commit & Push All (git-push-all)" __mt_menu_git_push_all \
+    "List Local Repos (mt-repos)" mt-repos \
     "Clone & Open in IDE (git-clone-ide)" __mt_menu_git_clone_ide \
     "Bulk-Clone a Project (mt-clone -i)" __mt_menu_clone_wizard \
-    "List Local Repos (mt-repos)" mt-repos \
     "AI-Generate .gitignore (mt-ai-gitignore)" mt-ai-gitignore \
-    "AI-Generate README (mt-ai-readme)" mt-ai-readme
+    "Stage, Commit & Push All (git-push-all)" __mt_menu_git_push_all \
+    "AI-Grouped Push (git-ai-push-all)" git-ai-push-all \
+    "Raise a Pull Request (git-raise-pr)" git-raise-pr \
+    "AI-Generate README (mt-ai-readme)" mt-ai-readme \
+    "Rebase onto Default Branch (git-default-rebase)" git-default-rebase \
+    "Clean Merged Branches (git-clean-merged)" git-clean-merged \
+    "Show Pretty Log Graph (git-pretty-log)" git-pretty-log \
+    "Open Remote URL (git-view-remote)" git-view-remote \
+    "⚠️  Hard-Reset to Upstream (git-nuke)" git-nuke
 }
 
 #######################################
-# System: "General Utilities" submenu
+# System: "General Utilities" submenu -- grouped by theme (networking,
+# scaffolding/formatting, encoding, inspection/history, backup/jobs)
+# instead of one flat undifferentiated list.
 #######################################
 __mt_menu_utilities() {
   __mt_menu_submenu "🛠️  General Utilities" \
+    "── 🌐 Networking & Serving ──" "" \
     "Serve Current Directory over HTTP (mt-http-server)" mt-http-server \
     "HTTP Server Manager (mt-server-manager)" mt-server-manager \
     "Run Internet Speed Test (mt-speedtest)" mt-speedtest \
+    "── 🏗️  Scaffolding & Formatting ──" "" \
     "Scaffold Repo from Blueprint (mt-blueprint)" mt-blueprint \
+    "Format Code to Google Style (google-fmt)" google-fmt \
+    "── 🔢 Encoding ──" "" \
     "Encode Text to Base64 (base64-enc)" __mt_menu_base64_encode \
     "Decode Base64 Text (base64-dec)" __mt_menu_base64_decode \
-    "Format Code to Google Style (google-fmt)" google-fmt \
+    "── 📊 Inspection & History ──" "" \
     "List Largest Files (mt-top-files)" mt-top-files \
     "Audit VCS Root (mt-vcs-audit)" mt-vcs-audit \
-    "Run/Save Clipboard Code (mt-apply)" mt-apply \
     "Show Command History (mt-cmd-history)" mt-cmd-history \
+    "Run/Save Clipboard Code (mt-apply)" mt-apply \
+    "── 💾 Backup & Jobs ──" "" \
     "List Background Jobs (mt-jobs)" mt-jobs \
     "Backup Current Directory (mt-backup)" mt-backup \
     "Restore from Backup (mt-restore)" mt-restore
@@ -342,25 +361,35 @@ __mt_menu_system() {
 }
 
 #######################################
-# System: "Launchers" submenu
+# System: "Launchers" submenu -- grouped by action type (cd into a
+# directory, open in IDE/homepage, open in the OS file manager) instead
+# of interleaving all three.
 #######################################
 __mt_menu_launchers() {
   __mt_menu_submenu "🚀 Launchers" \
+    "── 📂 Navigate (cd) ──" "" \
     "cd to AI Workspace (cd-ai-workspace)" cd-ai-workspace \
-    "cd to Docker Dir + Explorer (cd-win-docker)" cd-win-docker \
-    "Open Current Dir in IDE (ide)" ide \
     "cd to Dotfiles Repo (mt-dotfiles)" mt-dotfiles \
+    "cd to Docker Dir + Explorer (cd-win-docker)" cd-win-docker \
+    "── 💻 IDE & Homepage ──" "" \
+    "Open Current Dir in IDE (ide)" ide \
     "Open Dotfiles Homepage (mt-open-homepage)" mt-open-homepage \
+    "── 🗂️  Open in File Manager ──" "" \
+    "Open Current Dir in File Manager (win)" win \
     "Open AI Workspace in File Manager (win-ai-workspace)" win-ai-workspace \
     "Open Docker Root in File Manager (win-docker)" win-docker \
     "Open Sync Repo in File Manager (win-sync)" win-sync \
     "Open Exports Dir in File Manager (win-export)" win-export \
-    "Open VCS Root in File Manager (win-vcs)" win-vcs \
-    "Open Current Dir in File Manager (win)" win
+    "Open VCS Root in File Manager (win-vcs)" win-vcs
 }
 
 #######################################
-# System: Launch the interactive master router for the entire framework
+# System: Launch the interactive master router for the entire framework.
+# Categories are matched by exact label text rather than a numbered
+# prefix, since fzf fuzzy-matches the text you type -- a visible number
+# would suggest a quick-jump keystroke that doesn't actually work once
+# more than 9 categories exist (typing "1" would fuzzy-match every label
+# containing that digit, not just category 1).
 # Usage: mt-menu
 #######################################
 mt-menu() {
@@ -369,46 +398,52 @@ mt-menu() {
     return 0
   fi
 
+  local -a labels=(
+    "⚙️  Setup & Config"
+    "🤖 AI Workflows"
+    "📦 Code Exports"
+    "🔍 Search & Docs"
+    "🐳 Docker Tools"
+    "☁️  GCP & Kubernetes"
+    "🏔️  Terraform"
+    "🌿 Git Workflows"
+    "🛠️  General Utilities"
+    "⚡ System & Bootstrap"
+    "🚀 Launchers"
+    "🔐 Secrets Manager"
+  )
+  local -a commands=(
+    __mt_menu_setup
+    __mt_menu_ai
+    __mt_menu_exports
+    __mt_menu_docs
+    __mt_menu_docker
+    __mt_menu_gcp
+    __mt_menu_terraform
+    __mt_menu_git
+    __mt_menu_utilities
+    __mt_menu_system
+    __mt_menu_launchers
+    mt-secrets
+  )
+
   while true; do
     echo -e "${CB_BLUE}==========================================================${C_RESET}"
     echo -e "${CB_BLUE}              MT DEVOPS FRAMEWORK - MASTER MENU            ${C_RESET}"
     echo -e "${CB_BLUE}==========================================================${C_RESET}\n"
 
-    local options=(
-      "1. ⚙️  Setup & Config"
-      "2. 🤖 AI Workflows"
-      "3. 📦 Code Exports"
-      "4. 🎨 Terminal UI"
-      "5. 🔍 Search & Docs"
-      "6. 🐳 Docker Tools"
-      "7. ☁️  GCP & Kubernetes"
-      "8. 🏔️  Terraform"
-      "9. 🌿 Git Workflows"
-      "10. 🛠️  General Utilities"
-      "11. ⚡ System & Bootstrap"
-      "12. 🚀 Launchers"
-      "13. 🔐 Secrets Manager"
-      "14. 🚪 Exit"
-    )
-
+    local -a options=("${labels[@]}" "🚪 Exit")
     local choice
     choice=$(printf '%s\n' "${options[@]}" | fzf --prompt="🚀 Select a category > " --height=~20 --layout=reverse --border)
+    [ -z "$choice" ] && return 0
+    [ "$choice" = "🚪 Exit" ] && return 0
 
-    case "$choice" in
-      1.*) __mt_menu_setup ;;
-      2.*) __mt_menu_ai ;;
-      3.*) __mt_menu_exports ;;
-      4.*) __mt_menu_ui ;;
-      5.*) __mt_menu_docs ;;
-      6.*) __mt_menu_docker ;;
-      7.*) __mt_menu_gcp ;;
-      8.*) __mt_menu_terraform ;;
-      9.*) __mt_menu_git ;;
-      10.*) __mt_menu_utilities ;;
-      11.*) __mt_menu_system ;;
-      12.*) __mt_menu_launchers ;;
-      13.*) mt-secrets ;;
-      *) return 0 ;;
-    esac
+    local i
+    for i in "${!labels[@]}"; do
+      if [ "${labels[$i]}" = "$choice" ]; then
+        "${commands[$i]}"
+        break
+      fi
+    done
   done
 }
