@@ -277,6 +277,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-top-files` | System: Display the top largest files in a directory |
 | `mt-vcs-audit` | System: Audit VCS root for unorganized files and directories |
 
+### Git: Bulk Repository Cloning (mt-clone)
+| Command | Description |
+|---|---|
+| `mt-clone` | Git: Clone every repository in a source-control provider's project |
+
 ### Google Style Code Formatting
 | Command | Description |
 |---|---|
