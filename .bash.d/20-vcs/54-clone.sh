@@ -201,14 +201,24 @@ __mt_clone_bitbucket_repo() {
 # to clone vs already present) and asks for confirmation before
 # cloning anything, unless --auto-approve is set. Currently supports
 # Bitbucket only -- see clone_wizard.py's PROVIDERS registry to add
-# another.
-# Usage: mt-clone -p <provider> -w <workspace> -pr <project> [--auto-approve]
+# another. Filters (--type/--lang/--from-date/--year/--age) are applied
+# client-side against the full project repo list, not via a provider
+# query DSL -- if more than one date-ish filter is given, the OLDEST
+# (most inclusive) cutoff wins.
+# Usage: mt-clone -p <provider> -w <workspace> -pr <project> [filters] [--auto-approve]
 # Options:
-#   -p, --provider <name>    Source-control provider (currently: bitbucket)
-#   -w, --workspace <name>   Workspace name
-#   -pr, --project <name>    Project name (or key)
-#   --auto-approve           Skip the confirmation prompt
-#   -h, --help                Show this help menu
+#   -p, --provider <name>     Source-control provider (currently: bitbucket)
+#   -w, --workspace <name>    Workspace name
+#   -pr, --project <name>     Project name (or key)
+#   -t, --type <private|public>  Filter by repository visibility
+#   -l, --lang <language>     Filter by programming language (case-insensitive)
+#   -d, --from-date <date>    Only repos updated on/after this date --
+#                              dd-mm-yyyy, dd/mm/yyyy, ddmmyyyy, or the
+#                              4-digit ddmm shorthand (current year assumed)
+#   -y, --year <yyyy>         Only repos updated during or after this year
+#   -a, --age <days>          Only repos updated within the last N days
+#   --auto-approve            Skip the confirmation prompt
+#   -h, --help                 Show this help menu
 # Globals:
 #   VCS_ROOT, CLONE_WIZARD, SECRETS_MANAGER, BITBUCKET_API_KEY, BITBUCKET_EMAIL
 #######################################
@@ -219,6 +229,7 @@ mt-clone() {
   fi
 
   local provider="" raw_workspace="" raw_project="" auto_approve=false
+  local type_filter="" lang_filter="" from_date="" year_filter="" age_filter=""
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -234,12 +245,44 @@ mt-clone() {
         raw_project="$2"
         shift 2
         ;;
+      -t | --type)
+        type_filter="${2,,}"
+        if [[ "$type_filter" != "private" && "$type_filter" != "public" ]]; then
+          echo "mt-clone: --type must be 'private' or 'public'" >&2
+          return 1
+        fi
+        shift 2
+        ;;
+      -l | --lang)
+        lang_filter="$2"
+        shift 2
+        ;;
+      -d | --from-date)
+        from_date="$2"
+        shift 2
+        ;;
+      -y | --year)
+        if ! [[ "$2" =~ ^[0-9]{4}$ ]]; then
+          echo "mt-clone: --year requires a 4-digit year" >&2
+          return 1
+        fi
+        year_filter="$2"
+        shift 2
+        ;;
+      -a | --age)
+        if ! [[ "$2" =~ ^[0-9]+$ ]]; then
+          echo "mt-clone: --age requires a non-negative number of days" >&2
+          return 1
+        fi
+        age_filter="$2"
+        shift 2
+        ;;
       --auto-approve)
         auto_approve=true
         shift
         ;;
       *)
-        echo "Usage: mt-clone -p <provider> -w <workspace> -pr <project> [--auto-approve]" >&2
+        echo "Usage: mt-clone -p <provider> -w <workspace> -pr <project> [-t private|public] [-l language] [-d date] [-y year] [-a days] [--auto-approve]" >&2
         return 1
         ;;
     esac
@@ -256,12 +299,24 @@ mt-clone() {
   fi
 
   echo -e "${CB_BLUE}🔍 Fetching repositories for ${raw_workspace}/${raw_project} (${provider})...${C_RESET}"
+  local -a fetch_args=(fetch "$provider" "$raw_workspace" "$raw_project")
+  local filters_applied=false
+  [ -n "$type_filter" ] && fetch_args+=(--type "$type_filter") && filters_applied=true
+  [ -n "$lang_filter" ] && fetch_args+=(--lang "$lang_filter") && filters_applied=true
+  [ -n "$from_date" ] && fetch_args+=(--from-date "$from_date") && filters_applied=true
+  [ -n "$year_filter" ] && fetch_args+=(--year "$year_filter") && filters_applied=true
+  [ -n "$age_filter" ] && fetch_args+=(--age "$age_filter") && filters_applied=true
+
   local repos_raw
-  repos_raw=$(python3 "$CLONE_WIZARD" fetch "$provider" "$raw_workspace" "$raw_project") || return 1
+  repos_raw=$(python3 "$CLONE_WIZARD" "${fetch_args[@]}") || return 1
   [ "$provider" = "bitbucket" ] && python3 "$SECRETS_MANAGER" touch "BITBUCKET_API_KEY" 2> /dev/null
 
   if [ -z "$repos_raw" ]; then
-    echo -e "${CB_YELLOW}⚠️  No repositories found.${C_RESET}"
+    if [ "$filters_applied" = true ]; then
+      echo -e "${CB_YELLOW}⚠️  No repositories matched your filters.${C_RESET}"
+    else
+      echo -e "${CB_YELLOW}⚠️  No repositories found.${C_RESET}"
+    fi
     return 0
   fi
 
