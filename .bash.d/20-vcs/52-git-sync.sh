@@ -5,23 +5,31 @@
 # ~/.bash.d/20-vcs/52-git-sync.sh
 
 #######################################
-# Git: Clone and initialize repository in sync directory
+# Git: Clone and initialize the sync repository directory, or reconcile
+# an already-existing checkout's origin to match SYNC_REPO_URL.
+# The origin reconciliation always runs, even when repo_dir was already
+# a git checkout -- e.g. a collaborator who manually cloned the upstream
+# repo before ever running mt-become-collaborator, or whose fork URL
+# changed since. Without this, origin silently keeps pointing at
+# whatever it was first cloned from forever, and every future
+# 'mt-push-update' push fails with a 403 against the wrong remote no
+# matter how correctly SYNC_REPO_URL is configured.
 # Arguments:
 #   $1 - Target repository directory path
-#   $2 - Remote origin URL
+#   $2 - Remote origin URL (SYNC_REPO_URL)
 #######################################
 __git_sync_init_repo() {
   local repo_dir="$1" remote_url="$2"
 
-  [ -d "$repo_dir/.git" ] && return 0
+  if [ ! -d "$repo_dir/.git" ]; then
+    echo "📥 Local sync directory not found or not initialized."
+    mkdir -p "$repo_dir"
 
-  echo "📥 Local sync directory not found or not initialized."
-  mkdir -p "$repo_dir"
-
-  if ! git clone "$remote_url" "$repo_dir" 2> /dev/null; then
-    echo "⚠️ Clone failed (likely an empty remote). Initializing local repository..."
-    git -C "$repo_dir" init
-    git -C "$repo_dir" remote add origin "$remote_url"
+    if ! git clone "$remote_url" "$repo_dir" 2> /dev/null; then
+      echo "⚠️ Clone failed (likely an empty remote). Initializing local repository..."
+      git -C "$repo_dir" init
+      git -C "$repo_dir" remote add origin "$remote_url"
+    fi
   fi
 
   if [ "$(git -C "$repo_dir" remote get-url origin 2> /dev/null)" != "$remote_url" ]; then

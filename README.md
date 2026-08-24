@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Refactored repository initialization logic to ensure remote `origin` URL reconciliation runs on existing local checkouts.
+- Fixed an issue where mismatched or updated `SYNC_REPO_URL` values caused `403` push errors on pre-existing git repositories.
+- Updated internal function documentation to clarify remote origin synchronization behavior.
 - **Added System Diagnostics (`mt-doctor`)**: Introduced `.bash.d/00-system/03-doctor.sh` to perform automated health checks on environment configuration and status.
 - **Version Check Integration**: Added checks against cached version data to report outdated installations and prompt updates.
 - **Sync Configuration & GitHub CLI Validation**: Added checks to verify `SYNC_REPO_URL` setup, GitHub CLI authentication status, and local repository origin alignment.
 - **Git Repository State Inspection**: Implemented detection for active merges, dirty working directories, unpushed commits, and PR status tracking on non-default branches.
 - **Configuration Schema Verification**: Integrated read-only schema checks via `config_manager.py` to identify legacy keys requiring migration.
-- Introduced `mt-migrate-config` command and interactive menu entry to detect and clean up legacy configuration keys in `config.yaml` left behind by schema renames.
-- Automated config schema reconciliation during framework releases (`mt-get-update`), preserving existing user settings while removing deprecated options.
-- Enhanced `config_manager.py` with section- and leaf-level schema mapping logic, including automatic backup creation before modifying `config.yaml`.
 
 ---
 
