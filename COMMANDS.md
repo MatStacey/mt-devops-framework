@@ -193,6 +193,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-become-collaborator` | Config: Interactive one-time setup wizard for collaborators who don't |
 | `mt-get-gemini-status` | AI: Print current Gemini API model version and extended reasoning mode toggle |
 | `mt-load-config` | Config: Forcefully re-parse config.yaml and reload environment variables |
+| `mt-migrate-config` | Config: Detect and clean up legacy config.yaml keys left behind by past |
 | `mt-open-config` | Config: Open bash.d directory and config.yaml in IDE |
 | `mt-set-cicd` | Config: Set default CI/CD provider |
 | `mt-set-default-ai` | Config: Set default AI model provider |
@@ -369,6 +370,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `win` | System: Open a directory in the platform's native file manager |
 | `win-export` | System: Open ~/vcs/personal/exports in the platform's native file manager (shortcut for `win export`) |
 | `win-vcs` | System: Open ~/vcs in the platform's native file manager (shortcut for `win vcs`) |
+
+### System Diagnostics ("mt-doctor")
+| Command | Description |
+|---|---|
+| `mt-doctor` | System: Diagnostic health-check for the framework's environment -- |
 
 ### System: Interactive Master Menu
 | Command | Description |
