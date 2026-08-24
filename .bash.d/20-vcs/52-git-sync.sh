@@ -51,7 +51,13 @@ __git_sync_copy_files() {
   fi
 
   # SECURITY FIX: One-way sync ONLY. Local Home is the source of truth during a push.
-  rsync -a -u --delete --delete-excluded --exclude-from="$syncignore" "$HOME/.bash.d/" "$repo_dir/.bash.d/"
+  # No -u/--update: git checkout/pull (run on repo_dir moments earlier by
+  # __mt_push_update_reconcile_branch, and always on a collaborator's first-ever
+  # run via __git_sync_init_repo's fresh clone) stamps every file it writes with
+  # the current time, which is virtually always newer than an edit saved earlier
+  # in $HOME/.bash.d -- -u would then skip copying the real edit entirely,
+  # silently discarding it before git ever sees a diff.
+  rsync -a --delete --delete-excluded --exclude-from="$syncignore" "$HOME/.bash.d/" "$repo_dir/.bash.d/"
 
   if [ -f "$HOME/.bashrc" ]; then
     cp -f "$HOME/.bashrc" "$repo_dir/.bashrc"
