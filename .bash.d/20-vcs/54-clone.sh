@@ -166,6 +166,67 @@ __mt_clone_print_plan() {
 }
 
 #######################################
+# Git: Let the user interactively exclude specific repositories from an
+# already-built clone plan (e.g. one large repo they don't personally
+# need) via an fzf multi-select over everything not already cloned --
+# repos already present locally are never offered, since they're
+# skipped from cloning either way regardless of exclusion. Rewrites the
+# plan file in place with any excluded rows removed; declining or
+# selecting nothing leaves the plan untouched.
+# Arguments:
+#   $1 - Plan file path (slug|clone_url|size|language|updated_on|is_private|target_dir|exists)
+#######################################
+__mt_clone_pick_exclusions() {
+  local plan_file="$1"
+
+  local -a candidates
+  mapfile -t candidates < <(awk -F'|' '$8=="false"' "$plan_file")
+  [ "${#candidates[@]}" -eq 0 ] && return 0
+
+  local display_lines=""
+  local line slug clone_url size lang updated is_private target_dir exists
+  for line in "${candidates[@]}"; do
+    IFS='|' read -r slug clone_url size lang updated is_private target_dir exists <<< "$line"
+    display_lines+="${slug}|$(__mt_clone_human_size "$size")|${lang:--}"$'\n'
+  done
+
+  local -a picked
+  mapfile -t picked < <(
+    printf '%s' "$display_lines" |
+      fzf --multi --prompt="✂️  Exclude repos > " --height=~20 --layout=reverse --border \
+        --header="TAB: mark for exclusion | ENTER: confirm | ESC: exclude none"
+  )
+  [ "${#picked[@]}" -eq 0 ] && return 0
+
+  local -a excluded_slugs
+  local p
+  for p in "${picked[@]}"; do
+    excluded_slugs+=("${p%%|*}")
+  done
+
+  local tmp_file
+  tmp_file=$(mktemp)
+  local removed=0 rest s skip
+  while IFS='|' read -r slug rest; do
+    skip=false
+    for s in "${excluded_slugs[@]}"; do
+      if [ "$slug" = "$s" ]; then
+        skip=true
+        break
+      fi
+    done
+    if [ "$skip" = true ]; then
+      ((removed++))
+    else
+      echo "${slug}|${rest}" >> "$tmp_file"
+    fi
+  done < "$plan_file"
+  mv "$tmp_file" "$plan_file"
+
+  echo -e "${CB_YELLOW}✂️  Excluded ${removed} repositories.${C_RESET}\n"
+}
+
+#######################################
 # Git: Wizard picker for the "last updated" filter -- quick calendar-
 # boundary options (today/this week/this month/this year, per spec)
 # resolved via clone_wizard.py's quick-date subcommand, or a specific
@@ -362,8 +423,10 @@ __mt_clone_bitbucket_repo() {
 # Git: Clone every repository in a source-control provider's project
 # into config.paths.vcs_root_dir/<provider>/<workspace>/<project>/,
 # skipping any that already exist locally. Shows a plan (repositories
-# to clone vs already present) and asks for confirmation before
-# cloning anything, unless --auto-approve is set. Currently supports
+# to clone vs already present), offers an fzf multi-select to exclude
+# specific repos from it (e.g. one large repo you don't personally
+# need), and asks for confirmation before cloning anything -- all
+# skipped if --auto-approve is set. Currently supports
 # Bitbucket only -- see clone_wizard.py's PROVIDERS registry to add
 # another. Filters (--type/--lang/--from-date/--year/--age) are applied
 # client-side against the full project repo list, not via a provider
@@ -525,6 +588,21 @@ mt-clone() {
     echo -e "${CB_GREEN}✅ Nothing to do -- every repository already exists locally.${C_RESET}"
     rm -f "$plan_file"
     return 0
+  fi
+
+  if [ "$auto_approve" != true ]; then
+    local want_exclude
+    read -r -p "✂️  Exclude specific repositories from this clone? [y/N] " -n 1 want_exclude < /dev/tty || want_exclude="n"
+    echo
+    if [[ "$want_exclude" =~ ^[Yy]$ ]]; then
+      __mt_clone_pick_exclusions "$plan_file"
+      __mt_clone_print_plan "$plan_file" "$raw_workspace" "$raw_project" "$project_dir"
+      if [ "$MT_CLONE_TO_CLONE" -eq 0 ]; then
+        echo -e "${CB_GREEN}✅ Nothing left to clone after exclusions.${C_RESET}"
+        rm -f "$plan_file"
+        return 0
+      fi
+    fi
   fi
 
   if [ "$auto_approve" != true ]; then
