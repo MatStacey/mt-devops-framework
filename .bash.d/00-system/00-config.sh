@@ -10,6 +10,14 @@ SECRETS_MANAGER="$HOME/.bash.d/lib/python/secrets_manager.py"
 ENV_CACHE="$HOME/.bash.d/data/cache/.env.cache"
 YAML_TEMPLATE="$HOME/.bash.d/lib/templates/config.yaml.tpl"
 
+# Real secret values (API keys, tokens) never live in config.yaml or git --
+# they're externalized to this file, outside ~/vcs entirely so a `mt-clone`
+# or repo re-sync can never touch it. Single source of truth for the path;
+# secrets_manager.py carries its own copy of this constant since it's a
+# standalone Python script with no shared env with bash.
+SECRETS_DIR="$HOME/secrets"
+SECRETS_FILE="$SECRETS_DIR/secrets.sh"
+
 # The framework's source-of-truth repository. Intentionally a hardcoded
 # constant, not a config.yaml setting: it's where mt-get-update pulls
 # releases from and where git-raise-pr/mt-push-update raise PRs against.
@@ -41,9 +49,9 @@ __reload_config_if_modified() {
       source "$ENV_CACHE"
 
       # Load externalized secrets
-      if [ -f "$HOME/vcs/secrets/secrets.sh" ]; then
+      if [ -f "$SECRETS_FILE" ]; then
         # shellcheck disable=SC1091
-        source "$HOME/vcs/secrets/secrets.sh"
+        source "$SECRETS_FILE"
       fi
 
       if [ "$old_theme" != "$BASH_THEME" ]; then
@@ -62,9 +70,9 @@ if [ -f "$ENV_CACHE" ]; then
   source "$ENV_CACHE"
 
   # Load externalized secrets
-  if [ -f "$HOME/vcs/secrets/secrets.sh" ]; then
+  if [ -f "$SECRETS_FILE" ]; then
     # shellcheck disable=SC1091
-    source "$HOME/vcs/secrets/secrets.sh"
+    source "$SECRETS_FILE"
   fi
 fi
 
@@ -515,7 +523,7 @@ mt-wizard-paths() {
   read -r -p "Dotfiles Repo [${DOTFILES_DIR:-~/vcs/personal/mt-devops-framework}]: " dotfiles_dir_input
   [ -n "$dotfiles_dir_input" ] && python3 "$CONFIG_MANAGER" update "paths" "dotfiles_dir" "$dotfiles_dir_input"
   local ai_workspace_input
-  read -r -p "AI Workspace [${AI_WORKSPACE_DIR:-~/vcs/workspaces/ai}]: " ai_workspace_input
+  read -r -p "AI Workspace [${AI_WORKSPACE_DIR:-~/workspaces/ai}]: " ai_workspace_input
   [ -n "$ai_workspace_input" ] && python3 "$CONFIG_MANAGER" update "paths" "ai_workspace_dir" "$ai_workspace_input"
   local iam_scripts_input
   read -r -p "IAM Scripts [${SCRIPTS_IAM_DIR:-/tmp/scripts/iam}]: " iam_scripts_input
@@ -651,9 +659,9 @@ mt-load-config() {
     chmod 600 "$env_cache" 2> /dev/null
     # shellcheck disable=SC1090
     source "$env_cache"
-    if [ -f "$HOME/vcs/secrets/secrets.sh" ]; then
+    if [ -f "$SECRETS_FILE" ]; then
       # shellcheck disable=SC1091
-      source "$HOME/vcs/secrets/secrets.sh"
+      source "$SECRETS_FILE"
     fi
     echo -e "${CB_GREEN}✅ Config reloaded! Active variables updated.${C_RESET}"
   else

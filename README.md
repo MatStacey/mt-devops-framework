@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Centralized Secrets Management**: Relocated externalized secrets out of `~/vcs` into a dedicated `~/secrets` directory, introducing `SECRETS_DIR` and `SECRETS_FILE` global constants.
+- **Refactored Secret Scripts**: Refactored `00-config.sh` and `01-secrets.sh` to dynamically reference `$SECRETS_FILE` and `$SECRETS_DIR` rather than using hardcoded paths.
+- **Updated Path Defaults**: Adjusted the default AI Workspace path setting in `mt-wizard-paths` to `~/workspaces/ai` (previously `~/vcs/workspaces/ai`).
+- **Improved User Feedback**: Updated interactive API key prompts (Gemini, Claude) and output messaging to reflect the new `~/secrets/secrets.sh` storage location.
 - **Refactored Submenu Navigation**: Updated `fzf` submenus to match options by exact label instead of numeric prefixes, fixing fuzzy-search matching bugs and adding support for visual section headers.
 - **Reorganized Setup & Config Menu**: Grouped tools into structured categories (*Guided Wizards*, *Quick Setters*, *Secrets*, *Terminal & Display*, and *Maintenance*) and consolidated the standalone *Terminal UI* submenu.
 - **Added Visual Safety Warnings**: Prominently flagged broad-impact actions (such as restarting all containers and nuking resources) in the Docker menu with `⚠️` indicators.
 - **Streamlined GCP/Kubernetes Menu**: Removed redundant individual config commands in favor of the unified `gcl-config` display action.
-- **Interactive Repository Exclusion**: Added `__mt_clone_pick_exclusions` to allow filtering out specific repositories from a clone plan using an interactive `fzf` multi-select interface.
-- **Workflow Integration**: Updated `mt-clone` to prompt users for optional exclusions before confirming the clone execution (bypassed when `--auto-approve` is enabled).
-- **Dynamic Plan Updates**: Refreshes and reprints the clone plan following user exclusions, exiting gracefully if all remaining targets are removed.
-- **Fix Bitbucket HTTPS Git Clone Authentication**: Resolved clone authorization failures ("may not have access" errors) by using the required `x-bitbucket-api-token-auth` literal username instead of `BITBUCKET_EMAIL` when constructing HTTP Basic Auth headers for git operations.
 
 ---
 

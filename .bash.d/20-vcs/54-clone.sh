@@ -304,19 +304,25 @@ __mt_clone_wizard_pick_language() {
 }
 
 #######################################
-# Git: Interactively collect everything mt-clone needs (provider,
+# Git: Interactively collect everything mt-clone needs (scope, provider,
 # workspace, project, filters) via fzf/prompts, fetching the project's
 # full repo list once -- unfiltered, so the language picker can be
 # populated from real data -- and applying whatever filters were chosen
 # locally afterward via clone_wizard.py's filter subcommand, without a
 # second API call.
 # Globals (written, expected pre-declared local by the caller):
-#   provider, raw_workspace, raw_project, repos_raw
+#   scope, provider, raw_workspace, raw_project, repos_raw
 # Returns:
 #   0 on success, 1 if the user cancelled or nothing was found
 #######################################
 __mt_clone_run_wizard() {
   echo -e "${CB_CYAN}🧙 mt-clone Wizard${C_RESET}\n"
+
+  scope=$(printf '%s\n' "work" "personal" | fzf --prompt="📁 Scope > " --height=~10 --layout=reverse --border)
+  if [ -z "$scope" ]; then
+    echo -e "${CB_YELLOW}🛑 Cancelled.${C_RESET}"
+    return 1
+  fi
 
   provider=$(python3 "$CLONE_WIZARD" list-providers | fzf --prompt="🌐 Provider > " --height=~10 --layout=reverse --border)
   if [ -z "$provider" ]; then
@@ -421,7 +427,7 @@ __mt_clone_bitbucket_repo() {
 
 #######################################
 # Git: Clone every repository in a source-control provider's project
-# into config.paths.vcs_root_dir/<provider>/<workspace>/<project>/,
+# into config.paths.vcs_root_dir/<scope>/<provider>/<workspace>/<project>/,
 # skipping any that already exist locally. Shows a plan (repositories
 # to clone vs already present), offers an fzf multi-select to exclude
 # specific repos from it (e.g. one large repo you don't personally
@@ -432,12 +438,13 @@ __mt_clone_bitbucket_repo() {
 # client-side against the full project repo list, not via a provider
 # query DSL -- if more than one date-ish filter is given, the OLDEST
 # (most inclusive) cutoff wins. -i/--wizard runs an interactive flow
-# instead (provider/workspace/project prompts, plus a filter menu whose
-# language picker is populated from repositories actually present) and
-# ignores -p/-w/-pr/filter flags even if also given.
-# Usage: mt-clone -p <provider> -w <workspace> -pr <project> [filters] [--auto-approve]
+# instead (scope/provider/workspace/project prompts, plus a filter menu
+# whose language picker is populated from repositories actually
+# present) and ignores -s/-p/-w/-pr/filter flags even if also given.
+# Usage: mt-clone -s <work|personal> -p <provider> -w <workspace> -pr <project> [filters] [--auto-approve]
 #        mt-clone -i [--auto-approve]
 # Options:
+#   -s, --scope <work|personal>  Top-level VCS_ROOT subdirectory to clone into
 #   -p, --provider <name>     Source-control provider (currently: bitbucket)
 #   -w, --workspace <name>    Workspace name
 #   -pr, --project <name>     Project name (or key)
@@ -460,7 +467,7 @@ mt-clone() {
     return 0
   fi
 
-  local provider="" raw_workspace="" raw_project="" auto_approve=false do_wizard=false
+  local scope="" provider="" raw_workspace="" raw_project="" auto_approve=false do_wizard=false
   local type_filter="" lang_filter="" from_date="" year_filter="" age_filter=""
   local repos_raw
 
@@ -469,6 +476,14 @@ mt-clone() {
       -i | --wizard)
         do_wizard=true
         shift
+        ;;
+      -s | --scope)
+        scope="${2,,}"
+        if [[ "$scope" != "work" && "$scope" != "personal" ]]; then
+          echo "mt-clone: --scope must be 'work' or 'personal'" >&2
+          return 1
+        fi
+        shift 2
         ;;
       -p | --provider)
         provider="$2"
@@ -519,7 +534,7 @@ mt-clone() {
         shift
         ;;
       *)
-        echo "Usage: mt-clone -p <provider> -w <workspace> -pr <project> [-t private|public] [-l language] [-d date] [-y year] [-a days] [--auto-approve] | mt-clone -i" >&2
+        echo "Usage: mt-clone -s <work|personal> -p <provider> -w <workspace> -pr <project> [-t private|public] [-l language] [-d date] [-y year] [-a days] [--auto-approve] | mt-clone -i" >&2
         return 1
         ;;
     esac
@@ -528,8 +543,8 @@ mt-clone() {
   if [ "$do_wizard" = true ]; then
     __mt_clone_run_wizard || return 1
   else
-    if [ -z "$provider" ] || [ -z "$raw_workspace" ] || [ -z "$raw_project" ]; then
-      echo -e "${CB_RED}🚨 --provider, --workspace, and --project are all required.${C_RESET}"
+    if [ -z "$scope" ] || [ -z "$provider" ] || [ -z "$raw_workspace" ] || [ -z "$raw_project" ]; then
+      echo -e "${CB_RED}🚨 --scope, --provider, --workspace, and --project are all required.${C_RESET}"
       return 1
     fi
 
@@ -563,7 +578,7 @@ mt-clone() {
   local sanitized_workspace sanitized_project
   sanitized_workspace=$(__mt_clone_sanitize_name "$raw_workspace")
   sanitized_project=$(__mt_clone_sanitize_name "$raw_project")
-  local project_dir="${VCS_ROOT:-$HOME/vcs}/${provider}/${sanitized_workspace}/${sanitized_project}"
+  local project_dir="${VCS_ROOT:-$HOME/vcs}/${scope}/${provider}/${sanitized_workspace}/${sanitized_project}"
 
   __mt_clone_check_collision "$project_dir" "$raw_workspace" "$raw_project" || {
     echo -e "${CB_YELLOW}🛑 Aborted.${C_RESET}"

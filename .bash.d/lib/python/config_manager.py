@@ -198,7 +198,7 @@ def load_env():
     export(
         "AI_WORKSPACE_DIR",
         paths_cfg.get("ai_workspace_dir",
-                      paths_cfg.get("ai_workspace", "~/vcs/workspaces/ai")),
+                      paths_cfg.get("ai_workspace", "~/workspaces/ai")),
         resolve_home=True,
     )
     export(

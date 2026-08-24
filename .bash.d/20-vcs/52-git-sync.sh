@@ -113,7 +113,7 @@ __mt_push_update_run_shellcheck() {
 # config.yaml and any *_token.sh file so a plaintext copy of them never
 # ends up sitting in an unencrypted zip under $BACKUP_DIR -- real secrets
 # (API keys) already live entirely outside .bash.d in
-# ~/vcs/secrets/secrets.sh and are never touched by this backup at all.
+# ~/secrets/secrets.sh and are never touched by this backup at all.
 # Globals (read):
 #   BACKUP_DIR
 # Returns:
