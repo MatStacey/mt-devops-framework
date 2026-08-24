@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added helper functions for formatting human-readable byte sizes and checking available filesystem disk space portably across OS environments.
+- Implemented detailed clone plan summary output including calculated target clone sizes with a 1.5x disk space safety buffer.
+- Added visual pre-flight warnings when available disk space is insufficient for the targeted clone operations.
+- Introduced structured summary table displaying repository update dates, human-readable sizes, local existence status, and primary languages.
+- Refactored `mt-clone` workflow to utilize modular plan printing and localized status variables.
 - **Added Bulk Repository Cloning (`mt-clone`)**: Introduced `54-clone.sh` to enable automated, bulk cloning of VCS repositories (starting with Bitbucket) into standardized target directories.
 - **Secure Credential Injection**: Implemented in-memory authentication using Git's `http.extraHeader` environment overrides (`GIT_CONFIG_COUNT`), preventing API tokens from persisting to `.git/config` or showing up in `ps` output.
 - **Workspace & Project Collision Safety**: Added automated path sanitization and marker-file tracking (`.mt-clone-source`) to prevent distinct remote projects from mistakenly cloning into the same local directory.
-- **Execution Planning & Dry Run**: Included an interactive planning stage showing total, existing, and target repository counts prior to execution, along with an `--auto-approve` flag for non-interactive scripting.
-- **Preserve Secret Metadata During Updates:** Updated `install.sh` to exclude `config/secrets_metadata.yaml` from `rsync` deletion flags.
-- **Prevent History Loss:** Ensures user secret lifecycle tracking history (creation, expiry, and last-used dates) is retained across script updates.
-- Modularized secrets management functions by moving them from `00-config.sh` into a dedicated `01-secrets.sh` script.
-- Integrated Python-backed `secrets_manager.py` to handle registration and unregistration of secret key metadata upon updates or removal.
 
 ---
 

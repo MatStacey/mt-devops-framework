@@ -58,6 +58,114 @@ __mt_clone_check_collision() {
 }
 
 #######################################
+# Git: Convert a byte count into a human-readable string (B/KB/MB/GB/TB)
+# Arguments:
+#   $1 - Byte count
+# Outputs:
+#   Prints the formatted size to STDOUT
+#######################################
+__mt_clone_human_size() {
+  awk -v b="$1" 'BEGIN {
+    split("B KB MB GB TB", units, " ")
+    i = 1
+    while (b >= 1024 && i < 5) { b /= 1024; i++ }
+    printf "%.1f %s", b, units[i]
+  }'
+}
+
+#######################################
+# Git: Print the bytes available on the filesystem containing the given
+# path (creating it first if missing, since df can't stat a path that
+# doesn't exist yet). Portable across GNU and BSD df (-P for POSIX
+# output columns, -k for 1024-byte blocks).
+# Arguments:
+#   $1 - Path to check
+# Outputs:
+#   Prints the available byte count to STDOUT
+#######################################
+__mt_clone_available_bytes() {
+  local path="$1"
+  mkdir -p "$path"
+  local available_kb
+  available_kb=$(df -Pk "$path" | tail -n 1 | awk '{print $4}')
+  echo $((available_kb * 1024))
+}
+
+#######################################
+# Git: Sort the plan file (not-yet-cloned first, then newest-updated,
+# largest-size, language, name -- matching the spec's requested table
+# order) and print the full summary block + details table. The size
+# estimate and disk-space check only ever count repositories that will
+# actually be cloned, not ones already present, and apply a 1.5x safety
+# margin since a provider's reported size is server-side git-object
+# size, not the eventual on-disk footprint after checkout.
+# Arguments:
+#   $1 - Plan file path (slug|clone_url|size|language|updated_on|is_private|target_dir|exists)
+#   $2 - Raw workspace name
+#   $3 - Raw project name
+#   $4 - Project directory (used for the disk-space check)
+# Globals (written, expected pre-declared local by the caller):
+#   MT_CLONE_TOTAL, MT_CLONE_TO_CLONE, MT_CLONE_ALREADY_EXIST
+#######################################
+__mt_clone_print_plan() {
+  local plan_file="$1" raw_workspace="$2" raw_project="$3" project_dir="$4"
+
+  local sorted_file
+  sorted_file=$(mktemp)
+  sort -t'|' -k8,8 -k5,5r -k3,3nr -k4,4 -k1,1 "$plan_file" > "$sorted_file"
+  mv "$sorted_file" "$plan_file"
+
+  MT_CLONE_TOTAL=$(wc -l < "$plan_file")
+  MT_CLONE_ALREADY_EXIST=$(awk -F'|' '$8=="true"' "$plan_file" | wc -l)
+  MT_CLONE_TO_CLONE=$((MT_CLONE_TOTAL - MT_CLONE_ALREADY_EXIST))
+
+  local clone_size_bytes
+  clone_size_bytes=$(awk -F'|' '$8=="false"{s+=$3} END{print s+0}' "$plan_file")
+  local clone_size_human
+  clone_size_human=$(__mt_clone_human_size "$clone_size_bytes")
+
+  local available_bytes required_bytes size_color
+  available_bytes=$(__mt_clone_available_bytes "$project_dir")
+  required_bytes=$(awk -v s="$clone_size_bytes" 'BEGIN{printf "%d", s*1.5}')
+  size_color="${CB_GREEN}"
+  [ "$MT_CLONE_TO_CLONE" -gt 0 ] && [ "$available_bytes" -lt "$required_bytes" ] && size_color="${CB_RED}"
+
+  echo -e "\n${CB_CYAN}📋 Clone Plan${C_RESET}"
+  echo -e "   Workspace:                 ${raw_workspace}"
+  echo -e "   Project:                   ${raw_project}"
+  echo -e "   Total repositories:        ${MT_CLONE_TOTAL}"
+  echo -e "   Already cloned (skipped):  ${MT_CLONE_ALREADY_EXIST}"
+  echo -e "   To be cloned:              ${MT_CLONE_TO_CLONE}"
+  echo -e "   Total size to clone:       ${size_color}${clone_size_human}${C_RESET}"
+  if [ "$size_color" = "${CB_RED}" ]; then
+    local available_human
+    available_human=$(__mt_clone_human_size "$available_bytes")
+    echo -e "   ${CB_RED}⚠️  Only ${available_human} available -- this may not be enough disk space.${C_RESET}"
+  fi
+  echo ""
+
+  if [ "$MT_CLONE_TOTAL" -gt 0 ]; then
+    printf "${CB_BLUE}%-30s %-12s %-10s %-8s %-15s${C_RESET}\n" "REPOSITORY" "UPDATED" "SIZE" "EXISTS" "LANGUAGE"
+    echo -e "${CB_BLUE}--------------------------------------------------------------------------------${C_RESET}"
+
+    local slug clone_url size lang updated is_private target_dir exists
+    while IFS='|' read -r slug clone_url size lang updated is_private target_dir exists; do
+      local updated_date="${updated:0:10}"
+      [ -z "$updated_date" ] && updated_date="-"
+      local size_human
+      size_human=$(__mt_clone_human_size "$size")
+      local exists_label="No" exists_color="${CB_GREEN}"
+      if [ "$exists" = "true" ]; then
+        exists_label="Yes"
+        exists_color="${C_DIM}"
+      fi
+      printf "%-30s %-12s %-10s ${exists_color}%-8s${C_RESET} %-15s\n" "${slug:0:30}" "$updated_date" "$size_human" "$exists_label" "${lang:--}"
+    done < "$plan_file"
+    echo ""
+  fi
+}
+
+#######################################
 # Git: Clone one Bitbucket repo without ever writing the API token to
 # disk -- the Authorization header is injected via GIT_CONFIG_KEY_n/
 # GIT_CONFIG_VALUE_n env vars (git 2.31+), which git never persists
@@ -178,24 +286,14 @@ mt-clone() {
     echo "${slug}|${clone_url}|${size}|${lang}|${updated}|${is_private}|${target_dir}|${exists}" >> "$plan_file"
   done <<< "$repos_raw"
 
-  local total to_clone already_exist
-  total=$(wc -l < "$plan_file")
-  already_exist=$(awk -F'|' '$8=="true"' "$plan_file" | wc -l)
-  to_clone=$((total - already_exist))
+  local MT_CLONE_TOTAL MT_CLONE_TO_CLONE MT_CLONE_ALREADY_EXIST
+  __mt_clone_print_plan "$plan_file" "$raw_workspace" "$raw_project" "$project_dir"
 
-  echo -e "\n${CB_CYAN}📋 Plan for ${raw_workspace}/${raw_project}:${C_RESET}"
-  echo -e "   Total repositories:        ${total}"
-  echo -e "   Already cloned (skipped):  ${already_exist}"
-  echo -e "   To be cloned:              ${to_clone}\n"
-
-  if [ "$to_clone" -eq 0 ]; then
+  if [ "$MT_CLONE_TO_CLONE" -eq 0 ]; then
     echo -e "${CB_GREEN}✅ Nothing to do -- every repository already exists locally.${C_RESET}"
     rm -f "$plan_file"
     return 0
   fi
-
-  awk -F'|' '$8=="false"{print "   • " $1}' "$plan_file"
-  echo ""
 
   if [ "$auto_approve" != true ]; then
     local reply
@@ -204,7 +302,7 @@ mt-clone() {
     # terminal is a different situation than a user actually pressing
     # Enter, and silently proceeding with a bulk clone in the former
     # case would be a real surprise.
-    read -r -p "🚀 Proceed with cloning ${to_clone} repositories? [Y/n] " -n 1 reply < /dev/tty || reply="n"
+    read -r -p "🚀 Proceed with cloning ${MT_CLONE_TO_CLONE} repositories? [Y/n] " -n 1 reply < /dev/tty || reply="n"
     echo
     if [[ "$reply" =~ ^[Nn]$ ]]; then
       echo -e "${CB_YELLOW}🛑 Aborted.${C_RESET}"
