@@ -241,6 +241,298 @@ def load_env():
     export("HTTP_SERVER_IDLE_TIMEOUT_SEC", srv_cfg.get("idle_timeout_sec", 1800))
 
 
+_MISSING = object()
+
+# Every (old_path, new_path) leaf rename this framework's schema has gone
+# through, expressed as dot-separated paths into the parsed config dict.
+# This list is derived directly from the fallback chains in load_env()
+# above (e.g. paths_cfg.get("vcs_root_dir", paths_cfg.get("vcs_root", ...)))
+# -- each fallback pair there is proof a rename happened and is mirrored
+# here so migrate_config() can retire the legacy side instead of letting
+# it sit in config.yaml forever alongside the new one.
+LEAF_RENAMES = [
+    ("paths.vcs_root", "paths.vcs_root_dir"),
+    ("paths.vcs_personal", "paths.vcs_personal_dir"),
+    ("paths.vcs_exports", "paths.vcs_exports_dir"),
+    ("paths.sync_repo", "paths.sync_repo_dir"),
+    ("paths.ai_workspace", "paths.ai_workspace_dir"),
+    ("paths.scripts_iam", "paths.iam_scripts_dir"),
+    ("paths.docker_root", "paths.docker_root_dir"),
+    ("git.feature_prefix", "git.feature_branch_prefix"),
+    ("git.format_on_push", "git.enable_format_on_push"),
+    ("git.ai_max_diff_bytes", "ai.max_context_bytes"),
+    ("llm_exports.auto_cleanup", "llm_exports.enable_auto_cleanup"),
+    ("llm_exports.blocklist", "llm_exports.file_blocklist_regex"),
+    ("llm_exports.ignore_dirs", "llm_exports.dir_ignore_glob"),
+    ("ai.enabled", "ai.enable_ai"),
+    ("cicd.provider", "cicd.default_provider"),
+    ("docker.restart_blocklist", "docker.restart_blocklist_csv"),
+    # Provider config used to live flat under ai.<provider>.*; it now lives
+    # nested under ai.providers.<provider>.*, with gemini/claude's old
+    # "version" key renamed to "model" to match. Both the fully-legacy
+    # (old location + old key) and half-migrated (old location + new key)
+    # shapes are covered, since load_env()'s fallback tolerates both.
+    ("ai.gemini.version", "ai.providers.gemini.model"),
+    ("ai.gemini.model", "ai.providers.gemini.model"),
+    ("ai.gemini.extended", "ai.providers.gemini.enable_extended_reasoning"),
+    (
+        "ai.gemini.enable_extended_reasoning",
+        "ai.providers.gemini.enable_extended_reasoning",
+    ),
+    ("ai.claude.version", "ai.providers.claude.model"),
+    ("ai.claude.model", "ai.providers.claude.model"),
+    ("ai.local.base_url", "ai.providers.local.base_url"),
+    ("ai.local.model", "ai.providers.local.model"),
+]
+
+# Whole top-level sections that were renamed outright (every child key
+# under the old name means the same thing under the new one -- no
+# per-key rename needed, just a merge).
+SECTION_RENAMES = [
+    ("system", "core"),
+    ("exports", "llm_exports"),
+]
+
+
+def _get_path(d, path):
+    """Walk a dot-separated path (e.g. "ai.gemini.version") through nested
+    dicts.
+
+    Arguments:
+        d: The root dict to walk.
+        path: Dot-separated key path.
+
+    Returns:
+        The value at that path, or the _MISSING sentinel if any segment
+        along the way is absent or not itself a dict.
+    """
+    current = d
+    for key in path.split("."):
+        if not isinstance(current, dict) or key not in current:
+            return _MISSING
+        current = current[key]
+    return current
+
+
+def _set_path(d, path, value):
+    """Write `value` at a dot-separated path, creating any missing (or
+    wrongly-typed) intermediate dicts along the way."""
+    keys = path.split(".")
+    current = d
+    for key in keys[:-1]:
+        if key not in current or not isinstance(current[key], dict):
+            current[key] = {}
+        current = current[key]
+    current[keys[-1]] = value
+
+
+def _del_path(d, path):
+    """Remove the value at a dot-separated path, if present. Leaves any
+    now-empty parent dicts behind for _prune_empty_dicts to clean up."""
+    keys = path.split(".")
+    current = d
+    for key in keys[:-1]:
+        if not isinstance(current, dict) or key not in current:
+            return
+        current = current[key]
+    if isinstance(current, dict):
+        current.pop(keys[-1], None)
+
+
+def _prune_empty_dicts(d):
+    """Recursively delete dict values that ended up empty once migration
+    moved their only contents elsewhere (e.g. a legacy `ai.gemini:` block
+    left behind once both its keys migrated to `ai.providers.gemini`)."""
+    for key in list(d.keys()):
+        val = d[key]
+        if isinstance(val, dict):
+            _prune_empty_dicts(val)
+            if not val:
+                del d[key]
+
+
+def _apply_section_renames(d, report):
+    """Merge each legacy top-level section into its canonical replacement
+    (e.g. `system:` -> `core:`), preferring whatever value the canonical
+    section already holds on a key collision, then drop the legacy
+    section. Appends a human-readable line per key to `report`."""
+    for old_section, new_section in SECTION_RENAMES:
+        old_block = d.get(old_section)
+        if not isinstance(old_block, dict) or not old_block:
+            if old_section in d:
+                del d[old_section]
+            continue
+        new_block = d.setdefault(new_section, {})
+        for key, val in old_block.items():
+            if key not in new_block:
+                new_block[key] = val
+                report.append(f"moved {old_section}.{key} -> {new_section}.{key}")
+            elif new_block[key] != val:
+                report.append(
+                    f"kept {new_section}.{key}={new_block[key]!r}, discarded "
+                    f"conflicting legacy {old_section}.{key}={val!r}"
+                )
+            else:
+                report.append(f"removed duplicate legacy key {old_section}.{key}")
+        del d[old_section]
+
+
+def _apply_leaf_renames(d, report):
+    """Apply every (old_path, new_path) rule in LEAF_RENAMES: move the
+    value forward if the canonical key is missing, otherwise keep the
+    canonical value and report (rather than silently discard) any legacy
+    value that disagrees with it. Appends a human-readable line per
+    change to `report`."""
+    for old_path, new_path in LEAF_RENAMES:
+        old_val = _get_path(d, old_path)
+        if old_val is _MISSING:
+            continue
+        new_val = _get_path(d, new_path)
+        if new_val is _MISSING:
+            _set_path(d, new_path, old_val)
+            report.append(f"moved {old_path} -> {new_path}")
+        elif new_val != old_val:
+            report.append(
+                f"kept {new_path}={new_val!r}, discarded conflicting "
+                f"legacy {old_path}={old_val!r}"
+            )
+        else:
+            report.append(f"removed duplicate legacy key {old_path}")
+        _del_path(d, old_path)
+
+
+def _compute_migration(d):
+    """Apply every migration rule to a deep copy of `d` and report what
+    would change, without touching the original.
+
+    Arguments:
+        d: The parsed config.yaml dict (left untouched).
+
+    Returns:
+        (migrated_copy, report) -- migrated_copy is the fully migrated
+        dict, report is the list of human-readable change lines (empty
+        if nothing needed migrating). Shared by migrate_config() (which
+        writes migrated_copy back to disk) and check_config() (which
+        only wants the report, read-only, for `mt-doctor`).
+    """
+    import copy
+
+    working = copy.deepcopy(d)
+    report = []
+    _apply_section_renames(working, report)
+    _apply_leaf_renames(working, report)
+    _prune_empty_dicts(working)
+    return working, report
+
+
+def check_config():
+    """Report-only counterpart to migrate_config(): prints whether
+    config.yaml has legacy keys pending migration, without writing
+    anything. Used by `mt-doctor` to surface config drift alongside its
+    other environment checks without mutating state as a side effect of
+    a report command.
+    """
+    import yaml
+
+    path = get_config_path()
+    if not os.path.exists(path):
+        print("SKIP: no config.yaml found yet.")
+        return
+
+    with open(path, "r", encoding="utf-8") as f:
+        d = yaml.safe_load(f) or {}
+
+    if not isinstance(d, dict):
+        print("WARN: config.yaml did not parse to a mapping.")
+        return
+
+    _, report = _compute_migration(d)
+    if not report:
+        print("OK: config.yaml matches the current schema.")
+        return
+
+    plural = "y" if len(report) == 1 else "ies"
+    print(f"WARN: {len(report)} legacy config.yaml entr{plural} pending migration "
+          f"-- run 'mt-migrate-config' to clean up:")
+    for line in report:
+        print(f"  - {line}")
+
+
+def migrate_config():
+    """Detect and clean up legacy config.yaml keys left behind by past
+    schema renames (see LEAF_RENAMES/SECTION_RENAMES).
+
+    config.yaml is only ever created once, from config.yaml.tpl, the
+    first time a shell starts with none present (see 00-config.sh) -- it
+    is never otherwise touched or migrated across framework updates. So
+    when a later release renames a key, every existing installation just
+    keeps writing to the OLD name forever (update_yaml() and every wizard
+    call-site only know the CURRENT canonical name, so they add it
+    alongside instead of replacing anything), and config.yaml
+    accumulates both the legacy and canonical key for every rename it
+    has lived through.
+
+    This is a safe no-op if no legacy keys are found. When there is
+    something to migrate, the original file is backed up to
+    BACKUP_DIR/config-migrations/ first, then the cleaned-up config is
+    written back and the env cache is invalidated so the next shell
+    reload picks up the change. Prints a human-readable report either
+    way. Called both automatically (end of mt-get-update's install step)
+    and on demand via `mt-migrate-config`.
+    """
+    import shutil
+    from datetime import datetime
+
+    import yaml
+
+    path = get_config_path()
+    if not os.path.exists(path):
+        print("No config.yaml found -- nothing to migrate.")
+        return
+
+    with open(path, "r", encoding="utf-8") as f:
+        d = yaml.safe_load(f) or {}
+
+    if not isinstance(d, dict):
+        print("🚨 config.yaml did not parse to a mapping -- skipping migration.")
+        return
+
+    d, report = _compute_migration(d)
+
+    if not report:
+        print(
+            "✅ config.yaml already matches the current schema -- nothing to migrate."
+        )
+        return
+
+    home = os.environ.get("HOME", "")
+    backup_dir = os.path.join(
+        os.path.expanduser(
+            os.environ.get("BACKUP_DIR", "~/backups").replace("~", home, 1)
+        ),
+        "config-migrations",
+    )
+    os.makedirs(backup_dir, exist_ok=True)
+    timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
+    backup_path = os.path.join(backup_dir, f"config_pre-migration_{timestamp}.yaml")
+    shutil.copy2(path, backup_path)
+    os.chmod(backup_path, 0o600)
+
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(d, f, sort_keys=False, default_flow_style=False)
+    os.chmod(path, 0o600)
+
+    cache_file = os.path.expanduser("~/.bash.d/data/cache/.env.cache")
+    if os.path.exists(cache_file):
+        os.remove(cache_file)
+
+    plural = "y" if len(report) == 1 else "ies"
+    print(f"🔧 Migrated {len(report)} legacy config.yaml entr{plural}:")
+    for line in report:
+        print(f"   - {line}")
+    print(f"📦 Backup saved to {backup_path}")
+
+
 def update_yaml(cat_path, key, val):
     import yaml
 
@@ -276,3 +568,7 @@ if __name__ == "__main__" and len(sys.argv) > 1:
         load_env()
     elif cmd == "update" and len(sys.argv) == 5:
         update_yaml(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif cmd == "migrate":
+        migrate_config()
+    elif cmd == "check-config":
+        check_config()
