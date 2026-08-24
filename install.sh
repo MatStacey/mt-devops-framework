@@ -28,10 +28,17 @@ mkdir -p "$TARGET_BASHD"
 # summaries), not framework state -- unlike the other caches under
 # data/cache/, it isn't cheaply auto-regenerated, so an update should
 # never silently discard it.
+#
+# config/secrets_metadata.yaml is excluded for the same reason: it's
+# mt-secrets' tracked created/expiry/last-used dates for each secret,
+# genuine user state with no source to regenerate from (unlike
+# config.yaml, it has no .tpl to reseed from either) -- discarding it
+# silently on every update would erase a user's expiry-tracking history.
 rsync -a --delete \
   --exclude 'config/config.yaml' \
   --exclude 'config/.env.cache' \
   --exclude 'config/*_token.sh' \
+  --exclude 'config/secrets_metadata.yaml' \
   --exclude 'data/cache/.vcs_hub.json' \
   --exclude '*private*.sh' \
   --exclude '*.local.sh' \
