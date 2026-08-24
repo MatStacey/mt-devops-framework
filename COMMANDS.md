@@ -190,6 +190,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | Command | Description |
 |---|---|
 | `mt-add-sync-url` | Config: Set the sync repository URL |
+| `mt-become-collaborator` | Config: Interactive one-time setup wizard for collaborators who don't |
 | `mt-get-gemini-status` | AI: Print current Gemini API model version and extended reasoning mode toggle |
 | `mt-load-config` | Config: Forcefully re-parse config.yaml and reload environment variables |
 | `mt-open-config` | Config: Open bash.d directory and config.yaml in IDE |
@@ -204,7 +205,6 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-setup-exports` | Config: Interactive Exports Setup Menu (deprecated alias) |
 | `mt-setup-git` | Config: Interactive Git Setup Menu (deprecated alias) |
 | `mt-setup-paths` | Config: Interactive Paths Setup Menu (deprecated alias) |
-| `mt-set-upstream-path` | Config: Set the upstream repository path for framework updates |
 | `mt-setup-system` | Config: Interactive System Setup Menu (deprecated alias) |
 | `mt-toggle-ai` | Config: Toggle global AI prompt and workflow integration (true/false) |
 | `mt-toggle-format-on-push` | Config: Toggle global format-on-push behavior (true/false) |

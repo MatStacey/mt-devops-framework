@@ -143,7 +143,6 @@ __mt_menu_pick_default_ai() { __mt_menu_pick_enum "🤖 Default AI Provider" mt-
 __mt_menu_pick_default_ide() { __mt_menu_pick_enum "💻 Default IDE" mt-set-default-ide vscode intellij; }
 __mt_menu_pick_cicd() { __mt_menu_pick_enum "⚙️  CI/CD Provider" mt-set-cicd github bitbucket gitlab azure jenkins; }
 __mt_menu_add_sync_url() { __mt_menu_prompt_arg "Git sync repository URL" mt-add-sync-url; }
-__mt_menu_set_upstream_path() { __mt_menu_prompt_arg "Upstream framework repo path" mt-set-upstream-path; }
 
 __mt_menu_bq_query() { __mt_menu_prompt_arg "BigQuery SQL" bq-query; }
 __mt_menu_gcp_crf_logs() { __mt_menu_prompt_arg "Cloud Run Function name" gcp-crf-logs; }
@@ -184,7 +183,7 @@ __mt_menu_setup() {
     "Toggle Format-on-Push (mt-toggle-format-on-push)" mt-toggle-format-on-push \
     "Toggle Update-Divergence Confirmation (mt-toggle-update-confirm)" mt-toggle-update-confirm \
     "Set Git Sync URL (mt-add-sync-url)" __mt_menu_add_sync_url \
-    "Set Upstream Repo Path (mt-set-upstream-path)" __mt_menu_set_upstream_path \
+    "Become a Collaborator / Fork Setup (mt-become-collaborator)" mt-become-collaborator \
     "Reload Config from Disk (mt-load-config)" mt-load-config \
     "Open config.yaml in IDE (mt-open-config)" mt-open-config \
     "View Active Configuration (mt-config)" mt-config

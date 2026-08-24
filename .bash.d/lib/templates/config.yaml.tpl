@@ -37,7 +37,6 @@ ai:
       model: llama3.2
 
 git:
-  upstream_repo_slug: MatStacey/mt-devops-framework
   feature_branch_prefix: feature/
   enable_format_on_push: true
 

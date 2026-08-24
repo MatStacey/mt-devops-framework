@@ -150,14 +150,10 @@ def load_env():
     export("EXPORT_MAX_FILE_THRESHOLD", exp_cfg.get("max_file_threshold", 2000))
 
     # Git
+    # NOTE: UPSTREAM_REPO_PATH is intentionally NOT sourced from config.yaml --
+    # it's a hardcoded constant in 00-config.sh (the framework's
+    # source-of-truth repo never changes per-user, unlike SYNC_REPO_URL).
     export("SYNC_REPO_URL", git_cfg.get("sync_repo_url", ""))
-    export(
-        "UPSTREAM_REPO_PATH",
-        git_cfg.get(
-            "upstream_repo_slug",
-            git_cfg.get("upstream_repo_path", "MatStacey/mt-devops-framework"),
-        ),
-    )
     export(
         "GIT_FEATURE_PREFIX",
         git_cfg.get("feature_branch_prefix", git_cfg.get("feature_prefix", "feature/")),
