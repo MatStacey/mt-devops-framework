@@ -16,6 +16,10 @@ Usage:
     python clone_wizard.py fetch <provider> <workspace> <project>
         [--type private|public] [--lang LANGUAGE]
         [--from-date DATE] [--year YYYY] [--age DAYS]
+    python clone_wizard.py filter [same --type/--lang/--from-date/--year/--age
+        flags as fetch] < already-fetched-repo-lines
+    python clone_wizard.py quick-date <today|week|month|year>
+    python clone_wizard.py list-providers
 """
 
 import argparse
@@ -193,6 +197,33 @@ def _apply_filters(repos, args):
     return repos
 
 
+def _print_repo_line(r):
+    print(
+        "|".join(
+            [
+                r["slug"],
+                r["clone_url"],
+                str(r["size_bytes"]),
+                r["language"],
+                r["updated_on"],
+                "true" if r["is_private"] else "false",
+            ]
+        )
+    )
+
+
+def _repo_from_line(line):
+    slug, clone_url, size_bytes, language, updated_on, is_private = line.rstrip("\n").split("|")
+    return {
+        "slug": slug,
+        "clone_url": clone_url,
+        "size_bytes": int(size_bytes),
+        "language": language,
+        "updated_on": updated_on,
+        "is_private": is_private == "true",
+    }
+
+
 def cmd_fetch(args):
     fetch_fn = PROVIDERS.get(args.provider)
     if not fetch_fn:
@@ -201,20 +232,52 @@ def cmd_fetch(args):
             file=sys.stderr,
         )
         sys.exit(1)
-    repos = _apply_filters(fetch_fn(args.workspace, args.project), args)
-    for r in repos:
-        print(
-            "|".join(
-                [
-                    r["slug"],
-                    r["clone_url"],
-                    str(r["size_bytes"]),
-                    r["language"],
-                    r["updated_on"],
-                    "true" if r["is_private"] else "false",
-                ]
-            )
-        )
+    for r in _apply_filters(fetch_fn(args.workspace, args.project), args):
+        _print_repo_line(r)
+
+
+def cmd_filter(args):
+    """Applies the same --type/--lang/--from-date/--year/--age filters as
+    fetch, but against an already-fetched repo list read from STDIN --
+    used by mt-clone's interactive wizard, which fetches once (unfiltered,
+    so it can discover the available languages to offer) and then filters
+    locally rather than hitting the provider's API a second time."""
+    repos = [_repo_from_line(line) for line in sys.stdin if line.strip()]
+    for r in _apply_filters(repos, args):
+        _print_repo_line(r)
+
+
+def cmd_quick_date(period):
+    """Prints a ddmmyyyy date (the same format --from-date accepts) for
+    one of mt-clone wizard's "quick" last-updated options -- these are
+    calendar-boundary based (start of the current week/month/year), not
+    rolling N-day windows, for consistency with each other."""
+    today = _today()
+    if period == "today":
+        result = today
+    elif period == "week":
+        result = today - timedelta(days=today.weekday())
+    elif period == "month":
+        result = today.replace(day=1)
+    elif period == "year":
+        result = today.replace(month=1, day=1)
+    else:
+        print(f"clone_wizard.py: unknown quick-date period '{period}'", file=sys.stderr)
+        sys.exit(1)
+    print(result.strftime("%d%m%Y"))
+
+
+def cmd_list_providers():
+    for name in PROVIDERS:
+        print(name)
+
+
+def _add_filter_args(parser):
+    parser.add_argument("--type", choices=["private", "public"])
+    parser.add_argument("--lang")
+    parser.add_argument("--from-date")
+    parser.add_argument("--year")
+    parser.add_argument("--age")
 
 
 def main():
@@ -225,15 +288,25 @@ def main():
     fetch_parser.add_argument("provider")
     fetch_parser.add_argument("workspace")
     fetch_parser.add_argument("project")
-    fetch_parser.add_argument("--type", choices=["private", "public"])
-    fetch_parser.add_argument("--lang")
-    fetch_parser.add_argument("--from-date")
-    fetch_parser.add_argument("--year")
-    fetch_parser.add_argument("--age")
+    _add_filter_args(fetch_parser)
+
+    filter_parser = subparsers.add_parser("filter")
+    _add_filter_args(filter_parser)
+
+    quick_date_parser = subparsers.add_parser("quick-date")
+    quick_date_parser.add_argument("period", choices=["today", "week", "month", "year"])
+
+    subparsers.add_parser("list-providers")
 
     args = parser.parse_args()
     if args.command == "fetch":
         cmd_fetch(args)
+    elif args.command == "filter":
+        cmd_filter(args)
+    elif args.command == "quick-date":
+        cmd_quick_date(args.period)
+    elif args.command == "list-providers":
+        cmd_list_providers()
 
 
 if __name__ == "__main__":

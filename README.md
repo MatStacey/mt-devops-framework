@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Interactive Clone Wizard**: Introduced an interactive wizard (`mt-clone -i`) utilizing `fzf` to streamline bulk repository cloning.
+- **Dynamic Repository Filtering**: Added interactive filtering options for target repositories by last updated date, visibility (public/private), and detected programming languages.
+- **CLI Tools Menu Integration**: Integrated the new bulk-clone wizard directly into the main interactive CLI tools menu (`09-menu.sh`).
 - **Enhanced Repository Filtering**: Added client-side filtering support to `mt-clone` allowing users to filter fetched repositories by visibility (`-t`/`--type`), programming language (`-l`/`--lang`), date updated (`-d`/`--from-date`), year (`-y`/`--year`), and age in days (`-a`/`--age`).
 - **Flexible Date Formats**: Supported multiple input formats (`dd-mm-yyyy`, `dd/mm/yyyy`, `ddmmyyyy`, and `ddmm` current-year shorthand) for the `--from-date` filter.
 - **Improved CLI Feedback**: Updated argument parsing, error validation, and user notification messages to clarify when zero repositories match specified filter criteria.
 - Added helper functions for formatting human-readable byte sizes and checking available filesystem disk space portably across OS environments.
 - Implemented detailed clone plan summary output including calculated target clone sizes with a 1.5x disk space safety buffer.
-- Added visual pre-flight warnings when available disk space is insufficient for the targeted clone operations.
-- Introduced structured summary table displaying repository update dates, human-readable sizes, local existence status, and primary languages.
-- Refactored `mt-clone` workflow to utilize modular plan printing and localized status variables.
 
 ---
 

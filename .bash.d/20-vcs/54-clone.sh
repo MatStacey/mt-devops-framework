@@ -166,6 +166,164 @@ __mt_clone_print_plan() {
 }
 
 #######################################
+# Git: Wizard picker for the "last updated" filter -- quick calendar-
+# boundary options (today/this week/this month/this year, per spec)
+# resolved via clone_wizard.py's quick-date subcommand, or a specific
+# date typed in the same format --from-date already accepts.
+# Globals (written, expected pre-declared local by the caller):
+#   from_date
+#######################################
+__mt_clone_wizard_pick_last_updated() {
+  local choice
+  choice=$(
+    printf '%s\n' \
+      "1. Today" \
+      "2. This week" \
+      "3. This month" \
+      "4. This year" \
+      "5. Specific date (dd-mm-yyyy)" \
+      "6. No filter" |
+      fzf --prompt="📅 Last Updated > " --height=~12 --layout=reverse --border
+  )
+
+  case "$choice" in
+    1.*) from_date=$(python3 "$CLONE_WIZARD" quick-date today) ;;
+    2.*) from_date=$(python3 "$CLONE_WIZARD" quick-date week) ;;
+    3.*) from_date=$(python3 "$CLONE_WIZARD" quick-date month) ;;
+    4.*) from_date=$(python3 "$CLONE_WIZARD" quick-date year) ;;
+    5.*) read -r -p "Date (dd-mm-yyyy): " from_date < /dev/tty ;;
+    6.*) from_date="" ;;
+    *) ;;
+  esac
+}
+
+#######################################
+# Git: Wizard picker for the type (visibility) filter
+# Globals (written, expected pre-declared local by the caller):
+#   type_filter
+#######################################
+__mt_clone_wizard_pick_type() {
+  local choice
+  choice=$(printf '%s\n' "1. Private" "2. Public" "3. No filter" | fzf --prompt="🔒 Type > " --height=~10 --layout=reverse --border)
+  case "$choice" in
+    1.*) type_filter="private" ;;
+    2.*) type_filter="public" ;;
+    3.*) type_filter="" ;;
+    *) ;;
+  esac
+}
+
+#######################################
+# Git: Wizard picker for the language filter -- populated from the
+# distinct languages actually present in the already-fetched repo
+# list, per spec, rather than an arbitrary free-typed value.
+# Arguments:
+#   $1 - Unfiltered repo list (same pipe-delimited format fetch prints)
+# Globals (written, expected pre-declared local by the caller):
+#   lang_filter
+#######################################
+__mt_clone_wizard_pick_language() {
+  local repos_unfiltered="$1"
+  local -a languages
+  mapfile -t languages < <(awk -F'|' '$4!=""{print $4}' <<< "$repos_unfiltered" | sort -u)
+
+  if [ "${#languages[@]}" -eq 0 ]; then
+    echo -e "${CB_YELLOW}⚠️  No languages detected among these repositories.${C_RESET}"
+    read -r -p "Press Enter to continue..." < /dev/tty
+    return 0
+  fi
+
+  local choice
+  choice=$(printf '%s\n' "${languages[@]}" "(No filter)" | fzf --prompt="💻 Language > " --height=~15 --layout=reverse --border)
+  if [ -z "$choice" ] || [ "$choice" = "(No filter)" ]; then
+    lang_filter=""
+  else
+    lang_filter="$choice"
+  fi
+}
+
+#######################################
+# Git: Interactively collect everything mt-clone needs (provider,
+# workspace, project, filters) via fzf/prompts, fetching the project's
+# full repo list once -- unfiltered, so the language picker can be
+# populated from real data -- and applying whatever filters were chosen
+# locally afterward via clone_wizard.py's filter subcommand, without a
+# second API call.
+# Globals (written, expected pre-declared local by the caller):
+#   provider, raw_workspace, raw_project, repos_raw
+# Returns:
+#   0 on success, 1 if the user cancelled or nothing was found
+#######################################
+__mt_clone_run_wizard() {
+  echo -e "${CB_CYAN}🧙 mt-clone Wizard${C_RESET}\n"
+
+  provider=$(python3 "$CLONE_WIZARD" list-providers | fzf --prompt="🌐 Provider > " --height=~10 --layout=reverse --border)
+  if [ -z "$provider" ]; then
+    echo -e "${CB_YELLOW}🛑 Cancelled.${C_RESET}"
+    return 1
+  fi
+
+  if [ "$provider" = "bitbucket" ] && { [ -z "${BITBUCKET_API_KEY:-}" ] || [ -z "${BITBUCKET_EMAIL:-}" ]; }; then
+    echo -e "${CB_RED}🚨 Bitbucket credentials are not configured. Run 'mt-add-bitbucket-secret' first.${C_RESET}"
+    return 1
+  fi
+
+  read -r -p "🏢 Workspace name: " raw_workspace < /dev/tty
+  if [ -z "$raw_workspace" ]; then
+    echo -e "${CB_YELLOW}🛑 Cancelled.${C_RESET}"
+    return 1
+  fi
+
+  read -r -p "📁 Project name: " raw_project < /dev/tty
+  if [ -z "$raw_project" ]; then
+    echo -e "${CB_YELLOW}🛑 Cancelled.${C_RESET}"
+    return 1
+  fi
+
+  echo -e "\n${CB_BLUE}🔍 Fetching repositories for ${raw_workspace}/${raw_project} (${provider})...${C_RESET}"
+  local repos_unfiltered
+  repos_unfiltered=$(python3 "$CLONE_WIZARD" fetch "$provider" "$raw_workspace" "$raw_project") || return 1
+  [ "$provider" = "bitbucket" ] && python3 "$SECRETS_MANAGER" touch "BITBUCKET_API_KEY" 2> /dev/null
+
+  if [ -z "$repos_unfiltered" ]; then
+    echo -e "${CB_YELLOW}⚠️  No repositories found.${C_RESET}"
+    return 1
+  fi
+
+  local type_filter="" lang_filter="" from_date=""
+  while true; do
+    local menu_choice
+    menu_choice=$(
+      printf '%s\n' \
+        "1. Last Updated  (${from_date:-none})" \
+        "2. Type          (${type_filter:-none})" \
+        "3. Language      (${lang_filter:-none})" \
+        "4. Continue -- show plan" |
+        fzf --prompt="🧙 Filters > " --height=~12 --layout=reverse --border
+    )
+
+    case "$menu_choice" in
+      1.*) __mt_clone_wizard_pick_last_updated ;;
+      2.*) __mt_clone_wizard_pick_type ;;
+      3.*) __mt_clone_wizard_pick_language "$repos_unfiltered" ;;
+      4.* | "") break ;;
+    esac
+  done
+
+  local -a filter_args=(filter)
+  [ -n "$type_filter" ] && filter_args+=(--type "$type_filter")
+  [ -n "$lang_filter" ] && filter_args+=(--lang "$lang_filter")
+  [ -n "$from_date" ] && filter_args+=(--from-date "$from_date")
+
+  repos_raw=$(printf '%s\n' "$repos_unfiltered" | python3 "$CLONE_WIZARD" "${filter_args[@]}")
+
+  if [ -z "$repos_raw" ]; then
+    echo -e "${CB_YELLOW}⚠️  No repositories matched your filters.${C_RESET}"
+    return 1
+  fi
+}
+
+#######################################
 # Git: Clone one Bitbucket repo without ever writing the API token to
 # disk -- the Authorization header is injected via GIT_CONFIG_KEY_n/
 # GIT_CONFIG_VALUE_n env vars (git 2.31+), which git never persists
@@ -204,8 +362,12 @@ __mt_clone_bitbucket_repo() {
 # another. Filters (--type/--lang/--from-date/--year/--age) are applied
 # client-side against the full project repo list, not via a provider
 # query DSL -- if more than one date-ish filter is given, the OLDEST
-# (most inclusive) cutoff wins.
+# (most inclusive) cutoff wins. -i/--wizard runs an interactive flow
+# instead (provider/workspace/project prompts, plus a filter menu whose
+# language picker is populated from repositories actually present) and
+# ignores -p/-w/-pr/filter flags even if also given.
 # Usage: mt-clone -p <provider> -w <workspace> -pr <project> [filters] [--auto-approve]
+#        mt-clone -i [--auto-approve]
 # Options:
 #   -p, --provider <name>     Source-control provider (currently: bitbucket)
 #   -w, --workspace <name>    Workspace name
@@ -217,6 +379,7 @@ __mt_clone_bitbucket_repo() {
 #                              4-digit ddmm shorthand (current year assumed)
 #   -y, --year <yyyy>         Only repos updated during or after this year
 #   -a, --age <days>          Only repos updated within the last N days
+#   -i, --wizard               Run the interactive wizard instead
 #   --auto-approve            Skip the confirmation prompt
 #   -h, --help                 Show this help menu
 # Globals:
@@ -228,11 +391,16 @@ mt-clone() {
     return 0
   fi
 
-  local provider="" raw_workspace="" raw_project="" auto_approve=false
+  local provider="" raw_workspace="" raw_project="" auto_approve=false do_wizard=false
   local type_filter="" lang_filter="" from_date="" year_filter="" age_filter=""
+  local repos_raw
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
+      -i | --wizard)
+        do_wizard=true
+        shift
+        ;;
       -p | --provider)
         provider="$2"
         shift 2
@@ -282,42 +450,45 @@ mt-clone() {
         shift
         ;;
       *)
-        echo "Usage: mt-clone -p <provider> -w <workspace> -pr <project> [-t private|public] [-l language] [-d date] [-y year] [-a days] [--auto-approve]" >&2
+        echo "Usage: mt-clone -p <provider> -w <workspace> -pr <project> [-t private|public] [-l language] [-d date] [-y year] [-a days] [--auto-approve] | mt-clone -i" >&2
         return 1
         ;;
     esac
   done
 
-  if [ -z "$provider" ] || [ -z "$raw_workspace" ] || [ -z "$raw_project" ]; then
-    echo -e "${CB_RED}🚨 --provider, --workspace, and --project are all required.${C_RESET}"
-    return 1
-  fi
-
-  if [ "$provider" = "bitbucket" ] && { [ -z "${BITBUCKET_API_KEY:-}" ] || [ -z "${BITBUCKET_EMAIL:-}" ]; }; then
-    echo -e "${CB_RED}🚨 Bitbucket credentials are not configured. Run 'mt-add-bitbucket-secret' first.${C_RESET}"
-    return 1
-  fi
-
-  echo -e "${CB_BLUE}🔍 Fetching repositories for ${raw_workspace}/${raw_project} (${provider})...${C_RESET}"
-  local -a fetch_args=(fetch "$provider" "$raw_workspace" "$raw_project")
-  local filters_applied=false
-  [ -n "$type_filter" ] && fetch_args+=(--type "$type_filter") && filters_applied=true
-  [ -n "$lang_filter" ] && fetch_args+=(--lang "$lang_filter") && filters_applied=true
-  [ -n "$from_date" ] && fetch_args+=(--from-date "$from_date") && filters_applied=true
-  [ -n "$year_filter" ] && fetch_args+=(--year "$year_filter") && filters_applied=true
-  [ -n "$age_filter" ] && fetch_args+=(--age "$age_filter") && filters_applied=true
-
-  local repos_raw
-  repos_raw=$(python3 "$CLONE_WIZARD" "${fetch_args[@]}") || return 1
-  [ "$provider" = "bitbucket" ] && python3 "$SECRETS_MANAGER" touch "BITBUCKET_API_KEY" 2> /dev/null
-
-  if [ -z "$repos_raw" ]; then
-    if [ "$filters_applied" = true ]; then
-      echo -e "${CB_YELLOW}⚠️  No repositories matched your filters.${C_RESET}"
-    else
-      echo -e "${CB_YELLOW}⚠️  No repositories found.${C_RESET}"
+  if [ "$do_wizard" = true ]; then
+    __mt_clone_run_wizard || return 1
+  else
+    if [ -z "$provider" ] || [ -z "$raw_workspace" ] || [ -z "$raw_project" ]; then
+      echo -e "${CB_RED}🚨 --provider, --workspace, and --project are all required.${C_RESET}"
+      return 1
     fi
-    return 0
+
+    if [ "$provider" = "bitbucket" ] && { [ -z "${BITBUCKET_API_KEY:-}" ] || [ -z "${BITBUCKET_EMAIL:-}" ]; }; then
+      echo -e "${CB_RED}🚨 Bitbucket credentials are not configured. Run 'mt-add-bitbucket-secret' first.${C_RESET}"
+      return 1
+    fi
+
+    echo -e "${CB_BLUE}🔍 Fetching repositories for ${raw_workspace}/${raw_project} (${provider})...${C_RESET}"
+    local -a fetch_args=(fetch "$provider" "$raw_workspace" "$raw_project")
+    local filters_applied=false
+    [ -n "$type_filter" ] && fetch_args+=(--type "$type_filter") && filters_applied=true
+    [ -n "$lang_filter" ] && fetch_args+=(--lang "$lang_filter") && filters_applied=true
+    [ -n "$from_date" ] && fetch_args+=(--from-date "$from_date") && filters_applied=true
+    [ -n "$year_filter" ] && fetch_args+=(--year "$year_filter") && filters_applied=true
+    [ -n "$age_filter" ] && fetch_args+=(--age "$age_filter") && filters_applied=true
+
+    repos_raw=$(python3 "$CLONE_WIZARD" "${fetch_args[@]}") || return 1
+    [ "$provider" = "bitbucket" ] && python3 "$SECRETS_MANAGER" touch "BITBUCKET_API_KEY" 2> /dev/null
+
+    if [ -z "$repos_raw" ]; then
+      if [ "$filters_applied" = true ]; then
+        echo -e "${CB_YELLOW}⚠️  No repositories matched your filters.${C_RESET}"
+      else
+        echo -e "${CB_YELLOW}⚠️  No repositories found.${C_RESET}"
+      fi
+      return 0
+    fi
   fi
 
   local sanitized_workspace sanitized_project

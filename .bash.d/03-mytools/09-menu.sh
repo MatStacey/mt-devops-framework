@@ -157,6 +157,7 @@ __mt_menu_tf_yaml() { __mt_menu_prompt_arg "YAML var file path" tf-yaml; }
 __mt_menu_git_new_feature() { __mt_menu_prompt_arg "Ticket/branch suffix" git-new-feature; }
 __mt_menu_git_push_all() { __mt_menu_prompt_arg "Commit message" git-push-all; }
 __mt_menu_git_clone_ide() { __mt_menu_prompt_arg "Repository URL" git-clone-ide; }
+__mt_menu_clone_wizard() { mt-clone -i; }
 
 __mt_menu_base64_encode() { __mt_menu_prompt_arg "Text to encode" base64-enc; }
 __mt_menu_base64_decode() { __mt_menu_prompt_arg "Base64 text to decode" base64-dec; }
@@ -300,6 +301,7 @@ __mt_menu_git() {
     "New Feature Branch (git-new-feature)" __mt_menu_git_new_feature \
     "Stage, Commit & Push All (git-push-all)" __mt_menu_git_push_all \
     "Clone & Open in IDE (git-clone-ide)" __mt_menu_git_clone_ide \
+    "Bulk-Clone a Project (mt-clone -i)" __mt_menu_clone_wizard \
     "List Local Repos (mt-repos)" mt-repos \
     "AI-Generate .gitignore (mt-ai-gitignore)" mt-ai-gitignore \
     "AI-Generate README (mt-ai-readme)" mt-ai-readme
