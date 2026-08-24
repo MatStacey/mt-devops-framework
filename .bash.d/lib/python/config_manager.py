@@ -401,6 +401,63 @@ def _apply_leaf_renames(d, report):
         _del_path(d, old_path)
 
 
+def _compute_migration(d):
+    """Apply every migration rule to a deep copy of `d` and report what
+    would change, without touching the original.
+
+    Arguments:
+        d: The parsed config.yaml dict (left untouched).
+
+    Returns:
+        (migrated_copy, report) -- migrated_copy is the fully migrated
+        dict, report is the list of human-readable change lines (empty
+        if nothing needed migrating). Shared by migrate_config() (which
+        writes migrated_copy back to disk) and check_config() (which
+        only wants the report, read-only, for `mt-doctor`).
+    """
+    import copy
+
+    working = copy.deepcopy(d)
+    report = []
+    _apply_section_renames(working, report)
+    _apply_leaf_renames(working, report)
+    _prune_empty_dicts(working)
+    return working, report
+
+
+def check_config():
+    """Report-only counterpart to migrate_config(): prints whether
+    config.yaml has legacy keys pending migration, without writing
+    anything. Used by `mt-doctor` to surface config drift alongside its
+    other environment checks without mutating state as a side effect of
+    a report command.
+    """
+    import yaml
+
+    path = get_config_path()
+    if not os.path.exists(path):
+        print("SKIP: no config.yaml found yet.")
+        return
+
+    with open(path, "r", encoding="utf-8") as f:
+        d = yaml.safe_load(f) or {}
+
+    if not isinstance(d, dict):
+        print("WARN: config.yaml did not parse to a mapping.")
+        return
+
+    _, report = _compute_migration(d)
+    if not report:
+        print("OK: config.yaml matches the current schema.")
+        return
+
+    plural = "y" if len(report) == 1 else "ies"
+    print(f"WARN: {len(report)} legacy config.yaml entr{plural} pending migration "
+          f"-- run 'mt-migrate-config' to clean up:")
+    for line in report:
+        print(f"  - {line}")
+
+
 def migrate_config():
     """Detect and clean up legacy config.yaml keys left behind by past
     schema renames (see LEAF_RENAMES/SECTION_RENAMES).
@@ -440,10 +497,7 @@ def migrate_config():
         print("🚨 config.yaml did not parse to a mapping -- skipping migration.")
         return
 
-    report = []
-    _apply_section_renames(d, report)
-    _apply_leaf_renames(d, report)
-    _prune_empty_dicts(d)
+    d, report = _compute_migration(d)
 
     if not report:
         print(
@@ -516,3 +570,5 @@ if __name__ == "__main__" and len(sys.argv) > 1:
         update_yaml(sys.argv[2], sys.argv[3], sys.argv[4])
     elif cmd == "migrate":
         migrate_config()
+    elif cmd == "check-config":
+        check_config()
