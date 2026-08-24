@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Introduced `mt-doctor` system diagnostics script (`03-doctor.sh`) to streamline environment health checks and troubleshooting.
+- Implemented framework version validation using local cached metadata.
+- Added sync configuration verification for `SYNC_REPO_URL`, GitHub CLI authentication, and local Git remote targeting.
+- Added deep Git state inspections for the sync repository, detecting in-progress merges, uncommitted changes, unpushed commits, and open or stale PR branches.
+- Added config schema checking to identify legacy `config.yaml` keys pending migration.
 - Introduced `mt-migrate-config` command and interactive menu entry to detect and clean up legacy configuration keys in `config.yaml` left behind by schema renames.
 - Automated config schema reconciliation during framework releases (`mt-get-update`), preserving existing user settings while removing deprecated options.
 - Enhanced `config_manager.py` with section- and leaf-level schema mapping logic, including automatic backup creation before modifying `config.yaml`.
-- **Resolved Git Sync Data Discard Issue**: Removed the `-u` (`--update`) flag from the `rsync` operation in `__git_sync_copy_files()` to ensure local edits in `$HOME/.bash.d/` are reliably copied to the repository directory.
-- **Fixed Timestamp Precedence Bug**: Prevented fresh git checkouts/pulls in the repository folder from stamping newer timestamps that previously caused `rsync` to skip and lose local configuration changes.
-- **Centralized Secrets Management**: Relocated externalized secrets out of `~/vcs` into a dedicated `~/secrets` directory, introducing `SECRETS_DIR` and `SECRETS_FILE` global constants.
-- **Refactored Secret Scripts**: Refactored `00-config.sh` and `01-secrets.sh` to dynamically reference `$SECRETS_FILE` and `$SECRETS_DIR` rather than using hardcoded paths.
-- **Updated Path Defaults**: Adjusted the default AI Workspace path setting in `mt-wizard-paths` to `~/workspaces/ai` (previously `~/vcs/workspaces/ai`).
 
 ---
 
