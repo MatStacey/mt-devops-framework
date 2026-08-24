@@ -365,7 +365,7 @@ Complex bash functions, framework utilities, and automated workflows.
 ### System: Interactive Master Menu
 | Command | Description |
 |---|---|
-| `mt-menu` | System: Launch the interactive master router for the entire framework |
+| `mt-menu` | System: Launch the interactive master router for the entire framework. |
 
 ### System & Navigation Aliases
 | Command | Description |
