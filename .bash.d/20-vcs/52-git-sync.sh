@@ -5,23 +5,31 @@
 # ~/.bash.d/20-vcs/52-git-sync.sh
 
 #######################################
-# Git: Clone and initialize repository in sync directory
+# Git: Clone and initialize the sync repository directory, or reconcile
+# an already-existing checkout's origin to match SYNC_REPO_URL.
+# The origin reconciliation always runs, even when repo_dir was already
+# a git checkout -- e.g. a collaborator who manually cloned the upstream
+# repo before ever running mt-become-collaborator, or whose fork URL
+# changed since. Without this, origin silently keeps pointing at
+# whatever it was first cloned from forever, and every future
+# 'mt-push-update' push fails with a 403 against the wrong remote no
+# matter how correctly SYNC_REPO_URL is configured.
 # Arguments:
 #   $1 - Target repository directory path
-#   $2 - Remote origin URL
+#   $2 - Remote origin URL (SYNC_REPO_URL)
 #######################################
 __git_sync_init_repo() {
   local repo_dir="$1" remote_url="$2"
 
-  [ -d "$repo_dir/.git" ] && return 0
+  if [ ! -d "$repo_dir/.git" ]; then
+    echo "📥 Local sync directory not found or not initialized."
+    mkdir -p "$repo_dir"
 
-  echo "📥 Local sync directory not found or not initialized."
-  mkdir -p "$repo_dir"
-
-  if ! git clone "$remote_url" "$repo_dir" 2> /dev/null; then
-    echo "⚠️ Clone failed (likely an empty remote). Initializing local repository..."
-    git -C "$repo_dir" init
-    git -C "$repo_dir" remote add origin "$remote_url"
+    if ! git clone "$remote_url" "$repo_dir" 2> /dev/null; then
+      echo "⚠️ Clone failed (likely an empty remote). Initializing local repository..."
+      git -C "$repo_dir" init
+      git -C "$repo_dir" remote add origin "$remote_url"
+    fi
   fi
 
   if [ "$(git -C "$repo_dir" remote get-url origin 2> /dev/null)" != "$remote_url" ]; then
@@ -576,14 +584,55 @@ __mt_get_update_download_and_extract() {
 }
 
 #######################################
+# System: Back up every locally-modified file mt-get-update is about to
+# overwrite, before it does. CONFIRM_UPDATE_DIVERGENCE (off by default)
+# only controls whether the user gets a chance to abort -- by default
+# the update proceeds and silently discards any local edit to a
+# deployed file (e.g. a hand-customized 30-ai/*.sh) with nothing to
+# recover it from otherwise, which is exactly the gap that lost a real
+# collaborator's edit during this framework's own development. Mirrors
+# each diverging file's relative path under
+# BACKUP_DIR/update-overwrites/<timestamp>/ so any one of them can be
+# diffed or restored individually.
+# Arguments:
+#   $1 - Output of `diff -r -w -q "$HOME/.bash.d" <new>/.bash.d`, one
+#        "Files X and Y differ" line per diverging file
+# Globals:
+#   BACKUP_DIR
+#######################################
+__mt_get_update_backup_diverging_files() {
+  local diff_files="$1"
+  local backup_dir
+  backup_dir="${BACKUP_DIR:-$HOME/backups}/update-overwrites/$(date +%Y%m%d_%H%M%S)"
+
+  local line rel_path dest_path
+  while IFS= read -r line; do
+    [ -z "$line" ] && continue
+    rel_path="${line#Files }"
+    rel_path="${rel_path%% and *}"
+    [ -f "$rel_path" ] || continue
+    dest_path="${backup_dir}${rel_path#"$HOME"}"
+    mkdir -p "$(dirname "$dest_path")"
+    cp -p "$rel_path" "$dest_path"
+  done <<< "$diff_files"
+
+  if [ -d "$backup_dir" ]; then
+    mt-log INFO "Backed up local modifications about to be overwritten to ${backup_dir}"
+    echo -e "${CB_CYAN}📦 Your local edits were backed up to ${backup_dir} before being overwritten.${C_RESET}\n"
+  fi
+}
+
+#######################################
 # System: Warn about local ~/.bash.d modifications that diverge from the
-# downloaded release before it gets installed. By default this just warns
-# and proceeds; set CONFIRM_UPDATE_DIVERGENCE=true (mt-toggle-update-confirm)
-# to pause and require an explicit confirmation before overwriting instead.
+# downloaded release before it gets installed, and back them up first
+# (see __mt_get_update_backup_diverging_files) since by default this
+# just warns and proceeds. Set CONFIRM_UPDATE_DIVERGENCE=true
+# (mt-toggle-update-confirm) to also pause and require an explicit
+# confirmation before overwriting.
 # Arguments:
 #   $1 - Path to the extracted release's root directory
 # Globals:
-#   CONFIRM_UPDATE_DIVERGENCE
+#   CONFIRM_UPDATE_DIVERGENCE, BACKUP_DIR
 # Returns:
 #   0 to proceed with the update, 1 if the user declined (only possible
 #   when CONFIRM_UPDATE_DIVERGENCE=true)
@@ -600,6 +649,8 @@ __mt_get_update_check_divergence() {
   echo -e "${CB_YELLOW}Modified files detected:${C_RESET}"
   diff -r -w -q "$HOME/.bash.d" "${ext_root}/.bash.d" 2> /dev/null | grep -v -E "Only in|data/cache|config/\.env\.cache|data/\.current_version" | awk '{print "  • " $2 " " $4}'
   echo ""
+
+  __mt_get_update_backup_diverging_files "$diff_files"
 
   if [ "${CONFIRM_UPDATE_DIVERGENCE:-false}" != "true" ]; then
     echo -e "${CB_YELLOW}⚠️  Proceeding and overwriting the files above. Run 'mt-toggle-update-confirm' to require confirmation here instead.${C_RESET}"
