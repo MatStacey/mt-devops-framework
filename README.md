@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Interactive Repository Exclusion**: Added `__mt_clone_pick_exclusions` to allow filtering out specific repositories from a clone plan using an interactive `fzf` multi-select interface.
+- **Workflow Integration**: Updated `mt-clone` to prompt users for optional exclusions before confirming the clone execution (bypassed when `--auto-approve` is enabled).
+- **Dynamic Plan Updates**: Refreshes and reprints the clone plan following user exclusions, exiting gracefully if all remaining targets are removed.
 - **Fix Bitbucket HTTPS Git Clone Authentication**: Resolved clone authorization failures ("may not have access" errors) by using the required `x-bitbucket-api-token-auth` literal username instead of `BITBUCKET_EMAIL` when constructing HTTP Basic Auth headers for git operations.
 - **Refactor Bitbucket Clone Globals**: Removed the obsolete `BITBUCKET_EMAIL` global variable dependency from `__mt_clone_bitbucket_repo`.
 - **Upstream Repository Standardization:** Set `UPSTREAM_REPO_PATH` as a static constant and removed the obsolete `mt-set-upstream-path` command.
 - **Collaborator Onboarding Wizard:** Added `mt-become-collaborator` to automate GitHub CLI authentication checks, repo forking, and sync URL configuration for non-maintainers.
 - **Interactive Setup Enhancements:** Refactored `__mt_setup_quick` and `mt-wizard-git` to streamline Git sync setup based on maintainer write access.
-- **Interactive Clone Wizard**: Introduced an interactive wizard (`mt-clone -i`) utilizing `fzf` to streamline bulk repository cloning.
-- **Dynamic Repository Filtering**: Added interactive filtering options for target repositories by last updated date, visibility (public/private), and detected programming languages.
-- **CLI Tools Menu Integration**: Integrated the new bulk-clone wizard directly into the main interactive CLI tools menu (`09-menu.sh`).
 
 ---
 
