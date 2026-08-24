@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Added System Diagnostics (`mt-doctor`)**: Introduced `.bash.d/00-system/03-doctor.sh` to perform automated health checks on environment configuration and status.
+- **Version Check Integration**: Added checks against cached version data to report outdated installations and prompt updates.
+- **Sync Configuration & GitHub CLI Validation**: Added checks to verify `SYNC_REPO_URL` setup, GitHub CLI authentication status, and local repository origin alignment.
+- **Git Repository State Inspection**: Implemented detection for active merges, dirty working directories, unpushed commits, and PR status tracking on non-default branches.
+- **Configuration Schema Verification**: Integrated read-only schema checks via `config_manager.py` to identify legacy keys requiring migration.
 - Introduced `mt-migrate-config` command and interactive menu entry to detect and clean up legacy configuration keys in `config.yaml` left behind by schema renames.
 - Automated config schema reconciliation during framework releases (`mt-get-update`), preserving existing user settings while removing deprecated options.
 - Enhanced `config_manager.py` with section- and leaf-level schema mapping logic, including automatic backup creation before modifying `config.yaml`.
-- **Resolved Git Sync Data Discard Issue**: Removed the `-u` (`--update`) flag from the `rsync` operation in `__git_sync_copy_files()` to ensure local edits in `$HOME/.bash.d/` are reliably copied to the repository directory.
-- **Fixed Timestamp Precedence Bug**: Prevented fresh git checkouts/pulls in the repository folder from stamping newer timestamps that previously caused `rsync` to skip and lose local configuration changes.
-- **Centralized Secrets Management**: Relocated externalized secrets out of `~/vcs` into a dedicated `~/secrets` directory, introducing `SECRETS_DIR` and `SECRETS_FILE` global constants.
-- **Refactored Secret Scripts**: Refactored `00-config.sh` and `01-secrets.sh` to dynamically reference `$SECRETS_FILE` and `$SECRETS_DIR` rather than using hardcoded paths.
-- **Updated Path Defaults**: Adjusted the default AI Workspace path setting in `mt-wizard-paths` to `~/workspaces/ai` (previously `~/vcs/workspaces/ai`).
 
 ---
 
