@@ -29,3 +29,4 @@ __pycache__/
 *.zip
 .dev
 CLAUDE.md
+.bash.d/config/secrets_metadata.yaml

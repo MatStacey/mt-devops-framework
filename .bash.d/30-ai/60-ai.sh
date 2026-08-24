@@ -137,7 +137,8 @@ __ai_handle_rate_limit() {
 #######################################
 # AI: Query Google Gemini API with retries and rate-limit handling
 # Globals:
-#   GEMINI_API_KEY, GEMINI_VERSION, GEMINI_EXTENDED, URI_GEMINI_MODELS, AI_SYSTEM_PROMPT
+#   GEMINI_API_KEY, GEMINI_VERSION, GEMINI_EXTENDED, URI_GEMINI_MODELS,
+#   AI_SYSTEM_PROMPT, SECRETS_MANAGER
 # Arguments:
 #   $1 - User prompt string
 #   $2 - Output title context
@@ -224,13 +225,15 @@ __ai_query_gemini() {
     echo -e "\n${CB_RED}🚨 Error: AI failed after $max_retries retries. Aborting process.${C_RESET}" >&2
     return 100
   }
+  python3 "$SECRETS_MANAGER" touch "GEMINI_API_KEY"
   echo "$content"
 }
 
 #######################################
 # AI: Query Anthropic Claude API with retries and rate-limit handling
 # Globals:
-#   CLAUDE_API_KEY, CLAUDE_VERSION, URI_CLAUDE_MESSAGES, AI_SYSTEM_PROMPT
+#   CLAUDE_API_KEY, CLAUDE_VERSION, URI_CLAUDE_MESSAGES, AI_SYSTEM_PROMPT,
+#   SECRETS_MANAGER
 # Arguments:
 #   $1 - User prompt string
 #   $2 - Output title context
@@ -301,6 +304,7 @@ __ai_query_claude() {
     echo -e "\n${CB_RED}🚨 Error: AI failed after $max_retries retries. Aborting process.${C_RESET}" >&2
     return 100
   }
+  python3 "$SECRETS_MANAGER" touch "CLAUDE_API_KEY"
   echo "$content"
 }
 

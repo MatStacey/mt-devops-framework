@@ -175,6 +175,7 @@ __mt_menu_setup() {
     "Paths Configuration (mt-wizard-paths)" mt-wizard-paths \
     "Add Gemini API Key (mt-add-gemini-key)" mt-add-gemini-key \
     "Add Claude API Key (mt-add-claude-key)" mt-add-claude-key \
+    "Manage All Secrets (mt-secrets)" mt-secrets \
     "Set Default AI Provider (mt-set-default-ai)" __mt_menu_pick_default_ai \
     "Set Default IDE (mt-set-default-ide)" __mt_menu_pick_default_ide \
     "Set CI/CD Provider (mt-set-cicd)" __mt_menu_pick_cicd \
@@ -385,7 +386,8 @@ mt-menu() {
       "10. 🛠️  General Utilities"
       "11. ⚡ System & Bootstrap"
       "12. 🚀 Launchers"
-      "13. 🚪 Exit"
+      "13. 🔐 Secrets Manager"
+      "14. 🚪 Exit"
     )
 
     local choice
@@ -404,6 +406,7 @@ mt-menu() {
       10.*) __mt_menu_utilities ;;
       11.*) __mt_menu_system ;;
       12.*) __mt_menu_launchers ;;
+      13.*) mt-secrets ;;
       *) return 0 ;;
     esac
   done
