@@ -483,7 +483,8 @@ __mt_menu_launchers_navigate() {
   __mt_menu_submenu "📂 Navigate (cd)" \
     "cd to AI Workspace (cd-ai-workspace)" cd-ai-workspace \
     "cd to Dotfiles Repo (mt-dotfiles)" mt-dotfiles \
-    "cd to Docker Dir + Explorer (cd-win-docker)" cd-win-docker
+    "cd to Docker Dir + Explorer (cd-win-docker)" cd-win-docker \
+    "cd to Current Repo's Root (cd-repo-root)" cd-repo-root
 }
 
 #######################################

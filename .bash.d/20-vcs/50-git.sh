@@ -487,6 +487,27 @@ git-nuke() {
 }
 
 #######################################
+# Git: Change directory to the current repository's top-level root,
+# regardless of how deep the working directory is nested inside it
+# Usage: cd-repo-root
+#######################################
+cd-repo-root() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local repo_root
+  repo_root=$(git rev-parse --show-toplevel 2> /dev/null)
+  if [ -z "$repo_root" ]; then
+    echo -e "${CB_RED}🚨 Not inside a Git repository.${C_RESET}"
+    return 1
+  fi
+
+  cd "$repo_root" || return 1
+}
+
+#######################################
 # Git: Stage all files, commit with provided message, and push
 # Usage: git-push-all "commit message"
 # Arguments:
