@@ -6,13 +6,13 @@
 
 #######################################
 # AI: Analyze Terraform codebase for IAM requirements and optionally generate script
-# Usage: tf-iam [-g] [-m model]
+# Usage: tf-ai-iam [-g] [-m model]
 # Options:
 #   -g            Generate a provisioning script instead of just outputting a chat analysis
 #   -m <model>    Override the default AI model (e.g., gemini, claude)
 #   -h, --help    Show this help menu
 #######################################
-tf-iam() {
+tf-ai-iam() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
@@ -26,7 +26,7 @@ tf-iam() {
       g) generate_script=true ;;
       m) override_ai=("-m" "$OPTARG") ;;
       \?)
-        echo "Usage: tf-iam [-g] [-m gemini|claude]" >&2
+        echo "Usage: tf-ai-iam [-g] [-m gemini|claude]" >&2
         return 1
         ;;
     esac
@@ -64,4 +64,12 @@ tf-iam() {
     echo "🤖 Analyzing Terraform codebase for IAM requirements..."
     ai "${override_ai[@]}" -e "$prompt"
   fi
+}
+
+#######################################
+# AI: Analyze Terraform codebase for IAM requirements and optionally generate script (Alias for tf-ai-iam)
+# Usage: tf-iam [-g] [-m model]
+#######################################
+tf-iam() {
+  tf-ai-iam "$@"
 }

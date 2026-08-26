@@ -10,11 +10,6 @@
 alias cd-bashd='cd ~/.bash.d'
 
 #######################################
-# System: Change directory to ~/.bash.d
-#######################################
-alias mt-home='cd-bashd'
-
-#######################################
 # System: Change directory to ~/vcs
 #######################################
 alias cd-git-home='cd "$VCS_ROOT"'
@@ -131,7 +126,12 @@ alias ruff-fmt='ruff check --select I --fix . && ruff format .'
 #######################################
 # Dev: Shell - Format all shell scripts in current directory (recursive)
 #######################################
-alias shfmtlw='shfmt -l -w .'
+alias sh-fmt-all='shfmt -l -w .'
+
+#######################################
+# Dev: Shell - Format all shell scripts in current directory (recursive) (Alias)
+#######################################
+alias shfmtlw='sh-fmt-all'
 
 #######################################
 # Dev: Python - Create & active Python venv
