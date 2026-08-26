@@ -6,6 +6,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Updated the Bitbucket repository clone wizard to use SSH URLs instead of HTTPS URLs by default.
 - Added standard and background `mt-bulk-update` options to the Git CLI interactive menu.
 - Introduced a new bulk update utility to perform non-destructive, pull-only fast-forward synchronization across local Git repositories.
 - Added multi-level filtering support to scope bulk updates by environment (work/personal), provider, workspace, or project.
@@ -13,7 +14,6 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 - **Enhanced Submenu Navigation**: Added a generic `__mt_menu_category()` function to enable seamless nested interactive submenus using `fzf` without unnecessary pauses.
 - **Modularized Setup & Configuration Menu**: Broken down the monolithic setup menu into distinct submenus for Guided Wizards, Quick Setters & Toggles, Secrets & Collaboration, Terminal & Display, and Maintenance & View.
 - **Refactored General Utilities Menu**: Restructured general utilities into targeted submenus for Networking & Serving, Scaffolding & Formatting, and Encoding to improve clarity and user experience.
-- **Refactored Unpushed Commit Check**: Improved system doctor check to accurately compare the current branch against its specifically configured upstream branch instead of checking all remotes globally.
 
 ---
 
