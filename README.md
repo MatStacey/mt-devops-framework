@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Refactored Unpushed Commit Check**: Improved system doctor check to accurately compare the current branch against its specifically configured upstream branch instead of checking all remotes globally.
+- **Added Upstream Tracking Validation**: Introduced a warning if the current branch does not have an upstream tracking branch configured.
 - **Upstream Synchronization**: Updated branch reconciliation logic to sync against `UPSTREAM_REPO_PATH` directly instead of `origin`, preventing local drift when working from stale repository forks.
 - **Safe Default Branch Resetting**: Added auto-stashing for uncommitted and untracked changes prior to hard-resetting the default branch to the latest upstream state.
 - **Upstream Feature Branch Merging**: Modified feature branch update workflows to pull and merge directly from the upstream `FETCH_HEAD` rather than `origin`.
 - **Automated Update Backups**: Implemented automatic pre-update backups for locally modified framework files to prevent accidental data loss during system updates.
 - **Timestamped Recovery Directory**: Preserved diverging files in a structured `BACKUP_DIR/update-overwrites/<timestamp>/` path to enable easy diffing and manual restoration.
 - **Enhanced Divergence Check**: Integrated automatic backup execution directly into the release update pre-check workflow.
-- Refactored repository initialization logic to ensure remote `origin` URL reconciliation runs on existing local checkouts.
-- Fixed an issue where mismatched or updated `SYNC_REPO_URL` values caused `403` push errors on pre-existing git repositories.
 
 ---
 
