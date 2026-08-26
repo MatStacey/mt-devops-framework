@@ -55,7 +55,8 @@ Shortcuts for common commands and CLI replacements.
 | `pip-load` | Dev: Python - Install pip requirements |
 | `pip-save` | Dev: Python - Save pip requirements |
 | `ruff-fmt` | Dev: Python - Format Python files and imports using Ruff (recursive) |
-| `shfmtlw` | Dev: Shell - Format all shell scripts in current directory (recursive) |
+| `sh-fmt-all` | Dev: Shell - Format all shell scripts in current directory (recursive) |
+| `shfmtlw` | Dev: Shell - Format all shell scripts in current directory (recursive) (Alias) |
 | `venv-make` | Dev: Python - Create & active Python venv |
 | `venv-up` | Dev: Python - Activate existing Python venv |
 
@@ -111,7 +112,6 @@ Shortcuts for common commands and CLI replacements.
 | `cd-bashd` | System: Change directory to ~/.bash.d |
 | `cd-git-home` | System: Change directory to ~/vcs |
 | `cd-git-personal` | System: Change directory to ~/vcs/personal |
-| `mt-home` | System: Change directory to ~/.bash.d |
 | `refresh` | System: Reload Bash profile and caches |
 | `reload` | System: Reload Bash profile and caches |
 | `sys-update-install` | System: Update, Upgrade, Boostrap, and Reload |
@@ -389,7 +389,8 @@ Complex bash functions, framework utilities, and automated workflows.
 ### Terraform & AI Integrations
 | Command | Description |
 |---|---|
-| `tf-iam` | AI: Analyze Terraform codebase for IAM requirements and optionally generate script |
+| `tf-ai-iam` | AI: Analyze Terraform codebase for IAM requirements and optionally generate script |
+| `tf-iam` | AI: Analyze Terraform codebase for IAM requirements and optionally generate script (Alias for tf-ai-iam) |
 
 ### Terraform Aliases
 | Command | Description |

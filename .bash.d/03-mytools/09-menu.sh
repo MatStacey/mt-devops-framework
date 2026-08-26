@@ -368,7 +368,7 @@ __mt_menu_terraform() {
   __mt_menu_submenu "🏔️  Terraform" \
     "Validate All Terraform (tf-val-all)" tf-val-all \
     "Clean Terraform Caches (tf-clean)" tf-clean \
-    "Generate IAM Bindings (tf-iam)" tf-iam \
+    "Generate IAM Bindings (tf-ai-iam)" tf-ai-iam \
     "Plan Resource Replacement (tf-replace)" __mt_menu_tf_replace \
     "Run with YAML Var File (tf-yaml)" __mt_menu_tf_yaml
 }
