@@ -564,7 +564,96 @@ __git_auto_format() {
 }
 
 #######################################
-# Git: Scan VCS root and list all local repositories
+# Git: Find every git repository under a search root
+# Arguments:
+#   $1 - Root directory to search
+# Outputs:
+#   Prints one repository's absolute path per line
+#######################################
+__mt_vcs_find_repos() {
+  local search_dir="$1"
+  find "$search_dir" -type d -exec test -d "{}/.git" \; -prune -print
+}
+
+#######################################
+# Git: Break a repo's absolute path down into its VCS_ROOT-relative
+# scope/provider/workspace/project segments. Work-scope repos are five
+# levels deep, VCS_ROOT/work/<provider>/<workspace>/<project>/<repo> --
+# a Bitbucket/GitHub "project" is a grouping of many individual repos,
+# not a repo itself (e.g. cloudconnect groups 50+ real repos under it).
+# Personal-scope repos have no such grouping: VCS_ROOT/personal/<project>
+# is just two levels, and the project IS the repo.
+# Arguments:
+#   $1 - Absolute repo path
+# Outputs:
+#   Prints "scope|provider|workspace|project" -- provider/workspace are
+#   always empty for personal scope, and project is empty only if the
+#   scope itself doesn't match personal or work.
+#######################################
+__mt_vcs_path_context() {
+  local repo_path="$1"
+  local vcs_root_dir="${VCS_ROOT:-$HOME/vcs}"
+  local rel_path="${repo_path#"$vcs_root_dir"/}"
+
+  local -a parts
+  IFS='/' read -ra parts <<< "$rel_path"
+
+  local scope="${parts[0]:-}"
+  local provider="" workspace="" project=""
+  if [ "$scope" = "work" ]; then
+    provider="${parts[1]:-}"
+    workspace="${parts[2]:-}"
+    project="${parts[3]:-}"
+  elif [ "$scope" = "personal" ]; then
+    project="${parts[1]:-}"
+  fi
+
+  echo "${scope}|${provider}|${workspace}|${project}"
+}
+
+#######################################
+# Git: Test whether a repo's path matches the given scope/provider/
+# workspace/project filters (see __mt_vcs_path_context for the tree
+# layout this assumes). An empty filter always matches; a provider/
+# workspace/project filter can never match a personal-scope repo (that
+# layout has no such path segments), which correctly excludes them
+# rather than erroring.
+# Arguments:
+#   $1 - Absolute repo path
+#   $2 - Scope filter (work|personal|"")
+#   $3 - Provider filter ("" or exact name)
+#   $4 - Workspace filter ("" or exact name)
+#   $5 - Project filter ("" or exact project/repo folder name)
+# Returns:
+#   0 if the repo matches every given filter, 1 otherwise
+#######################################
+__mt_vcs_matches_filter() {
+  local repo_path="$1" scope="$2" provider="$3" workspace="$4" project="$5"
+  local context
+  context=$(__mt_vcs_path_context "$repo_path")
+  local repo_scope repo_provider repo_workspace repo_project
+  IFS='|' read -r repo_scope repo_provider repo_workspace repo_project <<< "$context"
+
+  [ -n "$scope" ] && [ "$repo_scope" != "$scope" ] && return 1
+  [ -n "$provider" ] && [ "$repo_provider" != "$provider" ] && return 1
+  [ -n "$workspace" ] && [ "$repo_workspace" != "$workspace" ] && return 1
+  [ -n "$project" ] && [ "$repo_project" != "$project" ] && return 1
+  return 0
+}
+
+#######################################
+# Git: Scan VCS root and list all local repositories, optionally
+# narrowed to a scope/provider/workspace/project -- useful on its own
+# now that a single work-scope project can group 50+ repos (see
+# __mt_vcs_path_context).
+# Usage: mt-repos [-s work|personal] [-p provider] [-w workspace]
+#                 [-pr project]
+# Options:
+#   -s, --scope <work|personal>   Only list repos under this scope
+#   -p, --provider <name>         Only list repos under this provider (work scope only, e.g. bitbucket)
+#   -w, --workspace <name>        Only list repos under this workspace (work scope only, e.g. rentokilinitial)
+#   -pr, --project <name>         Only list repos under this project (work scope; e.g. cloudconnect groups many repos) or this exact repo (personal scope)
+#   -h, --help                    Show this help
 # Globals:
 #   VCS_ROOT, WSL_DISTRO_NAME
 #######################################
@@ -573,6 +662,36 @@ mt-repos() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
+
+  local scope="" provider="" workspace="" project=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -s | --scope)
+        scope="${2,,}"
+        if [[ "$scope" != "work" && "$scope" != "personal" ]]; then
+          echo "mt-repos: --scope must be 'work' or 'personal'" >&2
+          return 1
+        fi
+        shift 2
+        ;;
+      -p | --provider)
+        provider="$2"
+        shift 2
+        ;;
+      -w | --workspace)
+        workspace="$2"
+        shift 2
+        ;;
+      -pr | --project)
+        project="$2"
+        shift 2
+        ;;
+      *)
+        echo "Usage: mt-repos [-s work|personal] [-p provider] [-w workspace] [-pr project]" >&2
+        return 1
+        ;;
+    esac
+  done
 
   local search_dir="${VCS_ROOT:-$HOME/vcs}"
   if [ ! -d "$search_dir" ]; then
@@ -585,19 +704,26 @@ mt-repos() {
   local tmp_out
   tmp_out=$(mktemp)
 
+  local repo_path total=0 matched=0
   while IFS= read -r repo_path; do
     [ -z "$repo_path" ] && continue
+    ((++total))
+    __mt_vcs_matches_filter "$repo_path" "$scope" "$provider" "$workspace" "$project" || continue
+    ((++matched))
 
     local repo_name
     repo_name=$(basename "$repo_path")
 
-    local rel_path="${repo_path#"$search_dir"/}"
+    local context
+    context=$(__mt_vcs_path_context "$repo_path")
+    local repo_scope repo_provider repo_workspace repo_project
+    IFS='|' read -r repo_scope repo_provider repo_workspace repo_project <<< "$context"
+
     local repo_type="Root"
-    if [[ "$rel_path" == */* ]]; then
-      repo_type="${rel_path%%/*}"
-    fi
-    # Capitalize the first letter for a clean UI
-    repo_type="$(tr '[:lower:]' '[:upper:]' <<< "${repo_type:0:1}")${repo_type:1}"
+    [ -n "$repo_scope" ] && repo_type="$(tr '[:lower:]' '[:upper:]' <<< "${repo_scope:0:1}")${repo_scope:1}"
+
+    local context_disp="--"
+    [ "$repo_scope" = "work" ] && context_disp="${repo_provider}/${repo_workspace}/${repo_project}"
 
     local branch
     branch=$(git -C "$repo_path" branch --show-current 2> /dev/null || echo "HEAD detached")
@@ -606,74 +732,25 @@ mt-repos() {
     local remote
     remote=$(git -C "$repo_path" config --get remote.origin.url 2> /dev/null || echo "No remote")
 
-    echo "${repo_type}|${repo_name}|${branch}|${remote}|${repo_path}" >> "$tmp_out"
-  done < <(find "$search_dir" -type d -exec test -d "{}/.git" \; -prune -print)
+    echo "${repo_type}|${context_disp}|${repo_name}|${branch}|${remote}|${repo_path}" >> "$tmp_out"
+  done < <(__mt_vcs_find_repos "$search_dir")
 
-  local count
-  count=$(wc -l < "$tmp_out")
-
-  if [ "$count" -eq 0 ]; then
-    echo -e "${CB_YELLOW}⚠️ No Git repositories found in $search_dir.${C_RESET}"
+  if [ "$matched" -eq 0 ]; then
+    if [ "$total" -eq 0 ]; then
+      echo -e "${CB_YELLOW}⚠️ No Git repositories found in $search_dir.${C_RESET}"
+    else
+      echo -e "${CB_YELLOW}⚠️  No repositories matched the given filters (${total} scanned).${C_RESET}"
+    fi
     rm -f "$tmp_out"
     return 0
   fi
 
-  echo -e "\n${CB_CYAN}📦 Found $count repositories in $search_dir:${C_RESET}\n"
+  echo -e "\n${CB_CYAN}📦 Found $matched repositories in $search_dir:${C_RESET}\n"
 
-  sort -t'|' -k1,1 -k2,2 -k5,5 "$tmp_out" -o "$tmp_out"
+  sort -t'|' -k1,1 -k2,2 -k3,3 "$tmp_out" -o "$tmp_out"
 
-  awk -F'|' -v home="$HOME" -v wsl_distro="${WSL_DISTRO_NAME:-Debian}" -v blue="$CB_BLUE" -v green="$CB_GREEN" -v yellow="$CB_YELLOW" -v dim="$C_DIM" -v rst="$C_RESET" -v magenta="$CB_MAGENTA" -v cyan="$CB_CYAN" '
-    function pad(str, len) {
-      if (length(str) > len) return substr(str, 1, len-3) "..."
-      return str sprintf("%*s", len - length(str), "")
-    }
-    BEGIN {
-      printf "%s%-15s %-35s %-20s %-50s %s%s\n", blue, "TYPE", "REPOSITORY", "BRANCH", "REMOTE URL", "PATH", rst
-      printf "%s%s%s\n", blue, "---------------------------------------------------------------------------------------------------------------------------------------------------", rst
-    }
-    {
-      type = pad($1, 15)
-      repo = pad($2, 35)
-      branch_raw = $3
-      branch = pad(branch_raw, 20)
-      branch_color = (branch_raw == "main" || branch_raw == "master") ? green : yellow
-      
-      remote_raw = $4
-      remote_color = (remote_raw == "No remote") ? dim : rst
-      remote_disp = pad(remote_raw, 50)
-      
-      # Robust URL transformation for both SSH (git@) and HTTPS
-      web_url = remote_raw
-      if (web_url ~ /^git@/) {
-          sub(/^git@/, "", web_url)
-          sub(/:/, "/", web_url)
-          web_url = "https://" web_url
-      }
-      sub(/\.git$/, "", web_url)
-      
-      if (web_url ~ /^http/) {
-          remote_linked = "\033]8;;" web_url "\033\\" remote_disp "\033]8;;\033\\"
-      } else {
-          remote_linked = remote_disp
-      }
-      
-      path_full = $5
-      path_disp = path_full
-      if (index(path_disp, home) == 1) {
-          path_disp = "~" substr(path_disp, length(home) + 1)
-      }
-      
-      if (wsl_distro != "") {
-          file_url = "file://wsl.localhost/" wsl_distro path_full
-      } else {
-          file_url = "file://" path_full
-      }
-      
-      path_linked = "\033]8;;" file_url "\033\\" path_disp "\033]8;;\033\\"
-      
-      printf "%s%s%s %s%s%s %s%s%s %s%s%s %s\n", magenta, type, rst, cyan, repo, rst, branch_color, branch, rst, remote_color, remote_linked, rst, path_linked
-    }
-  ' "$tmp_out"
+  local awk_script="$HOME/.bash.d/lib/awk/mt_repos_table.awk"
+  awk -F'|' -v home="$HOME" -v wsl_distro="${WSL_DISTRO_NAME:-Debian}" -v blue="$CB_BLUE" -v green="$CB_GREEN" -v yellow="$CB_YELLOW" -v dim="$C_DIM" -v rst="$C_RESET" -v magenta="$CB_MAGENTA" -v cyan="$CB_CYAN" -f "$awk_script" "$tmp_out"
 
   echo ""
   rm -f "$tmp_out"

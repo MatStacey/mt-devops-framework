@@ -5,65 +5,6 @@
 # ~/.bash.d/20-vcs/55-bulk-update.sh
 
 #######################################
-# Git: Find every git repository under a search root
-# Arguments:
-#   $1 - Root directory to search
-# Outputs:
-#   Prints one repository's absolute path per line
-#######################################
-__mt_bulk_update_find_repos() {
-  local search_dir="$1"
-  find "$search_dir" -type d -exec test -d "{}/.git" \; -prune -print
-}
-
-#######################################
-# Git: Test whether a repo's path matches the given scope/provider/
-# workspace/project filters, based on its position in the VCS_ROOT tree.
-# Work-scope repos are five levels deep, VCS_ROOT/work/<provider>/
-# <workspace>/<project>/<repo> -- a Bitbucket/GitHub "project" is a
-# grouping of many individual repos, not a repo itself (e.g. cloudconnect
-# groups 50+ real repos), so the project filter matches that grouping
-# level, not each repo's own name. Personal-scope repos have no such
-# grouping: VCS_ROOT/personal/<project> is just two levels, and the
-# project IS the repo. An empty filter always matches; a provider/
-# workspace/project filter can never match a personal-scope repo (that
-# layout has no such path segments), which correctly excludes them
-# rather than erroring.
-# Arguments:
-#   $1 - Absolute repo path
-#   $2 - Scope filter (work|personal|"")
-#   $3 - Provider filter ("" or exact name)
-#   $4 - Workspace filter ("" or exact name)
-#   $5 - Project filter ("" or exact project/repo folder name)
-# Returns:
-#   0 if the repo matches every given filter, 1 otherwise
-#######################################
-__mt_bulk_update_matches_filter() {
-  local repo_path="$1" scope="$2" provider="$3" workspace="$4" project="$5"
-  local vcs_root="${VCS_ROOT:-$HOME/vcs}"
-  local rel_path="${repo_path#"$vcs_root"/}"
-
-  local -a parts
-  IFS='/' read -ra parts <<< "$rel_path"
-
-  local repo_type="${parts[0]:-}"
-  local repo_provider="" repo_workspace="" repo_project=""
-  if [ "$repo_type" = "work" ]; then
-    repo_provider="${parts[1]:-}"
-    repo_workspace="${parts[2]:-}"
-    repo_project="${parts[3]:-}"
-  elif [ "$repo_type" = "personal" ]; then
-    repo_project="${parts[1]:-}"
-  fi
-
-  [ -n "$scope" ] && [ "$repo_type" != "$scope" ] && return 1
-  [ -n "$provider" ] && [ "$repo_provider" != "$provider" ] && return 1
-  [ -n "$workspace" ] && [ "$repo_workspace" != "$workspace" ] && return 1
-  [ -n "$project" ] && [ "$repo_project" != "$project" ] && return 1
-  return 0
-}
-
-#######################################
 # Git: Pull-only update of one repo's local default branch (main/master)
 # from its remote, never pushing and never discarding local work. If the
 # repo is currently on its default branch, that branch is fast-forwarded
@@ -219,11 +160,11 @@ __mt_bulk_update_run() {
   while IFS= read -r repo_path; do
     [ -z "$repo_path" ] && continue
     ((++total))
-    __mt_bulk_update_matches_filter "$repo_path" "$scope" "$provider" "$workspace" "$project" || continue
+    __mt_vcs_matches_filter "$repo_path" "$scope" "$provider" "$workspace" "$project" || continue
     ((++matched))
     echo -e "${C_DIM}  Checking ${repo_path#"$vcs_root"/}...${C_RESET}"
     __mt_bulk_update_repo "$repo_path" "$results_file"
-  done < <(__mt_bulk_update_find_repos "$vcs_root")
+  done < <(__mt_vcs_find_repos "$vcs_root")
 
   if [ "$matched" -eq 0 ]; then
     echo -e "${CB_YELLOW}⚠️  No repositories matched the given filters (${total} scanned).${C_RESET}"
