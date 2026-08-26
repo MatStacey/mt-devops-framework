@@ -99,7 +99,7 @@ def _fetch_bitbucket_repos(workspace, project):
         data = _bitbucket_get(url)
         for r in data.get("values", []):
             clone_url = next(
-                (link["href"] for link in r.get("links", {}).get("clone", []) if link["name"] == "https"),
+                (link["href"] for link in r.get("links", {}).get("clone", []) if link["name"] == "ssh"),
                 "",
             )
             repos.append(
