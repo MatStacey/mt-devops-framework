@@ -575,6 +575,13 @@ __ai_find_command_source() {
     cut -d: -f1
 }
 
+#######################################
+# AI: Explain a terminal command in detail, grounding the explanation in
+# its actual local implementation when one is found under ~/.bash.d
+# Usage: ai-explain "<command>"
+# Arguments:
+#   $1 - Command string to explain
+#######################################
 ai-explain() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"

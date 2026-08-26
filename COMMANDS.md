@@ -116,16 +116,10 @@ Shortcuts for common commands and CLI replacements.
 | `reload` | System: Reload Bash profile and caches |
 | `sys-update-install` | System: Update, Upgrade, Boostrap, and Reload |
 
-### Terraform & Kubernetes Wrappers
-| Command | Description |
-|---|---|
-| `tf-scan` | Terraform: Scan local terraform directory (./terraform) with Checkov |
-
 ### Terraform Aliases
 | Command | Description |
 |---|---|
 | `tf` | Terraform: Core Execution |
-| `tf-refresh` | Terraform: Refresh state without applying changes (Modern) |
 | `tfa` | Terraform: Apply changes |
 | `tfap` | Terraform: Apply the saved plan file |
 | `tfay` | Terraform: Apply changes (Auto-Approve) |
@@ -139,6 +133,7 @@ Shortcuts for common commands and CLI replacements.
 | `tfp` | Terraform: Generate execution plan |
 | `tfpd` | Terraform: Generate destruction plan |
 | `tfpo` | Terraform: Generate a saved plan file (tfplan) |
+| `tf-refresh` | Terraform: Refresh state without applying changes (Modern) |
 | `tfs` | Terraform: State management commands |
 | `tfsh` | Terraform: Show current state or plan |
 | `tfsls` | Terraform: List resources in state |
@@ -153,6 +148,11 @@ Shortcuts for common commands and CLI replacements.
 | `tfwst` | Terraform: Select an existing workspace |
 | `tfwsw` | Terraform: Show the current workspace name |
 | `tfy` | Terraform: Shortcut alias for tf-yaml |
+
+### Terraform & Kubernetes Wrappers
+| Command | Description |
+|---|---|
+| `tf-scan` | Terraform: Scan local terraform directory (./terraform) with Checkov |
 
 ### Version Control (Git) - Core Helpers
 | Command | Description |
@@ -175,6 +175,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | Command | Description |
 |---|---|
 | `ai` | AI: Query configured LLM with prompt and optional context |
+| `ai-explain` | AI: Explain a terminal command in detail, grounding the explanation in |
 | `mt-ai-debug` | AI: Debug and explain the last failed terminal command |
 | `mt-ai-quota` | AI: Check API quota and rate limits for the active AI provider |
 
@@ -355,12 +356,22 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-add-gemini-key` | AI: Interactively add or update your Gemini API key |
 | `mt-secrets` | System: Interactive menu for managing the framework's supported |
 
+### System Diagnostics ("mt-doctor")
+| Command | Description |
+|---|---|
+| `mt-doctor` | System: Diagnostic health-check for the framework's environment -- |
+
 ### System & Environment Bootstrap
 | Command | Description |
 |---|---|
 | `bootstrap` | System: Bootstrap missing dependencies (Debian/WSL via APT, macOS via Homebrew) |
 | `sys-install` | System: Updates system packages and clears pending-update marker |
 | `sys-update` | System: Updates system packages (APT on Debian/WSL, Homebrew on macOS) |
+
+### System: Interactive Master Menu
+| Command | Description |
+|---|---|
+| `mt-menu` | System: Launch the interactive master router for the entire framework. |
 
 ### System & Navigation Aliases
 | Command | Description |
@@ -370,25 +381,10 @@ Complex bash functions, framework utilities, and automated workflows.
 | `win-export` | System: Open ~/vcs/personal/exports in the platform's native file manager (shortcut for `win export`) |
 | `win-vcs` | System: Open ~/vcs in the platform's native file manager (shortcut for `win vcs`) |
 
-### System Diagnostics ("mt-doctor")
-| Command | Description |
-|---|---|
-| `mt-doctor` | System: Diagnostic health-check for the framework's environment -- |
-
-### System: Interactive Master Menu
-| Command | Description |
-|---|---|
-| `mt-menu` | System: Launch the interactive master router for the entire framework. |
-
 ### Terraform & AI Integrations
 | Command | Description |
 |---|---|
 | `tf-iam` | AI: Analyze Terraform codebase for IAM requirements and optionally generate script |
-
-### Terraform & Kubernetes Wrappers
-| Command | Description |
-|---|---|
-| `terraform` | Terraform: Core wrapper (preserves args) |
 
 ### Terraform Aliases
 | Command | Description |
@@ -396,6 +392,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `tf-clean` | Terraform: Aggressively clean local caching (.terraform, locks, plans) |
 | `tf-replace` | Terraform: Replace a specific resource (Modern alternative to taint) |
 | `tf-yaml` | Terraform: Execute Terraform using a YAML config file for variables |
+
+### Terraform & Kubernetes Wrappers
+| Command | Description |
+|---|---|
+| `terraform` | Terraform: Core wrapper (preserves args) |
 
 ### Utilities: Background Job Registry
 | Command | Description |
