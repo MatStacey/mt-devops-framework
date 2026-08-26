@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Enhanced Submenu Navigation**: Added a generic `__mt_menu_category()` function to enable seamless nested interactive submenus using `fzf` without unnecessary pauses.
+- **Modularized Setup & Configuration Menu**: Broken down the monolithic setup menu into distinct submenus for Guided Wizards, Quick Setters & Toggles, Secrets & Collaboration, Terminal & Display, and Maintenance & View.
+- **Refactored General Utilities Menu**: Restructured general utilities into targeted submenus for Networking & Serving, Scaffolding & Formatting, and Encoding to improve clarity and user experience.
 - **Refactored Unpushed Commit Check**: Improved system doctor check to accurately compare the current branch against its specifically configured upstream branch instead of checking all remotes globally.
 - **Added Upstream Tracking Validation**: Introduced a warning if the current branch does not have an upstream tracking branch configured.
 - **Upstream Synchronization**: Updated branch reconciliation logic to sync against `UPSTREAM_REPO_PATH` directly instead of `origin`, preventing local drift when working from stale repository forks.
 - **Safe Default Branch Resetting**: Added auto-stashing for uncommitted and untracked changes prior to hard-resetting the default branch to the latest upstream state.
 - **Upstream Feature Branch Merging**: Modified feature branch update workflows to pull and merge directly from the upstream `FETCH_HEAD` rather than `origin`.
-- **Automated Update Backups**: Implemented automatic pre-update backups for locally modified framework files to prevent accidental data loss during system updates.
-- **Timestamped Recovery Directory**: Preserved diverging files in a structured `BACKUP_DIR/update-overwrites/<timestamp>/` path to enable easy diffing and manual restoration.
-- **Enhanced Divergence Check**: Integrated automatic backup execution directly into the release update pre-check workflow.
 
 ---
 

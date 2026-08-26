@@ -57,6 +57,44 @@ __mt_menu_submenu() {
 }
 
 #######################################
+# System: Generic fzf category-picker loop -- identical to
+# __mt_menu_submenu except it never shows "Press Enter to continue..."
+# after dispatching, since every entry here is itself another
+# interactive submenu loop (not a one-shot action), and that submenu's
+# own "⬅  Back" already returns control here cleanly.
+# Arguments:
+#   $1   - Category menu title, shown as the fzf prompt
+#   $@   - Remaining args: alternating "label" "submenu function" pairs
+#######################################
+__mt_menu_category() {
+  local title="$1"
+  shift
+  local -a labels=() commands=()
+  while [ "$#" -gt 0 ]; do
+    labels+=("$1")
+    commands+=("$2")
+    shift 2
+  done
+
+  while true; do
+    local -a options=("${labels[@]}" "⬅  Back")
+
+    local choice
+    choice=$(printf '%s\n' "${options[@]}" | fzf --prompt="${title} > " --height=~20 --layout=reverse --border)
+    [ -z "$choice" ] && return 0
+    [ "$choice" = "⬅  Back" ] && return 0
+
+    local i
+    for i in "${!labels[@]}"; do
+      if [ "${labels[$i]}" = "$choice" ]; then
+        "${commands[$i]}"
+        break
+      fi
+    done
+  done
+}
+
+#######################################
 # System: Prompt for a single value and pass it as one argument to a
 # target command -- the shared building block for any menu item wrapping
 # a command whose one required argument is a whole string (a message, a
@@ -169,42 +207,79 @@ __mt_menu_base64_encode() { __mt_menu_prompt_arg "Text to encode" base64-enc; }
 __mt_menu_base64_decode() { __mt_menu_prompt_arg "Base64 text to decode" base64-dec; }
 
 #######################################
-# System: "Setup & Config" submenu -- grouped into Guided Wizards (full
-# multi-question flows), Quick Setters & Toggles (single-value changes
-# for when you don't want to walk through an unrelated wizard question),
-# Secrets & Collaboration, Terminal & Display, and Maintenance & View.
+# System: "Setup & Config" -> "Guided Wizards" submenu -- full
+# multi-question configuration flows
 #######################################
-__mt_menu_setup() {
-  __mt_menu_submenu "⚙️  Setup & Config" \
-    "── 🧙 Guided Wizards ──" "" \
+__mt_menu_setup_wizards() {
+  __mt_menu_submenu "🧙 Guided Wizards" \
     "System Configuration (mt-wizard-system)" mt-wizard-system \
     "AI Provider Configuration (mt-wizard-ai)" mt-wizard-ai \
     "Git Configuration (mt-wizard-git)" mt-wizard-git \
     "CI/CD Configuration (mt-wizard-cicd)" mt-wizard-cicd \
     "Docker Configuration (mt-wizard-docker)" mt-wizard-docker \
     "Exports Configuration (mt-wizard-exports)" mt-wizard-exports \
-    "Paths Configuration (mt-wizard-paths)" mt-wizard-paths \
-    "── ⚡ Quick Setters & Toggles ──" "" \
+    "Paths Configuration (mt-wizard-paths)" mt-wizard-paths
+}
+
+#######################################
+# System: "Setup & Config" -> "Quick Setters & Toggles" submenu --
+# single-value changes for when you don't want to walk through an
+# unrelated wizard question
+#######################################
+__mt_menu_setup_quick() {
+  __mt_menu_submenu "⚡ Quick Setters & Toggles" \
     "Set Default AI Provider (mt-set-default-ai)" __mt_menu_pick_default_ai \
     "Set Default IDE (mt-set-default-ide)" __mt_menu_pick_default_ide \
     "Set CI/CD Provider (mt-set-cicd)" __mt_menu_pick_cicd \
     "Toggle AI Integration (mt-toggle-ai)" mt-toggle-ai \
     "Toggle Format-on-Push (mt-toggle-format-on-push)" mt-toggle-format-on-push \
     "Toggle Update-Divergence Confirmation (mt-toggle-update-confirm)" mt-toggle-update-confirm \
-    "Set Git Sync URL (mt-add-sync-url)" __mt_menu_add_sync_url \
-    "── 🔐 Secrets & Collaboration ──" "" \
+    "Set Git Sync URL (mt-add-sync-url)" __mt_menu_add_sync_url
+}
+
+#######################################
+# System: "Setup & Config" -> "Secrets & Collaboration" submenu
+#######################################
+__mt_menu_setup_secrets() {
+  __mt_menu_submenu "🔐 Secrets & Collaboration" \
     "Add Gemini API Key (mt-add-gemini-key)" mt-add-gemini-key \
     "Add Claude API Key (mt-add-claude-key)" mt-add-claude-key \
-    "Become a Collaborator / Fork Setup (mt-become-collaborator)" mt-become-collaborator \
-    "── 🎨 Terminal & Display ──" "" \
+    "Become a Collaborator / Fork Setup (mt-become-collaborator)" mt-become-collaborator
+}
+
+#######################################
+# System: "Setup & Config" -> "Terminal & Display" submenu
+#######################################
+__mt_menu_setup_terminal() {
+  __mt_menu_submenu "🎨 Terminal & Display" \
     "Change Theme (mt-set-theme)" __mt_menu_pick_theme \
-    "Gemini Status (mt-get-gemini-status)" mt-get-gemini-status \
-    "── 🔧 Maintenance & View ──" "" \
+    "Gemini Status (mt-get-gemini-status)" mt-get-gemini-status
+}
+
+#######################################
+# System: "Setup & Config" -> "Maintenance & View" submenu
+#######################################
+__mt_menu_setup_maintenance() {
+  __mt_menu_submenu "🔧 Maintenance & View" \
     "Run Diagnostics (mt-doctor)" mt-doctor \
     "Reload Config from Disk (mt-load-config)" mt-load-config \
     "Clean Up Legacy config.yaml Keys (mt-migrate-config)" mt-migrate-config \
     "Open config.yaml in IDE (mt-open-config)" mt-open-config \
     "View Active Configuration (mt-config)" mt-config
+}
+
+#######################################
+# System: "Setup & Config" category picker -- routes to the Guided
+# Wizards, Quick Setters & Toggles, Secrets & Collaboration, Terminal &
+# Display, and Maintenance & View submenus
+#######################################
+__mt_menu_setup() {
+  __mt_menu_category "⚙️  Setup & Config" \
+    "🧙 Guided Wizards" __mt_menu_setup_wizards \
+    "⚡ Quick Setters & Toggles" __mt_menu_setup_quick \
+    "🔐 Secrets & Collaboration" __mt_menu_setup_secrets \
+    "🎨 Terminal & Display" __mt_menu_setup_terminal \
+    "🔧 Maintenance & View" __mt_menu_setup_maintenance
 }
 
 #######################################
@@ -321,31 +396,66 @@ __mt_menu_git() {
 }
 
 #######################################
-# System: "General Utilities" submenu -- grouped by theme (networking,
-# scaffolding/formatting, encoding, inspection/history, backup/jobs)
-# instead of one flat undifferentiated list.
+# System: "General Utilities" -> "Networking & Serving" submenu
 #######################################
-__mt_menu_utilities() {
-  __mt_menu_submenu "🛠️  General Utilities" \
-    "── 🌐 Networking & Serving ──" "" \
+__mt_menu_utilities_networking() {
+  __mt_menu_submenu "🌐 Networking & Serving" \
     "Serve Current Directory over HTTP (mt-http-server)" mt-http-server \
     "HTTP Server Manager (mt-server-manager)" mt-server-manager \
-    "Run Internet Speed Test (mt-speedtest)" mt-speedtest \
-    "── 🏗️  Scaffolding & Formatting ──" "" \
+    "Run Internet Speed Test (mt-speedtest)" mt-speedtest
+}
+
+#######################################
+# System: "General Utilities" -> "Scaffolding & Formatting" submenu
+#######################################
+__mt_menu_utilities_scaffolding() {
+  __mt_menu_submenu "🏗️  Scaffolding & Formatting" \
     "Scaffold Repo from Blueprint (mt-blueprint)" mt-blueprint \
-    "Format Code to Google Style (google-fmt)" google-fmt \
-    "── 🔢 Encoding ──" "" \
+    "Format Code to Google Style (google-fmt)" google-fmt
+}
+
+#######################################
+# System: "General Utilities" -> "Encoding" submenu
+#######################################
+__mt_menu_utilities_encoding() {
+  __mt_menu_submenu "🔢 Encoding" \
     "Encode Text to Base64 (base64-enc)" __mt_menu_base64_encode \
-    "Decode Base64 Text (base64-dec)" __mt_menu_base64_decode \
-    "── 📊 Inspection & History ──" "" \
+    "Decode Base64 Text (base64-dec)" __mt_menu_base64_decode
+}
+
+#######################################
+# System: "General Utilities" -> "Inspection & History" submenu
+#######################################
+__mt_menu_utilities_inspection() {
+  __mt_menu_submenu "📊 Inspection & History" \
     "List Largest Files (mt-top-files)" mt-top-files \
     "Audit VCS Root (mt-vcs-audit)" mt-vcs-audit \
     "Show Command History (mt-cmd-history)" mt-cmd-history \
-    "Run/Save Clipboard Code (mt-apply)" mt-apply \
-    "── 💾 Backup & Jobs ──" "" \
+    "Run/Save Clipboard Code (mt-apply)" mt-apply
+}
+
+#######################################
+# System: "General Utilities" -> "Backup & Jobs" submenu
+#######################################
+__mt_menu_utilities_backup() {
+  __mt_menu_submenu "💾 Backup & Jobs" \
     "List Background Jobs (mt-jobs)" mt-jobs \
     "Backup Current Directory (mt-backup)" mt-backup \
     "Restore from Backup (mt-restore)" mt-restore
+}
+
+#######################################
+# System: "General Utilities" category picker -- routes to Networking &
+# Serving, Scaffolding & Formatting, Encoding, Inspection & History, and
+# Backup & Jobs submenus instead of one flat undifferentiated list.
+#######################################
+__mt_menu_utilities() {
+  __mt_menu_category "🛠️  General Utilities" \
+    "🌐 Networking & Serving" __mt_menu_utilities_networking \
+    "🏗️  Scaffolding & Formatting" __mt_menu_utilities_scaffolding \
+    "🔢 Encoding" __mt_menu_utilities_encoding \
+    "📊 Inspection & History" __mt_menu_utilities_inspection \
+    "💾 Backup & Jobs" __mt_menu_utilities_backup
 }
 
 #######################################
@@ -363,26 +473,47 @@ __mt_menu_system() {
 }
 
 #######################################
-# System: "Launchers" submenu -- grouped by action type (cd into a
-# directory, open in IDE/homepage, open in the OS file manager) instead
-# of interleaving all three.
+# System: "Launchers" -> "Navigate (cd)" submenu
 #######################################
-__mt_menu_launchers() {
-  __mt_menu_submenu "🚀 Launchers" \
-    "── 📂 Navigate (cd) ──" "" \
+__mt_menu_launchers_navigate() {
+  __mt_menu_submenu "📂 Navigate (cd)" \
     "cd to AI Workspace (cd-ai-workspace)" cd-ai-workspace \
     "cd to Dotfiles Repo (mt-dotfiles)" mt-dotfiles \
-    "cd to Docker Dir + Explorer (cd-win-docker)" cd-win-docker \
-    "── 💻 IDE & Homepage ──" "" \
+    "cd to Docker Dir + Explorer (cd-win-docker)" cd-win-docker
+}
+
+#######################################
+# System: "Launchers" -> "IDE & Homepage" submenu
+#######################################
+__mt_menu_launchers_ide() {
+  __mt_menu_submenu "💻 IDE & Homepage" \
     "Open Current Dir in IDE (ide)" ide \
-    "Open Dotfiles Homepage (mt-open-homepage)" mt-open-homepage \
-    "── 🗂️  Open in File Manager ──" "" \
+    "Open Dotfiles Homepage (mt-open-homepage)" mt-open-homepage
+}
+
+#######################################
+# System: "Launchers" -> "Open in File Manager" submenu
+#######################################
+__mt_menu_launchers_filemanager() {
+  __mt_menu_submenu "🗂️  Open in File Manager" \
     "Open Current Dir in File Manager (win)" win \
     "Open AI Workspace in File Manager (win-ai-workspace)" win-ai-workspace \
     "Open Docker Root in File Manager (win-docker)" win-docker \
     "Open Sync Repo in File Manager (win-sync)" win-sync \
     "Open Exports Dir in File Manager (win-export)" win-export \
     "Open VCS Root in File Manager (win-vcs)" win-vcs
+}
+
+#######################################
+# System: "Launchers" category picker -- routes to Navigate (cd), IDE &
+# Homepage, and Open in File Manager submenus instead of interleaving
+# all three action types in one flat list.
+#######################################
+__mt_menu_launchers() {
+  __mt_menu_category "🚀 Launchers" \
+    "📂 Navigate (cd)" __mt_menu_launchers_navigate \
+    "💻 IDE & Homepage" __mt_menu_launchers_ide \
+    "🗂️  Open in File Manager" __mt_menu_launchers_filemanager
 }
 
 #######################################
