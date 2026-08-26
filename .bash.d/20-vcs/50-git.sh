@@ -289,6 +289,11 @@ __git_raise_pr_push_branch() {
 #######################################
 # Git: Create the PR via GitHub CLI, or open the appropriate web compare URL
 # for GitHub/GitLab/Bitbucket when 'gh' isn't available.
+# GitHub rejects PR titles over 256 characters outright -- a hand-typed
+# or AI-generated commit message easily exceeds that while still being
+# a perfectly good PR title, so this truncates defensively rather than
+# fail PR creation over it. The full original title is never lost, it's
+# preserved as the first line of the PR body.
 # Globals (read, set by git-raise-pr):
 #   is_github, target_branch, pr_title, pr_body, origin_url, current_branch
 #######################################
@@ -298,6 +303,12 @@ __git_raise_pr_create_or_open() {
 
     local repo_flag=()
     [ -n "$UPSTREAM_REPO_PATH" ] && repo_flag=("--repo" "$UPSTREAM_REPO_PATH")
+
+    if [ -n "$pr_title" ] && [ "${#pr_title}" -gt 250 ]; then
+      pr_body="Full title: ${pr_title}
+${pr_body}"
+      pr_title="${pr_title:0:247}..."
+    fi
 
     local pr_success=0
     if [ -n "$pr_title" ]; then

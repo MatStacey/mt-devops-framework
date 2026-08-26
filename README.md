@@ -34,7 +34,7 @@ Before installing this terminal environment, ensure your local workstation meets
 * **Zero-Lag Dynamic Prompt:** Real-time, color-coded Git status, Kubernetes context, and GCP project/account tracking optimized for minimal latency by prioritizing native file reads over subshells where possible. Includes OSC 8 clickable hyperlinking for Git branches and GCP consoles.
 * **Asynchronous Update Checks:** Silently checks for system package updates, as well as upstream terminal profile updates, in the background on a configurable TTL timer without blocking terminal initialization.
 * **Decoupled Python Configuration:** A dedicated standalone Python manager (`lib/python/config_manager.py`) reads `~/.bash.d/config/config.yaml` to dynamically inject customizable directory paths, model/provider settings, and remote repository URLs directly into the shell environment.
-* **Externalized Secrets:** API keys are never stored in `config.yaml`. They live in `~/vcs/secrets/secrets.sh` — a plain `export VAR="value"` file outside the dotfiles repo entirely, sourced automatically on shell startup. Run `mt-setup` or edit it directly (`vim ~/vcs/secrets/secrets.sh`) to add your `GEMINI_API_KEY` or `CLAUDE_API_KEY`.
+* **Externalized Secrets:** API keys are never stored in `config.yaml`. They live in `~/secrets/secrets.sh` — a plain `export VAR="value"` file outside the dotfiles repo entirely, sourced automatically on shell startup. Run `mt-setup` or edit it directly (`vim ~/secrets/secrets.sh`) to add your `GEMINI_API_KEY` or `CLAUDE_API_KEY`.
 * **Modular Theme Engine:** Color themes are fully externalized into standalone files under `~/.bash.d/config/themes/`, allowing custom aesthetic definitions and instant switching (`mt-set-theme`).
 * **Automated Bootstrapping:** Built-in `bootstrap` function automatically resolves and installs required APT/Homebrew packages, Python linters (`ruff`, `checkov`), formatters (`yapf`, `shfmt`), and modern CLI binaries (`yq`, `eza`, `batcat`, `zoxide`).
 * **Multi-Provider AI Architecture:** Consult universal AI via the `ai` command with support for **Gemini**, **Claude**, and **Local LLMs** (via Ollama or any OpenAI-compatible endpoint). Background workflows like `git-ai-push-all` dynamically respect your active `DEFAULT_AI` setting.
@@ -46,20 +46,13 @@ Before installing this terminal environment, ensure your local workstation meets
 
 This environment is designed to work out-of-the-box on a fresh WSL2 Debian/Ubuntu instance or macOS machine.
 
-### 1. Download and Extract
+### 1. Clone the Repository
 
-Download the latest compiled release and extract it into a permanent directory. The installation script will automatically bind this location as your synchronized workspace.
+Clone the repository into a permanent directory. The installation script will automatically bind this location as your synchronized workspace -- since every merge to `main` is released automatically, cloning the default branch always gets you the latest release, with real Git history attached from the start (required for `mt-push-update`/`mt-get-update` to work correctly later).
 
 ```bash
-# Create a dedicated directory
-mkdir -p ~/vcs/personal/mt-devops-framework
+git clone https://github.com/MatStacey/mt-devops-framework.git ~/vcs/personal/mt-devops-framework
 cd ~/vcs/personal/mt-devops-framework
-
-# Download and extract the latest release
-DOWNLOAD_URL=$(curl -s https://api.github.com/repos/MatStacey/mt-devops-framework/releases/latest | jq -r '.assets[0].browser_download_url')
-wget "$DOWNLOAD_URL"
-unzip "$(basename "$DOWNLOAD_URL")"
-
 ```
 
 ### 2. Run the Installer
@@ -90,7 +83,7 @@ mt-setup
 
 ```
 
-The interactive wizard will seamlessly guide you through setting your default IDE, AI provider, and Git synchronization repository. To add your AI provider's API key, run `mt-add-gemini-key` or `mt-add-claude-key` — both write directly and safely to `~/vcs/secrets/secrets.sh` (created with restrictive permissions, entirely outside the git-tracked repo), so your key is never typed into a git-visible file.
+The interactive wizard will seamlessly guide you through setting your default IDE, AI provider, and Git synchronization repository. To add your AI provider's API key, run `mt-add-gemini-key` or `mt-add-claude-key` — both write directly and safely to `~/secrets/secrets.sh` (created with restrictive permissions, entirely outside the git-tracked repo), so your key is never typed into a git-visible file.
 
 ### 5. Keeping Your Profile Updated
 
@@ -102,6 +95,26 @@ mt-get-update
 ```
 
 This command securely fetches your upstream commits and safely synchronizes them into your local `~/.bash.d/` workspace.
+
+Run `mt-doctor` any time to check the health of your setup -- installed version vs. the latest release, sync configuration, and the sync repo's Git state (stuck branches, open PRs, an in-progress merge, uncommitted changes). It's report-only and never changes anything, so it's always safe to run.
+
+### 6. Contributing / Becoming a Collaborator
+
+If you don't have direct write access to this repository, run:
+
+```bash
+mt-become-collaborator
+```
+
+This forks the repository to your own GitHub account and points `mt-push-update` at your fork automatically, so your changes land as Pull Requests against the upstream repo instead of failing to push directly. It also offers to run `gh auth login` for you if the GitHub CLI isn't authenticated yet.
+
+To make a change: edit files under `~/.bash.d/` directly (not the repo clone at `~/vcs/personal/mt-devops-framework/` -- `mt-push-update` syncs one-way from `~/.bash.d/` into that repo, so edits belong in the former, not the latter), then run:
+
+```bash
+mt-push-update
+```
+
+This formats, commits, pushes to your fork, and raises the Pull Request for you.
 
 ---
 
