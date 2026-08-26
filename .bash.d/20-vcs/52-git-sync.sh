@@ -14,6 +14,17 @@
 # whatever it was first cloned from forever, and every future
 # 'mt-push-update' push fails with a 403 against the wrong remote no
 # matter how correctly SYNC_REPO_URL is configured.
+#
+# If repo_dir already has files in it but no .git (e.g. an older manual
+# setup that extracted a release zip instead of cloning), a direct 'git
+# clone' into it fails -- not because the remote is empty, but because
+# git refuses to clone into a non-empty directory. Cloning into a
+# scratch directory and moving just the .git history into place (then
+# checking out HEAD on top of whatever's already there) connects that
+# directory to real history instead of the old fallback, which
+# misdiagnosed this exact case as "an empty remote" and papered over it
+# with a brand-new orphaned local repo disconnected from the actual
+# remote's history entirely.
 # Arguments:
 #   $1 - Target repository directory path
 #   $2 - Remote origin URL (SYNC_REPO_URL)
@@ -25,7 +36,21 @@ __git_sync_init_repo() {
     echo "📥 Local sync directory not found or not initialized."
     mkdir -p "$repo_dir"
 
-    if ! git clone "$remote_url" "$repo_dir" 2> /dev/null; then
+    if [ -n "$(ls -A "$repo_dir" 2> /dev/null)" ]; then
+      echo "📁 Existing files found in ${repo_dir} -- connecting them to the real remote history."
+      local tmp_clone
+      tmp_clone=$(mktemp -d)
+      if git clone "$remote_url" "$tmp_clone" 2> /dev/null; then
+        mv "$tmp_clone/.git" "$repo_dir/.git"
+        rm -rf "$tmp_clone"
+        (cd "$repo_dir" && git checkout -f HEAD > /dev/null 2>&1)
+      else
+        rm -rf "$tmp_clone"
+        echo "⚠️ Clone failed (likely an empty or unreachable remote). Initializing local repository..."
+        git -C "$repo_dir" init
+        git -C "$repo_dir" remote add origin "$remote_url"
+      fi
+    elif ! git clone "$remote_url" "$repo_dir" 2> /dev/null; then
       echo "⚠️ Clone failed (likely an empty remote). Initializing local repository..."
       git -C "$repo_dir" init
       git -C "$repo_dir" remote add origin "$remote_url"
@@ -500,8 +525,10 @@ mt-push-update() {
   if [[ -z "$remote_url" || "$remote_url" == "YOUR_SYNC_REPO_URL" || "$remote_url" == "null" ]]; then
     echo -e "${CB_YELLOW}⚠️  Profile Sync Not Configured${C_RESET}"
     echo -e "The ${C_BOLD}push-profile-update${C_RESET} feature automatically versions and pushes your terminal configuration to a remote Git repository."
-    echo "If you downloaded this profile as a standalone ZIP and do not wish to sync it, you can safely ignore this command."
-    echo -e "\nTo enable syncing, link an empty remote Git repository by running:"
+    echo "If you don't want to sync this profile at all, you can safely ignore this command."
+    echo -e "\nMost people should run:"
+    echo -e "   ${CB_CYAN}mt-become-collaborator${C_RESET}   ${C_DIM}# forks ${UPSTREAM_REPO_PATH} and configures this automatically${C_RESET}"
+    echo -e "\nIf you have direct write access to ${UPSTREAM_REPO_PATH}, or want to sync to your own separate repo instead, link it directly:"
     echo -e "   ${CB_CYAN}mt-add-sync-url \"git@github.com:username/my-terminal-repo.git\"${C_RESET}\n"
     return 1
   fi

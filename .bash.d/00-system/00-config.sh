@@ -810,5 +810,8 @@ mt-become-collaborator() {
   echo -e "\n${CB_GREEN}✅ You're set up as a collaborator!${C_RESET}"
   echo -e "${C_DIM}Your fork: https://github.com/${username}/${repo_name}${C_RESET}"
   echo -e "${C_DIM}Sync URL:  ${fork_url}${C_RESET}"
+  echo -e "\n📝 Make your changes in ${CB_CYAN}~/.bash.d/${C_RESET} (the live environment you're actually running) --"
+  echo -e "   not in the repo checkout. ${CB_CYAN}mt-push-update${C_RESET} only ever copies ~/.bash.d/ INTO the repo, one-way,"
+  echo -e "   so any edit made directly in the repo checkout gets silently overwritten instead of picked up."
   echo -e "\n💡 Run ${CB_CYAN}mt-push-update${C_RESET} any time to sync your local config changes and raise a PR against ${UPSTREAM_REPO_PATH}."
 }
