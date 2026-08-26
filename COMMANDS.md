@@ -283,6 +283,11 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `mt-clone` | Git: Clone every repository in a source-control provider's project |
 
+### Git: Bulk Repository Updates
+| Command | Description |
+|---|---|
+| `mt-bulk-update` | Git: Bulk-update every local repository under VCS_ROOT -- fetches each |
+
 ### Google Style Code Formatting
 | Command | Description |
 |---|---|

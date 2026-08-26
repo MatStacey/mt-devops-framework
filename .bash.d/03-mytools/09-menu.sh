@@ -202,6 +202,8 @@ __mt_menu_git_new_feature() { __mt_menu_prompt_arg "Ticket/branch suffix" git-ne
 __mt_menu_git_push_all() { __mt_menu_prompt_arg "Commit message" git-push-all; }
 __mt_menu_git_clone_ide() { __mt_menu_prompt_arg "Repository URL" git-clone-ide; }
 __mt_menu_clone_wizard() { mt-clone -i; }
+__mt_menu_bulk_update() { mt-bulk-update; }
+__mt_menu_bulk_update_bg() { mt-bulk-update -b; }
 
 __mt_menu_base64_encode() { __mt_menu_prompt_arg "Text to encode" base64-enc; }
 __mt_menu_base64_decode() { __mt_menu_prompt_arg "Base64 text to decode" base64-dec; }
@@ -383,6 +385,8 @@ __mt_menu_git() {
     "List Local Repos (mt-repos)" mt-repos \
     "Clone & Open in IDE (git-clone-ide)" __mt_menu_git_clone_ide \
     "Bulk-Clone a Project (mt-clone -i)" __mt_menu_clone_wizard \
+    "Bulk-Update All Repos (mt-bulk-update)" __mt_menu_bulk_update \
+    "Bulk-Update All Repos in Background (mt-bulk-update -b)" __mt_menu_bulk_update_bg \
     "AI-Generate .gitignore (mt-ai-gitignore)" mt-ai-gitignore \
     "Stage, Commit & Push All (git-push-all)" __mt_menu_git_push_all \
     "AI-Grouped Push (git-ai-push-all)" git-ai-push-all \
