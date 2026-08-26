@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Enhanced Repository Path Parsing**: Introduced helper functions (`__mt_vcs_find_repos`, `__mt_vcs_path_context`, `__mt_vcs_matches_filter`) to break down repository locations into structured scope, provider, workspace, and project segments.
+- **Advanced CLI Repository Filtering**: Added command-line flags (`-s/--scope`, `-p/--provider`, `-w/--workspace`, `-pr/--project`) to `mt-repos` for targeted repository searching.
+- **Improved CLI Output & Metadata**: Updated repository output rendering to display context paths and provide clear total versus matched count messaging.
 - Updated the Bitbucket repository clone wizard to use SSH URLs instead of HTTPS URLs by default.
 - Added standard and background `mt-bulk-update` options to the Git CLI interactive menu.
 - Introduced a new bulk update utility to perform non-destructive, pull-only fast-forward synchronization across local Git repositories.
 - Added multi-level filtering support to scope bulk updates by environment (work/personal), provider, workspace, or project.
 - Implemented automated working-tree stashing, detached HEAD safety checks, and stash conflict handling for safe bulk repository updates.
-- **Enhanced Submenu Navigation**: Added a generic `__mt_menu_category()` function to enable seamless nested interactive submenus using `fzf` without unnecessary pauses.
-- **Modularized Setup & Configuration Menu**: Broken down the monolithic setup menu into distinct submenus for Guided Wizards, Quick Setters & Toggles, Secrets & Collaboration, Terminal & Display, and Maintenance & View.
-- **Refactored General Utilities Menu**: Restructured general utilities into targeted submenus for Networking & Serving, Scaffolding & Formatting, and Encoding to improve clarity and user experience.
 
 ---
 
