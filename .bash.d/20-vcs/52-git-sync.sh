@@ -157,11 +157,27 @@ __mt_push_update_backup() {
 }
 
 #######################################
-# System: Reconcile the sync repo's local branch with origin before copying files
+# System: Reconcile the sync repo's local branch with the true upstream
+# repository (UPSTREAM_REPO_PATH) before copying files -- deliberately
+# NOT with 'origin', since for a collaborator origin is their own fork,
+# and GitHub never auto-syncs a fork with the repo it was forked from.
+# Reconciling against origin/main there just mirrors however stale the
+# fork happens to be, so the collaborator's local default branch can
+# silently drift arbitrarily far behind real upstream -- every future
+# 'mt-push-update' run then rsyncs their fully-current ~/.bash.d
+# (updated independently via 'mt-get-update', which always pulls the
+# real latest release) over that stale checkout, and the entire gap
+# gets staged and raised as a PR alongside whatever the collaborator
+# actually meant to change. Fetching UPSTREAM_REPO_PATH directly instead
+# closes that gap for maintainer and collaborator alike (for a
+# maintainer, origin already IS upstream, so this is a harmless
+# same-content re-fetch).
 # Runs inside the caller's `( cd "$repo_dir"; ... )` subshell, so `cd`/`exit`
 # here never affect the interactive shell.
 # Globals (read, set by mt-push-update):
 #   repo_dir
+# Globals:
+#   UPSTREAM_REPO_PATH
 #######################################
 __mt_push_update_reconcile_branch() {
   cd "$repo_dir" || exit 1
@@ -169,6 +185,8 @@ __mt_push_update_reconcile_branch() {
   local default_branch
   default_branch=$(git remote show origin 2> /dev/null | awk '/HEAD branch/ {print $NF}')
   default_branch="${default_branch:-main}"
+
+  local upstream_url="https://github.com/${UPSTREAM_REPO_PATH}.git"
 
   local current_branch
   current_branch=$(git branch --show-current)
@@ -193,7 +211,7 @@ __mt_push_update_reconcile_branch() {
           stashed=true
         fi
         if git checkout "$default_branch" > /dev/null 2>&1; then
-          git pull origin "$default_branch" > /dev/null 2>&1
+          git fetch "$upstream_url" "$default_branch" > /dev/null 2>&1 && git reset --hard FETCH_HEAD > /dev/null 2>&1
           git branch -D "$current_branch" > /dev/null 2>&1
           current_branch="$default_branch"
         else
@@ -211,12 +229,19 @@ __mt_push_update_reconcile_branch() {
 
   if [ "$current_branch" = "$default_branch" ]; then
     git checkout "$default_branch" > /dev/null 2>&1 || git checkout -b "$default_branch" > /dev/null 2>&1
-    git pull origin "$default_branch" > /dev/null 2>&1 || true
+
+    local stashed=false
+    if ! git diff --quiet || ! git diff --staged --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
+      git stash push --include-untracked -m "mt-push auto stash" > /dev/null 2>&1
+      stashed=true
+    fi
+    git fetch "$upstream_url" "$default_branch" > /dev/null 2>&1 && git reset --hard FETCH_HEAD > /dev/null 2>&1
+    [ "$stashed" = true ] && git stash pop > /dev/null 2>&1
   else
-    echo -e "${CB_BLUE}🔄 Ensuring ${current_branch} is up to date with origin/${default_branch}...${C_RESET}"
-    git fetch origin "$default_branch" > /dev/null 2>&1
-    if ! git merge "origin/$default_branch" --no-edit > /dev/null 2>&1; then
-      echo -e "${CB_RED}💥 Merge conflict detected with origin/${default_branch}!${C_RESET}"
+    echo -e "${CB_BLUE}🔄 Ensuring ${current_branch} is up to date with ${UPSTREAM_REPO_PATH}/${default_branch}...${C_RESET}"
+    git fetch "$upstream_url" "$default_branch" > /dev/null 2>&1
+    if ! git merge FETCH_HEAD --no-edit > /dev/null 2>&1; then
+      echo -e "${CB_RED}💥 Merge conflict detected with ${UPSTREAM_REPO_PATH}/${default_branch}!${C_RESET}"
       echo -e "${CB_YELLOW}The sync automation has paused to protect your code. Please resolve conflicts manually in $repo_dir, commit, and run mt-push-update again.${C_RESET}"
       git merge --abort > /dev/null 2>&1
       exit 1
