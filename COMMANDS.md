@@ -437,6 +437,7 @@ Complex bash functions, framework utilities, and automated workflows.
 ### Version Control (Git) - Core Helpers
 | Command | Description |
 |---|---|
+| `cd-repo-root` | Git: Change directory to the current repository's top-level root, |
 | `git` | Git: Intercept 'clone' to automatically route repositories into ~/vcs/ |
 | `git-clean-merged` | Git: Delete local and remote branches merged into the default branch |
 | `git-clone-ide` | Git: Clone repository into ~/vcs/, navigate into it, and open in default IDE |
