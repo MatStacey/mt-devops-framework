@@ -158,9 +158,15 @@ __mt_doctor_check_sync_repo_state() {
     __mt_doctor_line OK "No uncommitted changes in the sync repo checkout."
   fi
 
-  local unpushed
-  unpushed=$(git -C "$repo_dir" log --branches --not --remotes --oneline 2> /dev/null | wc -l)
-  [ "$unpushed" -gt 0 ] && __mt_doctor_line WARN "${unpushed} local commit(s) not yet pushed to any remote branch."
+  local upstream
+  upstream=$(cd "$repo_dir" && git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2> /dev/null)
+  if [ -z "$upstream" ]; then
+    __mt_doctor_line WARN "'${current_branch}' has no upstream tracking branch configured."
+  else
+    local ahead
+    ahead=$(git -C "$repo_dir" rev-list --count "${upstream}..HEAD" 2> /dev/null)
+    [ "${ahead:-0}" -gt 0 ] && __mt_doctor_line WARN "${ahead} commit(s) on '${current_branch}' not yet pushed to ${upstream}."
+  fi
 }
 
 #######################################
