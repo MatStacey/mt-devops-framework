@@ -559,7 +559,25 @@ __ai_query_local() {
 }
 
 #######################################
-# AI: Explain a terminal command in detail
+# AI: Find local implementation of a shell function
+# Arguments:
+#   $1 - Command/function name
+# Outputs:
+#   Prints source file path
+#######################################
+__ai_find_command_source() {
+  local cmd="$1"
+
+  grep -R "^[[:space:]]*${cmd}()" \
+    "$HOME/.bash.d" \
+    2> /dev/null |
+    head -n1 |
+    cut -d: -f1
+}
+
+#######################################
+# AI: Explain a terminal command in detail, grounding the explanation in
+# its actual local implementation when one is found under ~/.bash.d
 # Usage: ai-explain "<command>"
 # Arguments:
 #   $1 - Command string to explain
@@ -569,12 +587,41 @@ ai-explain() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
+
   if [ -z "$1" ]; then
     echo "Usage: ai-explain \"<command>\""
     return 1
   fi
-  mt-log INFO "Asking AI to explain: $1..."
-  ai -t "command-explanation" "Please explain this terminal command in detail, breaking down what each flag and argument does: $1"
+
+  local cmd="$1"
+  local source_file
+
+  mt-log INFO "Looking up implementation: $cmd..."
+
+  source_file=$(__ai_find_command_source "$cmd")
+
+  if [ -n "$source_file" ]; then
+    mt-log INFO "Found implementation: $source_file"
+
+    ai \
+      -t "command-explanation" \
+      -f "$source_file" \
+      "Explain the command '$cmd' from the supplied implementation.
+
+Cover:
+- purpose of the command
+- arguments and flags
+- variables used
+- helper functions called
+- side effects
+- examples of usage"
+  else
+    mt-log INFO "No local implementation found, explaining command syntax only..."
+
+    ai \
+      -t "command-explanation" \
+      "Explain this terminal command in detail, breaking down what each flag and argument does: $cmd"
+  fi
 }
 
 #######################################
