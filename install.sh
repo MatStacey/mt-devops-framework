@@ -39,6 +39,12 @@ mkdir -p "$TARGET_BASHD"
 # genuine user state with no source to regenerate from (unlike
 # config.yaml, it has no .tpl to reseed from either) -- discarding it
 # silently on every update would erase a user's expiry-tracking history.
+#
+# 40-private/ and lib/private/ are excluded for the same reason: they're
+# user-added, local-only script directories (kept out of the repo by
+# .syncignore -- see syncignore.tpl) that never exist in the repo source
+# by design, so --delete would otherwise erase them from the deployed
+# tree on every single update.
 rsync -a --delete \
   --exclude 'config/config.yaml' \
   --exclude 'config/.env.cache' \
@@ -48,6 +54,8 @@ rsync -a --delete \
   --exclude '*private*.sh' \
   --exclude '*.local.sh' \
   --exclude '*.local' \
+  --exclude '40-private/' \
+  --exclude 'lib/private/' \
   "$REPO_DIR/.bash.d/" "$TARGET_BASHD/"
 
 # 3. Scaffold config.yaml from template if missing
