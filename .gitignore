@@ -30,3 +30,5 @@ __pycache__/
 .dev
 CLAUDE.md
 .bash.d/config/secrets_metadata.yaml
+.bash.d/40-private/
+.bash.d/lib/private/

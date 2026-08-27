@@ -24,3 +24,5 @@ config/*_token.sh
 *private*.sh
 *.local.sh
 *.local
+40-private/
+lib/private/

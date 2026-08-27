@@ -35,3 +35,7 @@ __pycache__/
 CLAUDE.md
 .bash.d/config/github_token.sh
 .bash.d/config/*_token.sh
+
+# Local-Only User Content
+.bash.d/40-private/
+.bash.d/lib/private/
