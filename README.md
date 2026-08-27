@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Automated Ignore Pattern Reconciliation**: Added `__mt_reconcile_ignore_patterns` helper to continuously merge new default patterns from `.tpl` templates into active `.syncignore` and `.gitignore` files without overwriting user modifications.
+- **Protected Repository `install.sh`**: Removed `install.sh` from automatic dotfile push synchronization to prevent stale local files from overwriting the root installer.
+- **Private Directory Exclusion & ShellCheck Filtering**: Added `.bash.d/40-private/` and `.bash.d/lib/private/` to ignore templates and updated the pre-push linter gate to exclude these local-only directories from ShellCheck scans.
 - **State Preservation**: Added state-saving functionality during uninstallation to back up `config.yaml`, `secrets_metadata.yaml`, and `.vcs_hub.json` for seamless framework reinstalls.
 - **Git Repository Safety Checks**: Introduced validation checks to ensure local repository checkouts are only deleted if the working tree is clean and all local commits are pushed upstream.
 - **Interactive Uninstall Prompts**: Enhanced `mt-uninstall` with interactive prompts to confirm setting preservation and optional removal of secrets or repository checkouts.
 - **Dynamic Execution Summary**: Updated the uninstallation CLI output to dynamically reflect selected options and safety statuses before execution.
 - **Added System Uninstaller (`mt-uninstall`)**: Introduced a dedicated command to safely remove the MT DevOps Framework with interactive user confirmation.
-- **Automated Pre-Uninstall Backups**: Implemented automatic, timestamped backups of `~/.bash.d` and `~/.bashrc` under the configured backup directory prior to cleanup.
-- **Smart Configuration Restoration**: Added validation logic to detect trustworthy pre-framework `~/.bashrc.bak` backups and restore original user shell configurations.
-- **Data & Package Safety**: Ensured git repository checkouts, user secrets (`~/secrets/secrets.sh`), system-installed dependencies, and historical backup archives remain untouched.
 
 ---
 

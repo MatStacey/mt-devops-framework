@@ -63,6 +63,30 @@ __git_sync_init_repo() {
 }
 
 #######################################
+# Git: Append any pattern from a template ignore-file that a target
+# ignore-file doesn't already contain, verbatim and in template order.
+# Creates the target if missing. Lets a deployed .syncignore or a synced
+# repo's .gitignore pick up new default patterns added to their .tpl on
+# every sync run, instead of staying frozen at whatever they first
+# scaffolded from -- a plain first-run 'cp' only ever helps a brand-new
+# user, never an existing one whose file predates the template change.
+# Arguments:
+#   $1 - Path to the template file (source of truth for default patterns)
+#   $2 - Path to the target ignore-style file to reconcile
+#######################################
+__mt_reconcile_ignore_patterns() {
+  local template="$1" target="$2"
+  [ -f "$template" ] || return 0
+  touch "$target"
+
+  local pattern
+  while IFS= read -r pattern || [ -n "$pattern" ]; do
+    [[ -z "$pattern" || "$pattern" == \#* ]] && continue
+    grep -qxF "$pattern" "$target" || echo "$pattern" >> "$target"
+  done < "$template"
+}
+
+#######################################
 # Git: Synchronize active bash configuration files into dotfiles repository
 # Arguments:
 #   $1 - Target repository directory path
@@ -74,14 +98,7 @@ __git_sync_copy_files() {
 
   local syncignore="$HOME/.bash.d/config/.syncignore"
   local syncignore_tpl="$HOME/.bash.d/lib/templates/syncignore.tpl"
-
-  if [ ! -f "$syncignore" ]; then
-    if [ -f "$syncignore_tpl" ]; then
-      cp "$syncignore_tpl" "$syncignore"
-    else
-      touch "$syncignore"
-    fi
-  fi
+  __mt_reconcile_ignore_patterns "$syncignore_tpl" "$syncignore"
 
   # SECURITY FIX: One-way sync ONLY. Local Home is the source of truth during a push.
   # No -u/--update: git checkout/pull (run on repo_dir moments earlier by
@@ -96,7 +113,17 @@ __git_sync_copy_files() {
     cp -f "$HOME/.bashrc" "$repo_dir/.bashrc"
   fi
 
-  for f in install.sh README.md .gitignore .dockerignore Dockerfile .gitleaks.toml; do
+  # install.sh is deliberately NOT in this list: it's a repo-root file
+  # with no legitimate deployed counterpart -- nothing ever copies it
+  # into $HOME/.bash.d or $HOME, so the $HOME/$f fallback below would
+  # only ever pick up a stray leftover copy (e.g. from a manual
+  # extraction) and silently overwrite the repo's real install.sh with
+  # it. Confirmed as the actual cause of two separate incidents where a
+  # manually-shipped install.sh fix got reverted by the very next
+  # mt-push-update run. Edit install.sh directly in the repo checkout
+  # and ship it via a manual git flow (branch/commit/push/PR) instead --
+  # never through mt-push-update.
+  for f in README.md .gitignore .dockerignore Dockerfile .gitleaks.toml; do
     if [ -f "$HOME/.bash.d/$f" ]; then
       cp -f "$HOME/.bash.d/$f" "$repo_dir/$f"
     elif [ -f "$HOME/$f" ]; then
@@ -115,14 +142,7 @@ __git_sync_copy_files() {
   (
     cd "$repo_dir" || exit 1
 
-    touch .gitignore
-    local template_file="$HOME/.bash.d/lib/templates/gitignore.tpl"
-    if [ -f "$template_file" ]; then
-      while IFS= read -r pattern || [ -n "$pattern" ]; do
-        [[ -z "$pattern" || "$pattern" == \#* ]] && continue
-        grep -qxF "$pattern" .gitignore || echo "$pattern" >> .gitignore
-      done < "$template_file"
-    fi
+    __mt_reconcile_ignore_patterns "$HOME/.bash.d/lib/templates/gitignore.tpl" .gitignore
 
     git rm -r -q --cached . > /dev/null 2>&1
     git add --all
@@ -131,6 +151,11 @@ __git_sync_copy_files() {
 
 #######################################
 # System: Run the local ShellCheck gate used by mt-push-update -s
+# 40-private/ and lib/private/ are excluded from the scan: they're
+# local-only user content that never gets synced into the framework
+# repo (see __git_sync_copy_files), so a lint issue in one of them would
+# otherwise block every future push regardless of relevance to the
+# actual framework code being shipped.
 # Returns:
 #   0 if ShellCheck passed or is unavailable, 1 if it found errors
 #######################################
@@ -140,7 +165,7 @@ __mt_push_update_run_shellcheck() {
     echo -e "${CB_YELLOW}⚠️ ShellCheck is not installed locally. Skipping...${C_RESET}"
     return 0
   fi
-  if ! find "$HOME/.bash.d" -type f -name "*.sh" -not -path "*/data/cache/*" -print0 | xargs -0 shellcheck -e SC1090,SC1091,SC2119,SC2120,SC2207,SC2015,SC2317,SC2016,SC2129,SC2028,SC1003; then
+  if ! find "$HOME/.bash.d" -type f -name "*.sh" -not -path "*/data/cache/*" -not -path "*/40-private/*" -not -path "*/lib/private/*" -print0 | xargs -0 shellcheck -e SC1090,SC1091,SC2119,SC2120,SC2207,SC2015,SC2317,SC2016,SC2129,SC2028,SC1003; then
     echo -e "${CB_RED}🚨 ShellCheck failed! Please fix the errors above before syncing.${C_RESET}"
     return 1
   fi
