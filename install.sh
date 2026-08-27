@@ -7,8 +7,13 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "🚀 Starting installation of MT DevOps Framework..."
 
-# 1. Backup existing .bashrc if it exists and isn't a symlink/our file
-if [ -f "$HOME_DIR/.bashrc" ] && [ ! -L "$HOME_DIR/.bashrc" ]; then
+# 1. Backup existing .bashrc if it exists, isn't a symlink/our file, and
+# hasn't already been backed up. The "already backed up" guard matters:
+# this script also runs on every mt-get-update, and without it each
+# later run would overwrite the one true pre-framework backup with a
+# copy of the framework's own previous .bashrc, silently destroying the
+# user's real original after their very first update.
+if [ -f "$HOME_DIR/.bashrc" ] && [ ! -L "$HOME_DIR/.bashrc" ] && [ ! -f "$HOME_DIR/.bashrc.bak" ]; then
   echo "📦 Backing up existing .bashrc to ~/.bashrc.bak..."
   cp "$HOME_DIR/.bashrc" "$HOME_DIR/.bashrc.bak"
 fi
