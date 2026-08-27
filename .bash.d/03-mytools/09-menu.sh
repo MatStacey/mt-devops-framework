@@ -180,6 +180,8 @@ __mt_menu_export_cleanup_interactive() { mt-export-cleanup -i; }
 __mt_menu_search_interactive() { mt-search -i; }
 __mt_menu_list_func() { mt-list --func; }
 __mt_menu_list_alias() { mt-list --alias; }
+__mt_menu_docker_start() { docker-daemon start; }
+__mt_menu_docker_stop() { docker-daemon stop; }
 
 __mt_menu_ai_query() { __mt_menu_prompt_arg "Prompt for AI" ai; }
 __mt_menu_ai_explain() { __mt_menu_prompt_arg "Command to explain" ai-explain; }
@@ -320,12 +322,16 @@ __mt_menu_docs() {
 }
 
 #######################################
-# System: "Docker Tools" submenu -- broad-impact actions (restart-all,
-# nuke) are flagged with a ⚠️ label prefix so the warning is visible
-# before the item is even selected, not just after.
+# System: "Docker Tools" submenu -- daemon controls come first since
+# everything below them needs the daemon running, followed by everyday
+# usage, then broad-impact actions (restart-all, nuke) flagged with a
+# ⚠️ label prefix so the warning is visible before the item is even
+# selected, not just after.
 #######################################
 __mt_menu_docker() {
   __mt_menu_submenu "🐳 Docker Tools" \
+    "🟢 Start Docker Daemon (docker-daemon start)" __mt_menu_docker_start \
+    "🔴 Stop Docker Daemon (docker-daemon stop)" __mt_menu_docker_stop \
     "List Containers (docker-ls)" docker-ls \
     "Shell into Container (docker-shell)" docker-shell \
     "Launch Throwaway Sandbox (docker-sandbox)" docker-sandbox \
