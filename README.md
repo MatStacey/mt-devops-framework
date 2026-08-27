@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **State Preservation**: Added state-saving functionality during uninstallation to back up `config.yaml`, `secrets_metadata.yaml`, and `.vcs_hub.json` for seamless framework reinstalls.
+- **Git Repository Safety Checks**: Introduced validation checks to ensure local repository checkouts are only deleted if the working tree is clean and all local commits are pushed upstream.
+- **Interactive Uninstall Prompts**: Enhanced `mt-uninstall` with interactive prompts to confirm setting preservation and optional removal of secrets or repository checkouts.
+- **Dynamic Execution Summary**: Updated the uninstallation CLI output to dynamically reflect selected options and safety statuses before execution.
 - **Added System Uninstaller (`mt-uninstall`)**: Introduced a dedicated command to safely remove the MT DevOps Framework with interactive user confirmation.
 - **Automated Pre-Uninstall Backups**: Implemented automatic, timestamped backups of `~/.bash.d` and `~/.bashrc` under the configured backup directory prior to cleanup.
 - **Smart Configuration Restoration**: Added validation logic to detect trustworthy pre-framework `~/.bashrc.bak` backups and restore original user shell configurations.
 - **Data & Package Safety**: Ensured git repository checkouts, user secrets (`~/secrets/secrets.sh`), system-installed dependencies, and historical backup archives remain untouched.
-- **Maintenance Menu Integration**: Added the framework uninstaller entry (`mt-uninstall`) directly into the interactive maintenance menu.
-- **Added Docker Daemon Management (`docker-daemon`)**: Introduced a utility command to start, stop, restart, and check the status of the Docker service via `systemctl`.
-- **Automated Daemon Health Guards**: Implemented interactive checks (`__docker_ensure_running`) across all Docker helper commands (`docker-ls`, `docker-shell`, `docker-nuke`, etc.) to prompt and auto-start the daemon when down.
-- **Asynchronous Readiness Check**: Enhanced daemon startup logic to actively poll `docker info` for up to 30 seconds, ensuring the socket is fully accepting requests before executing commands.
 
 ---
 
