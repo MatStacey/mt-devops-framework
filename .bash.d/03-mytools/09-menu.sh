@@ -269,7 +269,8 @@ __mt_menu_setup_maintenance() {
     "Reload Config from Disk (mt-load-config)" mt-load-config \
     "Clean Up Legacy config.yaml Keys (mt-migrate-config)" mt-migrate-config \
     "Open config.yaml in IDE (mt-open-config)" mt-open-config \
-    "View Active Configuration (mt-config)" mt-config
+    "View Active Configuration (mt-config)" mt-config \
+    "⚠️  Uninstall Framework (mt-uninstall)" mt-uninstall
 }
 
 #######################################

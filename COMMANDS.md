@@ -387,6 +387,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `win-export` | System: Open ~/vcs/personal/exports in the platform's native file manager (shortcut for `win export`) |
 | `win-vcs` | System: Open ~/vcs in the platform's native file manager (shortcut for `win vcs`) |
 
+### System Uninstaller ("mt-uninstall")
+| Command | Description |
+|---|---|
+| `mt-uninstall` | System: Completely remove the MT DevOps Framework from this machine -- |
+
 ### Terraform & AI Integrations
 | Command | Description |
 |---|---|
