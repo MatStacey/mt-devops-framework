@@ -6,11 +6,10 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-- **Removed Auto-Sync for Repo-Root Files**: Discontinued automatic copying of repository-root files and directories (such as `README.md`, `.gitignore`, `.github/`, and `.devcontainer/`) from local candidate paths during `mt-push-update` to prevent stale local files from accidentally overwriting managed repository files.
+- **Removed Auto-Sync for Repo-Root Files**: Discontinued automatic copying of repository-root files and directories (including `install.sh`, `README.md`, `.gitignore`, `.dockerignore`, `Dockerfile`, `.gitleaks.toml`, `.github/`, and `.devcontainer/`) from local candidate paths during `mt-push-update`. Found and fixed the confirmed root cause of a real, twice-repeated bug where a stray leftover `install.sh` sitting in `$HOME` was silently overwriting the repository's real installer on every sync.
 - **Improved Stash Conflict Handling**: Introduced `__mt_push_update_restore_stash` during branch reconciliation to safely pop auto-stashed changes and alert users with actionable recovery instructions if conflicts occur, preventing silent failure and lost work.
 - **Automated Ignore Pattern Reconciliation**: Added `__mt_reconcile_ignore_patterns` helper to continuously merge new default patterns from `.tpl` templates into active `.syncignore` and `.gitignore` files without overwriting user modifications.
-- **Protected Repository `install.sh`**: Removed `install.sh` from automatic dotfile push synchronization to prevent stale local files from overwriting the root installer.
-- **Private Directory Exclusion & ShellCheck Filtering**: Added `.bash.d/40-private/` and `.bash.d/lib/private/` to ignore templates and updated the pre-push linter gate to exclude these local-only directories from ShellCheck scans.
+- **Private Directory Support**: Added `~/.bash.d/40-private/` and `~/.bash.d/lib/private/` for local-only scripts, functions, and aliases -- excluded from `mt-push-update` sync, the pre-push ShellCheck gate, and never overwritten by `mt-get-update`.
 - **State Preservation**: Added state-saving functionality during uninstallation to back up `config.yaml`, `secrets_metadata.yaml`, and `.vcs_hub.json` for seamless framework reinstalls.
 - **Git Repository Safety Checks**: Introduced validation checks to ensure local repository checkouts are only deleted if the working tree is clean and all local commits are pushed upstream.
 - **Interactive Uninstall Prompts**: Enhanced `mt-uninstall` with interactive prompts to confirm setting preservation and optional removal of secrets or repository checkouts.
@@ -151,8 +150,9 @@ When launched, the Dev Container automatically builds the base image, installs a
 | `10-infra/` | GCP authentication/project switchers, concurrent Terraform validation, and comprehensive Kubectl aliases. |
 | `20-vcs/` | Git wrappers, AI-assisted feature-grouped commit automation (`git-ai-push-all`), profile syncing, and web launching. |
 | `30-ai/` | API integrations for Google Gemini, Anthropic Claude, local OpenAI-compatible endpoints, and debugging tools (`mt-ai-debug`). |
+| `40-private/` | *(User-created, optional)* Local-only scripts, functions, and aliases -- sourced automatically like any other module, but excluded from `mt-push-update` sync and never overwritten by `mt-get-update`. |
 | `config/` | Core YAML files, AI configurations (`config/ai/`), secure `.env` caching, `.syncignore`, and themes (`config/themes/`). |
-| `lib/` | Categorized subdirectories for `awk/`, `python/`, and `windows/` helper scripts, alongside `templates/`. |
+| `lib/` | Categorized subdirectories for `awk/`, `python/`, and `windows/` helper scripts, alongside `templates/`. `lib/private/` *(user-created, optional)* mirrors `40-private/` for non-bash supporting assets. |
 
 ---
 
@@ -178,3 +178,6 @@ If you encounter missing commands, broken aliases, or stale environment variable
 
 **Q: I am getting an "Argument list too long" error when using the AI tools.**
 **A:** This issue was resolved by utilizing temporary payload files. If you are experiencing this on an older version, run `mt-get-update` to automatically pull down the latest codebase fixes.
+
+**Q: How do I add scripts that should stay local and never get pushed to the shared repo?**
+**A:** Add them under `~/.bash.d/40-private/` (bash scripts, functions, and aliases -- sourced automatically like any other module) or `~/.bash.d/lib/private/` (supporting non-bash assets). Both are excluded from `mt-push-update`'s sync, the pre-push ShellCheck gate, and `mt-get-update`'s deploy sync, so they're never pushed to the repo and never overwritten by an update.
