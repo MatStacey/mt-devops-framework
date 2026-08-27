@@ -231,6 +231,7 @@ Complex bash functions, framework utilities, and automated workflows.
 ### Docker: Container Management Utilities
 | Command | Description |
 |---|---|
+| `docker-daemon` | Docker: Start, stop, restart, or check the status of the Docker daemon |
 | `docker-ls` | Docker: List all running containers in a clean table format |
 | `docker-nuke` | Docker: Aggressive cleanup of all unused containers, images, and volumes |
 | `docker-reboot-all` | Docker: Restart all currently running Docker containers |

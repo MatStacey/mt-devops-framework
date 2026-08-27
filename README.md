@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Added Docker Daemon Management (`docker-daemon`)**: Introduced a utility command to start, stop, restart, and check the status of the Docker service via `systemctl`.
+- **Automated Daemon Health Guards**: Implemented interactive checks (`__docker_ensure_running`) across all Docker helper commands (`docker-ls`, `docker-shell`, `docker-nuke`, etc.) to prompt and auto-start the daemon when down.
+- **Asynchronous Readiness Check**: Enhanced daemon startup logic to actively poll `docker info` for up to 30 seconds, ensuring the socket is fully accepting requests before executing commands.
+- **Menu System Integration**: Updated the interactive Docker submenu (`__mt_menu_docker`) with direct actions for starting and stopping the Docker service.
 - **Terraform AI Utilities**: Renamed primary function `tf-iam` to `tf-ai-iam` for naming consistency, updated menu shortcuts, and preserved `tf-iam` as a backward-compatible alias.
 - **Shell Formatting Commands**: Standardized recursive shell script formatting under `sh-fmt-all` while keeping `shfmtlw` as a legacy alias.
 - **Alias Cleanup**: Removed redundant `mt-home` alias.
 - Added `cd-repo-root` command to easily navigate to the top-level root directory of the current Git repository from any nested path.
-- Integrated the new `cd-repo-root` launcher into the interactive Navigate menu (`09-menu.sh`).
-- **Enhanced Repository Path Parsing**: Introduced helper functions (`__mt_vcs_find_repos`, `__mt_vcs_path_context`, `__mt_vcs_matches_filter`) to break down repository locations into structured scope, provider, workspace, and project segments.
-- **Advanced CLI Repository Filtering**: Added command-line flags (`-s/--scope`, `-p/--provider`, `-w/--workspace`, `-pr/--project`) to `mt-repos` for targeted repository searching.
-- **Improved CLI Output & Metadata**: Updated repository output rendering to display context paths and provide clear total versus matched count messaging.
 
 ---
 

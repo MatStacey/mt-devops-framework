@@ -5,6 +5,124 @@
 # ~/.bash.d/02-utilities/30-docker.sh
 
 #######################################
+# Docker: Check whether the Docker daemon is reachable
+# Returns:
+#   0 if 'docker info' succeeds, 1 otherwise
+#######################################
+__docker_is_running() {
+  docker info > /dev/null 2>&1
+}
+
+#######################################
+# Docker: Start the Docker daemon via systemd and wait until it's
+# actually ready to accept commands, not just until systemctl returns --
+# dockerd can take a few seconds to finish initializing after the unit
+# reports active, and callers need a real answer, not an optimistic one.
+# Returns:
+#   0 once 'docker info' succeeds, 1 on failure or timeout
+#######################################
+__docker_daemon_start() {
+  if ! command -v systemctl > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 systemctl not found -- don't know how to start the Docker daemon on this system.${C_RESET}"
+    return 1
+  fi
+
+  echo -e "${CB_BLUE}🐳 Starting Docker daemon...${C_RESET}"
+  if ! sudo systemctl start docker; then
+    echo -e "${CB_RED}🚨 Failed to start the Docker daemon.${C_RESET}"
+    return 1
+  fi
+
+  local waited=0
+  while ! __docker_is_running; do
+    sleep 1
+    ((waited++))
+    if [ "$waited" -ge 30 ]; then
+      echo -e "${CB_RED}🚨 Docker daemon started but isn't responding after 30s.${C_RESET}"
+      return 1
+    fi
+  done
+
+  echo -e "${CB_GREEN}✅ Docker daemon is running.${C_RESET}"
+}
+
+#######################################
+# Docker: Shared guard for every docker-* command that needs a live
+# daemon -- if it's not running, offers to start it instead of letting
+# the underlying docker CLI fail with a raw connection error.
+# Returns:
+#   0 if Docker ends up running (already was, or was just started), 1 if
+#   the user declined or the start failed
+#######################################
+__docker_ensure_running() {
+  __docker_is_running && return 0
+
+  echo -e "${CB_YELLOW}⚠️  Docker daemon is not running.${C_RESET}"
+  local reply
+  read -r -p "Start it now? [Y/n] " -n 1 reply < /dev/tty
+  echo
+  if [[ -n "$reply" && ! "$reply" =~ ^[Yy]$ ]]; then
+    echo -e "${CB_YELLOW}🛑 Aborted.${C_RESET}"
+    return 1
+  fi
+
+  __docker_daemon_start
+}
+
+#######################################
+# Docker: Start, stop, restart, or check the status of the Docker daemon
+# Usage: docker-daemon [start|stop|restart|status]
+# Arguments:
+#   $1 - Action: start, stop, restart, or status (default: status)
+#######################################
+docker-daemon() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  if ! command -v systemctl > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 systemctl not found -- don't know how to manage the Docker daemon on this system.${C_RESET}"
+    return 1
+  fi
+
+  local action="${1:-status}"
+  case "$action" in
+    start)
+      if __docker_is_running; then
+        echo -e "${CB_GREEN}✅ Docker daemon is already running.${C_RESET}"
+        return 0
+      fi
+      __docker_daemon_start
+      ;;
+    stop)
+      if ! __docker_is_running; then
+        echo -e "${CB_GREEN}✅ Docker daemon is already stopped.${C_RESET}"
+        return 0
+      fi
+      echo -e "${CB_BLUE}🐳 Stopping Docker daemon...${C_RESET}"
+      sudo systemctl stop docker && echo -e "${CB_GREEN}✅ Docker daemon stopped.${C_RESET}"
+      ;;
+    restart)
+      echo -e "${CB_BLUE}🐳 Restarting Docker daemon...${C_RESET}"
+      sudo systemctl stop docker 2> /dev/null
+      __docker_daemon_start
+      ;;
+    status)
+      if __docker_is_running; then
+        echo -e "${CB_GREEN}✅ Docker daemon is running.${C_RESET}"
+      else
+        echo -e "${CB_YELLOW}⚠️  Docker daemon is not running.${C_RESET}"
+      fi
+      ;;
+    *)
+      echo "Usage: docker-daemon [start|stop|restart|status]" >&2
+      return 1
+      ;;
+  esac
+}
+
+#######################################
 # Docker: Restart all currently running Docker containers
 # Usage: docker-reboot-all [-x container1,container2]
 # Options:
@@ -18,6 +136,7 @@ docker-reboot-all() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
+  __docker_ensure_running || return 1
 
   local manual_excludes=""
   local OPTIND opt
@@ -69,6 +188,7 @@ docker-ls() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
+  __docker_ensure_running || return 1
   docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
 }
 
@@ -81,6 +201,7 @@ docker-shell() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
+  __docker_ensure_running || return 1
 
   local target
   target=$(docker ps --format "{{.Names}}" | fzf --prompt="🐳 Select Container > " --height=~10 --layout=reverse --border)
@@ -106,6 +227,7 @@ docker-nuke() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
+  __docker_ensure_running || return 1
 
   if [[ "$1" == "--dry-run" ]]; then
     echo "🔍 Simulating destruction of unused Docker resources..."
@@ -138,6 +260,7 @@ docker-sandbox() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
+  __docker_ensure_running || return 1
 
   local image="${1:-debian}"
   echo -e "${CB_BLUE}🚀 Launching temporary ${image} sandbox...${C_RESET}"
@@ -166,6 +289,7 @@ docker-tail() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
+  __docker_ensure_running || return 1
 
   local selected
   selected=$(docker ps --format "{{.Names}}" | fzf --multi --prompt="🐳 Select Containers (TAB to multi-select) > " --height=~15 --layout=reverse --border)
