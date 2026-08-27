@@ -113,31 +113,24 @@ __git_sync_copy_files() {
     cp -f "$HOME/.bashrc" "$repo_dir/.bashrc"
   fi
 
-  # install.sh is deliberately NOT in this list: it's a repo-root file
-  # with no legitimate deployed counterpart -- nothing ever copies it
-  # into $HOME/.bash.d or $HOME, so the $HOME/$f fallback below would
-  # only ever pick up a stray leftover copy (e.g. from a manual
-  # extraction) and silently overwrite the repo's real install.sh with
-  # it. Confirmed as the actual cause of two separate incidents where a
-  # manually-shipped install.sh fix got reverted by the very next
-  # mt-push-update run. Edit install.sh directly in the repo checkout
-  # and ship it via a manual git flow (branch/commit/push/PR) instead --
+  # No loop here for install.sh, README.md, .gitignore, .dockerignore,
+  # Dockerfile, .gitleaks.toml, .github/, or .devcontainer/ -- there used
+  # to be one, copying each from $HOME/.bash.d/<name> or (falling back)
+  # loose $HOME/<name> into the repo. Removed entirely: none of these
+  # repo-root items are ever actually deployed to either candidate path
+  # by install.sh (it only ever populates $HOME/.bash.d/ from the repo's
+  # own .bash.d/ subtree, and none of the eight live inside that
+  # subtree), so both candidates were always either empty or -- worse --
+  # populated by a stray/stale leftover from something unrelated (a
+  # manual extraction, an old backup, ...) that got blindly trusted with
+  # no diff or staleness check. A stray ~/install.sh confirmed this
+  # happening for real, twice, silently reverting a genuinely-shipped
+  # fix each time. README.md is already regenerated separately just
+  # below (AI summary step) and .gitignore already has its own safe
+  # reconciliation (see __mt_reconcile_ignore_patterns above) -- every
+  # repo-root file or directory should be edited directly in the repo
+  # checkout and shipped via a manual git flow (branch/commit/push/PR),
   # never through mt-push-update.
-  for f in README.md .gitignore .dockerignore Dockerfile .gitleaks.toml; do
-    if [ -f "$HOME/.bash.d/$f" ]; then
-      cp -f "$HOME/.bash.d/$f" "$repo_dir/$f"
-    elif [ -f "$HOME/$f" ]; then
-      cp -f "$HOME/$f" "$repo_dir/$f"
-    fi
-  done
-
-  for d in .github .devcontainer; do
-    if [ -d "$HOME/.bash.d/$d" ]; then
-      cp -r -f "$HOME/.bash.d/$d" "$repo_dir/"
-    elif [ -d "$HOME/$d" ]; then
-      cp -r -f "$HOME/$d" "$repo_dir/"
-    fi
-  done
 
   (
     cd "$repo_dir" || exit 1
@@ -207,6 +200,25 @@ __mt_push_update_backup() {
 }
 
 #######################################
+# System: Pop the auto-stash __mt_push_update_reconcile_branch creates
+# before resetting/merging against upstream, warning loudly instead of
+# silently swallowing a failed pop. A pop can fail (typically a conflict
+# between the stashed changes and the branch state just fetched), and
+# discarding its exit status used to leave local changes sitting in the
+# stash list with zero indication anything went wrong -- from the
+# user's side that reads as "my changes just vanished", not as a
+# conflict to resolve.
+# Globals (read):
+#   repo_dir
+#######################################
+__mt_push_update_restore_stash() {
+  if ! git stash pop > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 Could not automatically reapply your stashed local changes (likely a conflict with the branch state just fetched).${C_RESET}"
+    echo -e "${CB_YELLOW}Nothing was lost -- they're safe in the stash. Run 'git stash list' and 'git stash pop' manually in ${repo_dir} to recover them.${C_RESET}"
+  fi
+}
+
+#######################################
 # System: Reconcile the sync repo's local branch with the true upstream
 # repository (UPSTREAM_REPO_PATH) before copying files -- deliberately
 # NOT with 'origin', since for a collaborator origin is their own fork,
@@ -266,10 +278,10 @@ __mt_push_update_reconcile_branch() {
           current_branch="$default_branch"
         else
           echo -e "${CB_RED}🚨 Failed to checkout $default_branch. Please commit or stash changes manually.${C_RESET}"
-          [ "$stashed" = true ] && git stash pop > /dev/null 2>&1
+          [ "$stashed" = true ] && __mt_push_update_restore_stash
           exit 1
         fi
-        [ "$stashed" = true ] && git stash pop > /dev/null 2>&1
+        [ "$stashed" = true ] && __mt_push_update_restore_stash
       else
         echo -e "${CB_RED}🚨 Aborted profile sync.${C_RESET}"
         exit 1
@@ -286,7 +298,7 @@ __mt_push_update_reconcile_branch() {
       stashed=true
     fi
     git fetch "$upstream_url" "$default_branch" > /dev/null 2>&1 && git reset --hard FETCH_HEAD > /dev/null 2>&1
-    [ "$stashed" = true ] && git stash pop > /dev/null 2>&1
+    [ "$stashed" = true ] && __mt_push_update_restore_stash
   else
     echo -e "${CB_BLUE}🔄 Ensuring ${current_branch} is up to date with ${UPSTREAM_REPO_PATH}/${default_branch}...${C_RESET}"
     git fetch "$upstream_url" "$default_branch" > /dev/null 2>&1

@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Removed Auto-Sync for Repo-Root Files**: Discontinued automatic copying of repository-root files and directories (such as `README.md`, `.gitignore`, `.github/`, and `.devcontainer/`) from local candidate paths during `mt-push-update` to prevent stale local files from accidentally overwriting managed repository files.
+- **Improved Stash Conflict Handling**: Introduced `__mt_push_update_restore_stash` during branch reconciliation to safely pop auto-stashed changes and alert users with actionable recovery instructions if conflicts occur, preventing silent failure and lost work.
 - **Automated Ignore Pattern Reconciliation**: Added `__mt_reconcile_ignore_patterns` helper to continuously merge new default patterns from `.tpl` templates into active `.syncignore` and `.gitignore` files without overwriting user modifications.
 - **Protected Repository `install.sh`**: Removed `install.sh` from automatic dotfile push synchronization to prevent stale local files from overwriting the root installer.
 - **Private Directory Exclusion & ShellCheck Filtering**: Added `.bash.d/40-private/` and `.bash.d/lib/private/` to ignore templates and updated the pre-push linter gate to exclude these local-only directories from ShellCheck scans.
 - **State Preservation**: Added state-saving functionality during uninstallation to back up `config.yaml`, `secrets_metadata.yaml`, and `.vcs_hub.json` for seamless framework reinstalls.
 - **Git Repository Safety Checks**: Introduced validation checks to ensure local repository checkouts are only deleted if the working tree is clean and all local commits are pushed upstream.
 - **Interactive Uninstall Prompts**: Enhanced `mt-uninstall` with interactive prompts to confirm setting preservation and optional removal of secrets or repository checkouts.
-- **Dynamic Execution Summary**: Updated the uninstallation CLI output to dynamically reflect selected options and safety statuses before execution.
-- **Added System Uninstaller (`mt-uninstall`)**: Introduced a dedicated command to safely remove the MT DevOps Framework with interactive user confirmation.
 
 ---
 
