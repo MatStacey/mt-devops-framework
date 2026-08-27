@@ -48,16 +48,94 @@ __mt_uninstall_bashrc_backup_trustworthy() {
 }
 
 #######################################
+# System: Preserve config.yaml, secrets_metadata.yaml, and .vcs_hub.json
+# to a single stable (non-timestamped) location outside ~/.bash.d before
+# it's deleted -- a plain reinstall re-scaffolds a bare default
+# config.yaml and has no source to regenerate the other two from, so
+# without this a reinstalled framework silently comes back de-configured
+# even though the full backup technically still has them buried in a
+# timestamped folder. Re-running this overwrites the previous save with
+# the latest, matching .bashrc.bak's own single-most-recent-copy model.
+# Globals:
+#   BACKUP_DIR
+# Outputs:
+#   Prints the directory the files were saved to
+#######################################
+__mt_uninstall_preserve_state() {
+  local save_dir="${BACKUP_DIR:-$HOME/backups}/uninstall-preserved-config"
+  mkdir -p "$save_dir"
+
+  [ -f "$HOME/.bash.d/config/config.yaml" ] && cp -p "$HOME/.bash.d/config/config.yaml" "$save_dir/"
+  [ -f "$HOME/.bash.d/config/secrets_metadata.yaml" ] && cp -p "$HOME/.bash.d/config/secrets_metadata.yaml" "$save_dir/"
+  [ -f "$HOME/.bash.d/data/cache/.vcs_hub.json" ] && cp -p "$HOME/.bash.d/data/cache/.vcs_hub.json" "$save_dir/"
+
+  echo "$save_dir"
+}
+
+#######################################
+# System: Check whether the repo checkout at $1 is safe to delete outright
+# -- clean working tree (no uncommitted or untracked changes) and every
+# local commit already pushed to its upstream. Refusing otherwise means
+# mt-uninstall can never silently destroy real git history or work that
+# exists nowhere else, even when the user opts in to wiping it.
+# Arguments:
+#   $1 - Repo checkout path
+# Returns:
+#   0 if safe to delete, 1 otherwise
+#######################################
+__mt_uninstall_repo_safe_to_delete() {
+  local repo_dir="$1"
+  [ -d "$repo_dir/.git" ] || return 0
+
+  git -C "$repo_dir" diff --quiet 2> /dev/null || return 1
+  git -C "$repo_dir" diff --staged --quiet 2> /dev/null || return 1
+  [ -z "$(git -C "$repo_dir" ls-files --others --exclude-standard 2> /dev/null)" ] || return 1
+
+  local upstream
+  upstream=$(git -C "$repo_dir" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2> /dev/null)
+  [ -n "$upstream" ] || return 1
+
+  local ahead
+  ahead=$(git -C "$repo_dir" rev-list --count "${upstream}..HEAD" 2> /dev/null)
+  [ "${ahead:-0}" -eq 0 ]
+}
+
+#######################################
+# System: Ask a single Y/n question and report whether the user accepted.
+# Arguments:
+#   $1 - Prompt text (without the [Y/n] or [y/N] suffix)
+#   $2 - Default: "y" or "n"
+# Returns:
+#   0 if accepted, 1 if declined
+#######################################
+__mt_uninstall_confirm() {
+  local prompt="$1" default="$2"
+  local suffix="[y/N]"
+  [ "$default" = "y" ] && suffix="[Y/n]"
+
+  local reply
+  read -r -p "${prompt} ${suffix} " -n 1 reply < /dev/tty
+  echo
+  [ -z "$reply" ] && reply="$default"
+  [[ "$reply" =~ ^[Yy]$ ]]
+}
+
+#######################################
 # System: Completely remove the MT DevOps Framework from this machine --
 # deletes ~/.bash.d and restores or removes ~/.bashrc, after a full
-# backup and a typed "yes" confirmation (case-insensitive). Deliberately
-# leaves untouched: the git repo checkout at DOTFILES_DIR/SYNC_REPO_DIR
-# (the user's own git history, not installer state), ~/secrets/secrets.sh
-# (API keys, not framework code), and BACKUP_DIR itself (where this
-# command's own safety backup, and every other backup this framework has
-# ever made, lives). System packages installed via bootstrap (jq, fzf,
-# shfmt, ...) are never touched -- removing tools other software may also
-# depend on is out of scope for uninstalling this framework alone.
+# backup and a typed "yes" confirmation (case-insensitive). Along the
+# way, offers two independent choices: whether to preserve config.yaml/
+# secrets_metadata.yaml/.vcs_hub.json outside ~/.bash.d (default: yes --
+# see __mt_uninstall_preserve_state), and whether to also delete
+# ~/secrets/secrets.sh and the git repo checkout at DOTFILES_DIR/
+# SYNC_REPO_DIR (default: no -- these are API keys and the user's own
+# git history, not installer state, and the repo checkout is only ever
+# actually deleted if __mt_uninstall_repo_safe_to_delete confirms nothing
+# would be lost). BACKUP_DIR itself is never touched -- it's where every
+# backup this framework has ever made lives, including this command's
+# own. System packages installed via bootstrap (jq, fzf, shfmt, ...) are
+# never touched either -- removing tools other software may also depend
+# on is out of scope for uninstalling this framework alone.
 # Usage: mt-uninstall
 # Globals:
 #   DOTFILES_DIR, SYNC_REPO_DIR, BACKUP_DIR
@@ -75,6 +153,28 @@ mt-uninstall() {
   echo -e "${CB_RED}==========================================================${C_RESET}"
   echo -e "${CB_RED}            MT DEVOPS FRAMEWORK - UNINSTALL                ${C_RESET}"
   echo -e "${CB_RED}==========================================================${C_RESET}\n"
+
+  echo -e "${CB_CYAN}config.yaml, secrets_metadata.yaml, and .vcs_hub.json won't survive a plain reinstall otherwise.${C_RESET}"
+  local preserve_state=false
+  __mt_uninstall_confirm "Keep your settings for next time?" "y" && preserve_state=true
+  echo
+
+  local wipe_extras=false
+  local wipe_repo=false
+  if [ -n "$repo_dir" ] || [ -f "$HOME/secrets/secrets.sh" ]; then
+    echo -e "${CB_CYAN}By default, ~/secrets/secrets.sh and your git repo checkout are left alone -- they're your API keys and your own git history, not installer state.${C_RESET}"
+    __mt_uninstall_confirm "Also delete these?" "n" && wipe_extras=true
+    echo
+
+    if [ "$wipe_extras" = true ] && [ -n "$repo_dir" ] && [ -d "$repo_dir" ]; then
+      if __mt_uninstall_repo_safe_to_delete "$repo_dir"; then
+        wipe_repo=true
+      else
+        echo -e "${CB_YELLOW}⚠️  ${repo_dir} has uncommitted changes or commits not yet pushed -- leaving it in place rather than risk losing work that exists nowhere else.${C_RESET}\n"
+      fi
+    fi
+  fi
+
   echo -e "${CB_YELLOW}This will:${C_RESET}"
   echo -e "  ${CB_RED}🗑️  Delete${C_RESET}  ~/.bash.d (the entire framework)"
   if [ "$restore_bashrc" = true ]; then
@@ -82,9 +182,19 @@ mt-uninstall() {
   else
     echo -e "  ${CB_RED}🗑️  Delete${C_RESET}  ~/.bashrc (no trustworthy pre-install backup was found to restore)"
   fi
+  if [ "$preserve_state" = true ]; then
+    echo -e "  ${CB_GREEN}💾 Preserve${C_RESET} config.yaml, secrets_metadata.yaml, .vcs_hub.json outside ~/.bash.d"
+  fi
+  [ "$wipe_extras" = true ] && [ -f "$HOME/secrets/secrets.sh" ] && echo -e "  ${CB_RED}🗑️  Delete${C_RESET}  ~/secrets/secrets.sh (your API keys)"
+  [ "$wipe_repo" = true ] && echo -e "  ${CB_RED}🗑️  Delete${C_RESET}  ${repo_dir} (your git repo checkout -- confirmed clean and fully pushed)"
+
   echo -e "\n${CB_CYAN}This will NOT touch:${C_RESET}"
-  echo -e "  ${CB_GREEN}✅${C_RESET} ~/secrets/secrets.sh (your API keys)"
-  [ -n "$repo_dir" ] && echo -e "  ${CB_GREEN}✅${C_RESET} ${repo_dir} (your git repo checkout)"
+  if [ "$wipe_extras" = false ] || [ ! -f "$HOME/secrets/secrets.sh" ]; then
+    echo -e "  ${CB_GREEN}✅${C_RESET} ~/secrets/secrets.sh (your API keys)"
+  fi
+  if [ -n "$repo_dir" ] && [ "$wipe_repo" = false ]; then
+    echo -e "  ${CB_GREEN}✅${C_RESET} ${repo_dir} (your git repo checkout)"
+  fi
   echo -e "  ${CB_GREEN}✅${C_RESET} ${BACKUP_DIR:-$HOME/backups} (existing backups, including the one this command is about to make)"
   echo -e "  ${CB_GREEN}✅${C_RESET} System packages installed via bootstrap (jq, fzf, shellcheck, ...)"
   echo
@@ -100,6 +210,12 @@ mt-uninstall() {
   backup_dir=$(__mt_uninstall_backup)
   echo -e "${CB_CYAN}📦 Backed up ~/.bash.d and ~/.bashrc to ${backup_dir} before removing anything.${C_RESET}"
 
+  local preserved_dir=""
+  if [ "$preserve_state" = true ]; then
+    preserved_dir=$(__mt_uninstall_preserve_state)
+    echo -e "${CB_GREEN}💾 Preserved your settings to ${preserved_dir}.${C_RESET}"
+  fi
+
   rm -rf "$HOME/.bash.d"
 
   if [ "$restore_bashrc" = true ]; then
@@ -110,7 +226,18 @@ mt-uninstall() {
     echo -e "${CB_GREEN}✅ Removed ~/.bashrc.${C_RESET}"
   fi
 
+  if [ "$wipe_extras" = true ] && [ -f "$HOME/secrets/secrets.sh" ]; then
+    rm -f "$HOME/secrets/secrets.sh"
+    echo -e "${CB_GREEN}✅ Removed ~/secrets/secrets.sh.${C_RESET}"
+  fi
+
+  if [ "$wipe_repo" = true ]; then
+    rm -rf "$repo_dir"
+    echo -e "${CB_GREEN}✅ Removed ${repo_dir}.${C_RESET}"
+  fi
+
   echo -e "\n${CB_GREEN}✅ MT DevOps Framework uninstalled.${C_RESET}"
   echo -e "${C_DIM}This terminal session still has its functions loaded in memory -- open a new terminal (or close this one) to finish.${C_RESET}"
   echo -e "${C_DIM}Backup saved to: ${backup_dir}${C_RESET}"
+  [ -n "$preserved_dir" ] && echo -e "${C_DIM}Settings preserved at: ${preserved_dir} -- copy them into a fresh ~/.bash.d/config/ (and data/cache/) after reinstalling.${C_RESET}"
 }
