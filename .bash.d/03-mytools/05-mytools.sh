@@ -540,7 +540,7 @@ mt-help() {
           next
       }
       $0 ~ "^alias " target "=" { code = $0 "\n"; exit }
-      $0 ~ "^" target "\(\\)[ \t]*\{" { code = $0 "\n"; flag=1; next }
+      $0 ~ "^" target "\\(\\)[ \t]*\\{" { code = $0 "\n"; flag=1; next }
       flag { code = code $0 "\n"; if ($0 ~ /^}$/) exit }
       { if (!flag) { doc=""; code="" } }
       END { print doc; print "---MT_CODE_DELIMITER---"; print code }
