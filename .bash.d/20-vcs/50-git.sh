@@ -290,8 +290,8 @@ __git_raise_pr_push_branch() {
 # Git: Create the PR via GitHub CLI, or open the appropriate web compare URL
 # for GitHub/GitLab/Bitbucket when 'gh' isn't available.
 # GitHub rejects PR titles over 256 characters outright -- a hand-typed
-# or AI-generated commit message easily exceeds that while still being
-# a perfectly good PR title, so this truncates defensively rather than
+# or AI-generated commit message easily exceeds that while still being a
+# perfectly good PR title, so this truncates defensively rather than
 # fail PR creation over it. The full original title is never lost, it's
 # preserved as the first line of the PR body.
 # Globals (read, set by git-raise-pr):
@@ -304,6 +304,31 @@ __git_raise_pr_create_or_open() {
     local repo_flag=()
     [ -n "$UPSTREAM_REPO_PATH" ] && repo_flag=("--repo" "$UPSTREAM_REPO_PATH")
 
+    # Check whether an open PR already exists for this branch.
+    # This can happen when mt-push-update is run again after the PR has
+    # already been created. In that case, the existing PR is the correct
+    # destination for the newly pushed commits and should not be treated
+    # as a failure.
+    local existing_pr_url=""
+    existing_pr_url=$(gh pr view "$current_branch" \
+      "${repo_flag[@]}" \
+      --json url,state \
+      -q 'select(.state == "OPEN") | .url' 2> /dev/null || true)
+
+    if [ -n "$existing_pr_url" ]; then
+      echo -e "${CB_GREEN}✅ An open Pull Request already exists for this branch.${C_RESET}"
+      echo -e "${CB_BLUE}🌐 $existing_pr_url${C_RESET}"
+
+      read -r -p "🌐 View Pull Request in browser? [Y/n] " -n 1 < /dev/tty || REPLY="n"
+      echo
+
+      if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ] || [ -z "$REPLY" ]; then
+        __open_url "$existing_pr_url"
+      fi
+
+      return 0
+    fi
+
     if [ -n "$pr_title" ] && [ "${#pr_title}" -gt 250 ]; then
       pr_body="Full title: ${pr_title}
 ${pr_body}"
@@ -311,10 +336,18 @@ ${pr_body}"
     fi
 
     local pr_success=0
+
     if [ -n "$pr_title" ]; then
-      gh pr create --base "$target_branch" "${repo_flag[@]}" --title "$pr_title" --body "$pr_body" || pr_success=1
+      gh pr create \
+        --base "$target_branch" \
+        "${repo_flag[@]}" \
+        --title "$pr_title" \
+        --body "$pr_body" || pr_success=1
     else
-      gh pr create --base "$target_branch" "${repo_flag[@]}" --fill || pr_success=1
+      gh pr create \
+        --base "$target_branch" \
+        "${repo_flag[@]}" \
+        --fill || pr_success=1
     fi
 
     if [ $pr_success -ne 0 ]; then
@@ -324,27 +357,25 @@ ${pr_body}"
 
     echo -e "${CB_GREEN}✅ Pull Request created successfully!${C_RESET}"
 
-    # Opening the browser is a best-effort convenience past this point --
-    # PR creation itself already succeeded and returned above on failure,
-    # so nothing here (a no-tty environment failing this read, or
-    # __open_url failing with no display available) should be allowed to
-    # make the function, and therefore git-raise-pr, report failure for a
-    # PR that was actually created fine.
     read -r -p "🌐 View Pull Request in browser? [Y/n] " -n 1 < /dev/tty || REPLY="n"
     echo
+
     if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ] || [ -z "$REPLY" ]; then
       local pr_url
-      pr_url=$(gh pr view --json url -q .url)
+      pr_url=$(gh pr view "$current_branch" "${repo_flag[@]}" --json url -q .url)
       __open_url "$pr_url"
     fi
   else
     echo -e "${CB_YELLOW}⚠️  'gh' CLI not found or using non-GitHub repository. Opening browser to create PR manually...${C_RESET}"
+
     local web_url="$origin_url"
+
     if [[ "$web_url" == git@* ]]; then
       web_url="${web_url#git@}"
       web_url="${web_url/:/\/}"
       web_url="https://${web_url}"
     fi
+
     web_url="${web_url%.git}"
 
     if [[ "$web_url" == *"bitbucket.org"* ]]; then
@@ -357,6 +388,7 @@ ${pr_body}"
 
     __open_url "$web_url"
   fi
+
   return 0
 }
 
