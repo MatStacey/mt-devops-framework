@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Optimized PR creation logic by capturing the URL directly from `gh pr create` output instead of executing a secondary query.
+- Updated error messaging formatting for failed PR creation attempts.
 - Streamlined Docker daemon management functions and cleaned up logging messages.
 - Added helper functions to extract Docker Compose project metadata and check container health/readiness.
 - Refactored container reboot logic to support sequential Compose project recreation and project-level exclusions.
 - **Git Utilities:** Added `__mt_git_default_branch` to optimize default branch detection by checking local cached refs before attempting network calls.
 - **Pull Request Workflow:** Refactored browser confirmation prompts into a dedicated helper to defer unnecessary API calls until confirmed.
 - **Code Maintenance:** Removed redundant byte formatting logic in LLM cleanup scripts in favor of shared size helper functions.
-- Refactored utility, tool, and VCS shell scripts by extracting embedded AWK and Python logic into dedicated library files under `.bash.d/lib/`.
-- Added Kubernetes (`k8s`) segment visibility controls to prompt display configuration.
 
 ---
 
