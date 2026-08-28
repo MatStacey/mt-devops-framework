@@ -472,6 +472,48 @@ __mt_push_update_commit_and_raise_pr() {
 }
 
 #######################################
+# System: Warn and confirm before proceeding if the deployed ~/.bash.d
+# tree is behind the latest published framework release.
+# __git_sync_copy_files syncs deployed files INTO the repo as a blind,
+# one-way copy -- if the local tree predates recent upstream changes to
+# the same files, that copy silently reverts them, and the resulting PR
+# either fails outright with a real git conflict or merges cleanly
+# while quietly clobbering someone else's work. This is the confirmed
+# root cause of a collaborator repeatedly hitting both outcomes (a
+# closed, unmergeable PR and a merged PR that reverted recent docstring
+# improvements) -- deliberately checked live here, right before the
+# copy happens, rather than relying on mt-doctor's own version check,
+# which reuses a cache that can be up to UPDATE_CHECK_TTL_SEC (default
+# 12h) stale.
+# Globals:
+#   UPSTREAM_REPO_PATH
+# Returns:
+#   0 to proceed, 1 if the user declined (or non-interactively, always,
+#   since there's no one to ask)
+#######################################
+__mt_push_update_check_staleness() {
+  command -v gh > /dev/null 2>&1 || return 0
+
+  local installed="Local"
+  [ -f "$HOME/.bash.d/data/.current_version" ] && installed=$(command cat "$HOME/.bash.d/data/.current_version")
+
+  local latest
+  latest=$(gh release view --repo "$UPSTREAM_REPO_PATH" --json tagName -q .tagName 2> /dev/null)
+
+  [ -z "$latest" ] && return 0
+  [ "$installed" = "$latest" ] && return 0
+
+  echo -e "${CB_YELLOW}⚠️  Your deployed ~/.bash.d is at ${installed}, but ${latest} has been published to ${UPSTREAM_REPO_PATH}.${C_RESET}"
+  echo -e "${CB_YELLOW}   Pushing now risks silently reverting recent upstream changes in any file you haven't personally touched since. Run 'mt-get-update' first.${C_RESET}"
+  read -p "🚀 Proceed anyway? [y/N] " -n 1 -r < /dev/tty
+  echo
+  if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo -e "${CB_RED}🛑 Aborted. Run 'mt-get-update', then re-run 'mt-push-update'.${C_RESET}"
+    return 1
+  fi
+}
+
+#######################################
 # System: Sync local bash configs to terminal dotfiles repo and create a Pull Request
 # Usage: mt-push-update [-i|--issue <num>] [-s|--shellcheck] [-b|--backup] [-m|--no-ai] [-d|--delete-merged] [--prompt-remote] [-g|--merge] [message]
 # Options:
@@ -570,6 +612,8 @@ mt-push-update() {
     echo -e "   ${CB_CYAN}mt-add-sync-url \"git@github.com:username/my-terminal-repo.git\"${C_RESET}\n"
     return 1
   fi
+
+  __mt_push_update_check_staleness || return 1
 
   if [ "$backup_before_sync" = true ]; then
     __mt_push_update_backup || return 1
