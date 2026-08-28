@@ -183,37 +183,8 @@ __mt_dispatcher_delegate_completion() {
 #######################################
 __mt_dispatcher_scrape_flags() {
   local file_path="$1" target_cmd="$2"
-  awk -v target="$target_cmd" '
-    /^#######################################/ { next }
-    /^#/ {
-      line = substr($0, 2)
-      sub(/^[ \t]/, "", line)
-      doc = doc line "\n"
-      next
-    }
-    $0 ~ "^alias " target "=" { matched = 1; exit }
-    $0 ~ "^" target "\\(\\)[ \t]*\\{" { matched = 1; exit }
-    { doc = "" }
-    END {
-      if (!matched) { exit }
-      in_opts = 0
-      n = split(doc, lines, "\n")
-      for (i = 1; i <= n; i++) {
-        l = lines[i]
-        if (l ~ /^Options:/) { in_opts = 1; continue }
-        if (in_opts && l ~ /^[A-Za-z]+:/) { in_opts = 0 }
-        if (in_opts) {
-          sub(/^[ \t]+/, "", l)
-          m = split(l, parts, /[ \t]+/)
-          for (j = 1; j <= m; j++) {
-            if (parts[j] !~ /^-/) { break }
-            gsub(/,$/, "", parts[j])
-            print parts[j]
-          }
-        }
-      }
-    }
-  ' "$file_path" 2> /dev/null
+  local awk_script="$HOME/.bash.d/lib/awk/scrape_command_flags.awk"
+  awk -v target="$target_cmd" -f "$awk_script" "$file_path" 2> /dev/null
 }
 
 #######################################
