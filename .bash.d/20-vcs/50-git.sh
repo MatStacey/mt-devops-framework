@@ -144,6 +144,28 @@ git-pretty-log() {
 }
 
 #######################################
+# Git: Print a repository's remote default branch name (e.g. main).
+# Tries the local, already-cached ref first (refs/remotes/origin/HEAD)
+# since it's instant, falling back to asking the remote directly (git
+# remote show origin) only if that's unset -- the remote query is a
+# real network round-trip and noticeably slower.
+# Arguments:
+#   $1 - Optional repo directory (defaults to the current directory)
+# Outputs:
+#   Prints the default branch name to STDOUT, or nothing if neither
+#   method can determine one (e.g. no 'origin' remote)
+#######################################
+__mt_git_default_branch() {
+  local repo_dir="${1:-.}"
+  local branch
+  branch=$(git -C "$repo_dir" symbolic-ref refs/remotes/origin/HEAD 2> /dev/null | sed 's@^refs/remotes/origin/@@')
+  if [ -z "$branch" ]; then
+    branch=$(git -C "$repo_dir" remote show origin 2> /dev/null | awk '/HEAD branch/ {print $NF}')
+  fi
+  echo "$branch"
+}
+
+#######################################
 # Git: Delete local and remote branches merged into the default branch
 #######################################
 git-clean-merged() {
@@ -153,7 +175,7 @@ git-clean-merged() {
   fi
 
   local default_branch
-  default_branch=$(git remote show origin 2> /dev/null | awk '/HEAD branch/ {print$NF}')
+  default_branch=$(__mt_git_default_branch)
   default_branch="${default_branch:-main}"
 
   echo -e "${CB_BLUE}🧹 Fetching latest remote state and pruning tracking branches...${C_RESET}"
@@ -297,6 +319,22 @@ __git_raise_pr_push_branch() {
 # Globals (read, set by git-raise-pr):
 #   is_github, target_branch, pr_title, pr_body, origin_url, current_branch
 #######################################
+#######################################
+# Git: Ask [Y/n] whether to open a Pull Request in the browser,
+# defaulting to yes on Enter or a failed read (e.g. no /dev/tty
+# available). Returns success/failure rather than taking a URL directly
+# so callers can defer computing the URL (e.g. an extra `gh` API call)
+# until the user has actually confirmed they want it.
+# Returns:
+#   0 if the user confirmed (or accepted the default), 1 otherwise
+#######################################
+__git_raise_pr_confirm_open_browser() {
+  local REPLY
+  read -r -p "🌐 View Pull Request in browser? [Y/n] " -n 1 REPLY < /dev/tty || REPLY="n"
+  echo
+  [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ] || [ -z "$REPLY" ]
+}
+
 __git_raise_pr_create_or_open() {
   if [ "$is_github" = true ] && command -v gh > /dev/null 2>&1; then
     echo -e "${CB_BLUE}🛠️  Creating Pull Request via GitHub CLI...${C_RESET}"
@@ -324,13 +362,7 @@ __git_raise_pr_create_or_open() {
 
     if [ -n "$existing_pr_url" ]; then
       echo -e "${CB_GREEN}✅ Open Pull Request found. Latest changes have been pushed to the existing PR.${C_RESET}"
-      read -r -p "🌐 View Pull Request in browser? [Y/n] " -n 1 < /dev/tty || REPLY="n"
-      echo
-
-      if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ] || [ -z "$REPLY" ]; then
-        __open_url "$existing_pr_url"
-      fi
-
+      __git_raise_pr_confirm_open_browser && __open_url "$existing_pr_url"
       return 0
     fi
 
@@ -362,10 +394,7 @@ ${pr_body}"
 
     echo -e "${CB_GREEN}✅ Pull Request created successfully!${C_RESET}"
 
-    read -r -p "🌐 View Pull Request in browser? [Y/n] " -n 1 < /dev/tty || REPLY="n"
-    echo
-
-    if [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ] || [ -z "$REPLY" ]; then
+    if __git_raise_pr_confirm_open_browser; then
       local pr_url
       pr_url=$(gh pr view "$current_branch" "${repo_flag[@]}" --json url -q .url)
       __open_url "$pr_url"
@@ -428,7 +457,7 @@ git-raise-pr() {
   shift $((OPTIND - 1))
 
   local default_branch
-  default_branch=$(git remote show origin 2> /dev/null | awk '/HEAD branch/ {print$NF}')
+  default_branch=$(__mt_git_default_branch)
   default_branch="${default_branch:-main}"
   target_branch="${target_branch:-$default_branch}"
 
@@ -473,7 +502,7 @@ git-default-rebase() {
   current_branch=$(git branch --show-current)
 
   local default_branch
-  default_branch=$(git remote show origin 2> /dev/null | awk '/HEAD branch/ {print$NF}')
+  default_branch=$(__mt_git_default_branch)
   default_branch="${default_branch:-main}"
 
   if [ "$current_branch" = "$default_branch" ]; then

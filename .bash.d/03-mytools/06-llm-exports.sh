@@ -466,20 +466,6 @@ mt-copy() {
 }
 
 #######################################
-# LLM: Format a byte count as a human-readable KB/MB string
-# Arguments:
-#   $1 - Byte count
-#######################################
-__mt_export_cleanup_human_size() {
-  local bytes="$1"
-  if [ "$bytes" -ge 1048576 ]; then
-    awk -v b="$bytes" 'BEGIN { printf "%.1fMB", b / 1048576 }'
-  else
-    awk -v b="$bytes" 'BEGIN { printf "%.1fKB", b / 1024 }'
-  fi
-}
-
-#######################################
 # LLM: Resolve which EXPORT_DIR subdirectories a cleanup run should target.
 # Rejects any target that would resolve outside EXPORT_DIR.
 # Arguments:
@@ -618,7 +604,7 @@ __mt_export_cleanup_render_table() {
     total_remove_bytes=$((total_remove_bytes + scan_remove_bytes))
 
     local freed_human oldest_fmt newest_fmt
-    freed_human=$(__mt_export_cleanup_human_size "$scan_remove_bytes")
+    freed_human=$(__mt_clone_human_size "$scan_remove_bytes")
     oldest_fmt="${scan_oldest:0:4}-${scan_oldest:4:2}-${scan_oldest:6:2}"
     newest_fmt="${scan_newest:0:4}-${scan_newest:4:2}-${scan_newest:6:2}"
 
@@ -631,7 +617,7 @@ __mt_export_cleanup_render_table() {
     echo -e "${C_DIM}(nothing eligible for removal)${C_RESET}"
   else
     local total_freed
-    total_freed=$(__mt_export_cleanup_human_size "$total_remove_bytes")
+    total_freed=$(__mt_clone_human_size "$total_remove_bytes")
     echo -e "${CB_YELLOW}TOTAL: ${total_remove_count} file(s), ${total_freed} to be freed${C_RESET}"
   fi
 }
@@ -785,7 +771,7 @@ __mt_export_cleanup_run() {
   rm -f "$cleanup_dir_list"
 
   local freed_human
-  freed_human=$(__mt_export_cleanup_human_size "$total_remove_bytes")
+  freed_human=$(__mt_clone_human_size "$total_remove_bytes")
   if [ "$verbose_ok" = true ]; then
     echo -e "${CB_GREEN}✅ Removed ${cleanup_deleted_count} file(s), freed ~${freed_human}.${C_RESET}"
     [ "$cleanup_failed_count" -gt 0 ] && echo -e "${CB_RED}⚠️ ${cleanup_failed_count} file(s) failed to delete — see mt-log for details.${C_RESET}"
