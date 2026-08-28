@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Improved URL opening handling under WSL by prioritizing `cmd.exe /c start` over `explorer.exe` for better browser dispatching.
+- Added fallback checks for URL launchers in WSL environments with updated warning messaging when no compatible launcher is found.
 - Fixed character escaping in AWK regex patterns to reliably match shell function declarations within mytools.
 - Added an explicit success return status (`return 0`) to the Git branch reconciliation workflow.
 - **Removed Auto-Sync for Repo-Root Files**: Discontinued automatic copying of repository-root files and directories (including `install.sh`, `README.md`, `.gitignore`, `.dockerignore`, `Dockerfile`, `.gitleaks.toml`, `.github/`, and `.devcontainer/`) from local candidate paths during `mt-push-update`. Found and fixed the confirmed root cause of a real, twice-repeated bug where a stray leftover `install.sh` sitting in `$HOME` was silently overwriting the repository's real installer on every sync.
 - **Improved Stash Conflict Handling**: Introduced `__mt_push_update_restore_stash` during branch reconciliation to safely pop auto-stashed changes and alert users with actionable recovery instructions if conflicts occur, preventing silent failure and lost work.
 - **Automated Ignore Pattern Reconciliation**: Added `__mt_reconcile_ignore_patterns` helper to continuously merge new default patterns from `.tpl` templates into active `.syncignore` and `.gitignore` files without overwriting user modifications.
 - **Private Directory Support**: Added `~/.bash.d/40-private/` and `~/.bash.d/lib/private/` for local-only scripts, functions, and aliases -- excluded from `mt-push-update` sync, the pre-push ShellCheck gate, and never overwritten by `mt-get-update`.
-- **State Preservation**: Added state-saving functionality during uninstallation to back up `config.yaml`, `secrets_metadata.yaml`, and `.vcs_hub.json` for seamless framework reinstalls.
-- **Git Repository Safety Checks**: Introduced validation checks to ensure local repository checkouts are only deleted if the working tree is clean and all local commits are pushed upstream.
 
 ---
 
