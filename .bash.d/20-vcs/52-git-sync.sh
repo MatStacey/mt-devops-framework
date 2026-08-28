@@ -245,7 +245,7 @@ __mt_push_update_reconcile_branch() {
   cd "$repo_dir" || exit 1
 
   local default_branch
-  default_branch=$(git remote show origin 2> /dev/null | awk '/HEAD branch/ {print $NF}')
+  default_branch=$(__mt_git_default_branch)
   default_branch="${default_branch:-main}"
 
   local upstream_url="https://github.com/${UPSTREAM_REPO_PATH}.git"
@@ -385,7 +385,7 @@ __mt_push_update_commit_and_raise_pr() {
   local current_branch
   current_branch=$(git branch --show-current)
   local default_branch
-  default_branch=$(git remote show origin 2> /dev/null | awk '/HEAD branch/ {print $NF}')
+  default_branch=$(__mt_git_default_branch)
   default_branch="${default_branch:-main}"
 
   local branch_name="$current_branch"

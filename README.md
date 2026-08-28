@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Git Utilities:** Added `__mt_git_default_branch` to optimize default branch detection by checking local cached refs before attempting network calls.
+- **Pull Request Workflow:** Refactored browser confirmation prompts into a dedicated helper to defer unnecessary API calls until confirmed.
+- **Code Maintenance:** Removed redundant byte formatting logic in LLM cleanup scripts in favor of shared size helper functions.
 - Refactored utility, tool, and VCS shell scripts by extracting embedded AWK and Python logic into dedicated library files under `.bash.d/lib/`.
 - Added Kubernetes (`k8s`) segment visibility controls to prompt display configuration.
 - Introduced `--compact` label toggling and configurable Git branch name length truncation settings.
 - Added a prompt display option (`--ai-model`) to show or hide AI model and version details in the terminal prompt.
 - Integrated AI model detail toggling into persistent configuration management and the interactive system setup menu.
-- Added `mt-toggle-display` CLI command to toggle visibility for Git, GCP, and AI prompt segments and configure GCP display modes.
-- Updated shell prompt rendering to respect display visibility flags and optimize prompt line length by shortening GCP account domains.
-- **Fixed Native Linux URL Opening**: Restored the `xdg-open` fallback in `__open_url` that PR #188 had inadvertently dropped while improving WSL URL-launching, which had left `git-raise-pr` silently unable to open URLs on non-WSL, non-macOS Linux systems.
 
 ---
 

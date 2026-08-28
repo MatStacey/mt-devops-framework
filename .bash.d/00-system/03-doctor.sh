@@ -120,7 +120,7 @@ __mt_doctor_check_sync_repo_state() {
   fi
 
   local default_branch
-  default_branch=$(git -C "$repo_dir" remote show origin 2> /dev/null | awk '/HEAD branch/ {print $NF}')
+  default_branch=$(__mt_git_default_branch "$repo_dir")
   default_branch="${default_branch:-main}"
 
   local current_branch

@@ -41,15 +41,8 @@ __mt_bulk_update_repo() {
     return 0
   fi
 
-  # A bulk operation fetches every repo already, so prefer the locally
-  # cached origin/HEAD symref over the framework's usual `remote show
-  # origin` -- it avoids one extra network round-trip per repo, which
-  # adds up across a whole VCS tree.
   local default_branch
-  default_branch=$(git -C "$repo_path" symbolic-ref refs/remotes/origin/HEAD 2> /dev/null | sed 's@^refs/remotes/origin/@@')
-  if [ -z "$default_branch" ]; then
-    default_branch=$(git -C "$repo_path" remote show origin 2> /dev/null | awk '/HEAD branch/ {print $NF}')
-  fi
+  default_branch=$(__mt_git_default_branch "$repo_path")
   default_branch="${default_branch:-main}"
 
   local update_status="UNCHANGED"
