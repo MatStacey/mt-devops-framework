@@ -87,6 +87,25 @@ __mt_reconcile_ignore_patterns() {
 }
 
 #######################################
+# Git: Report whether ~/.bash.d is already a symlink resolving into the
+# sync repo's own .bash.d subtree -- i.e. whether this machine has been
+# cut over via mt-migrate-symlink, so there's only one physical copy of
+# the framework left and any deployed<->repo copy step would just be a
+# (harmless but pointless, and with --delete active, needlessly risky)
+# self-copy. Used to guard those copy steps in __git_sync_copy_files,
+# mt-get-update, and mt-restore.
+# Arguments:
+#   $1 - Sync repo directory path (DOTFILES_DIR/SYNC_REPO_DIR)
+# Returns:
+#   0 if migrated (symlinked), 1 otherwise
+#######################################
+__mt_bashd_is_symlinked_into_repo() {
+  local repo_dir="$1"
+  [ -L "$HOME/.bash.d" ] || return 1
+  [ "$(readlink -f "$HOME/.bash.d" 2> /dev/null)" = "$(readlink -f "$repo_dir/.bash.d" 2> /dev/null)" ]
+}
+
+#######################################
 # Git: Synchronize active bash configuration files into dotfiles repository
 # Arguments:
 #   $1 - Target repository directory path
@@ -96,18 +115,22 @@ __git_sync_copy_files() {
 
   mkdir -p "$repo_dir/.bash.d"
 
-  local syncignore="$HOME/.bash.d/config/.syncignore"
-  local syncignore_tpl="$HOME/.bash.d/lib/templates/syncignore.tpl"
-  __mt_reconcile_ignore_patterns "$syncignore_tpl" "$syncignore"
+  if __mt_bashd_is_symlinked_into_repo "$repo_dir"; then
+    echo -e "${C_DIM}↪️  ~/.bash.d is already a symlink into ${repo_dir}/.bash.d -- skipping the copy, they're the same directory.${C_RESET}"
+  else
+    local syncignore="$HOME/.bash.d/config/.syncignore"
+    local syncignore_tpl="$HOME/.bash.d/lib/templates/syncignore.tpl"
+    __mt_reconcile_ignore_patterns "$syncignore_tpl" "$syncignore"
 
-  # SECURITY FIX: One-way sync ONLY. Local Home is the source of truth during a push.
-  # No -u/--update: git checkout/pull (run on repo_dir moments earlier by
-  # __mt_push_update_reconcile_branch, and always on a collaborator's first-ever
-  # run via __git_sync_init_repo's fresh clone) stamps every file it writes with
-  # the current time, which is virtually always newer than an edit saved earlier
-  # in $HOME/.bash.d -- -u would then skip copying the real edit entirely,
-  # silently discarding it before git ever sees a diff.
-  rsync -a --delete --delete-excluded --exclude-from="$syncignore" "$HOME/.bash.d/" "$repo_dir/.bash.d/"
+    # SECURITY FIX: One-way sync ONLY. Local Home is the source of truth during a push.
+    # No -u/--update: git checkout/pull (run on repo_dir moments earlier by
+    # __mt_push_update_reconcile_branch, and always on a collaborator's first-ever
+    # run via __git_sync_init_repo's fresh clone) stamps every file it writes with
+    # the current time, which is virtually always newer than an edit saved earlier
+    # in $HOME/.bash.d -- -u would then skip copying the real edit entirely,
+    # silently discarding it before git ever sees a diff.
+    rsync -a --delete --delete-excluded --exclude-from="$syncignore" "$HOME/.bash.d/" "$repo_dir/.bash.d/"
+  fi
 
   if [ -f "$HOME/.bashrc" ]; then
     cp -f "$HOME/.bashrc" "$repo_dir/.bashrc"
@@ -841,7 +864,52 @@ __mt_get_update_install() {
 }
 
 #######################################
-# System: Download and install profile updates from GitHub releases
+# System: Pull the latest framework code directly via git, for a machine
+# already cut over by mt-migrate-symlink -- ~/.bash.d is the sync repo's
+# .bash.d subtree, so there's a live working tree to update in place
+# instead of a separate deployed copy to overwrite. Reuses
+# __mt_push_update_reconcile_branch (the exact same fetch-from-upstream,
+# stash-and-restore-dirty-changes logic mt-push-update already relies
+# on) rather than duplicating that idiom here.
+# Arguments:
+#   $1 - Optional specific version tag to target (empty = latest via
+#        the default branch; a specific tag checks out detached)
+# Globals:
+#   DOTFILES_DIR, SYNC_REPO_DIR, UPSTREAM_REPO_PATH, CONFIG_MANAGER,
+#   CONFIG_FILE
+# Returns:
+#   0 on success, 1 on failure (dirty tree, fetch/merge conflict)
+#######################################
+__mt_get_update_git_pull() {
+  local target_version="$1"
+  local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
+
+  echo -e "${CB_BLUE}⬇️ ~/.bash.d is symlinked into ${repo_dir} -- pulling directly from ${UPSTREAM_REPO_PATH} instead of downloading a release archive.${C_RESET}"
+
+  (__mt_push_update_reconcile_branch) || return 1
+
+  if [ -n "$target_version" ]; then
+    if ! git -C "$repo_dir" checkout "$target_version" > /dev/null 2>&1; then
+      echo -e "${CB_RED}🚨 Could not check out tag ${target_version} in ${repo_dir}.${C_RESET}"
+      return 1
+    fi
+  fi
+
+  local tag_name
+  tag_name=$(git -C "$repo_dir" describe --tags --abbrev=0 2> /dev/null)
+  [ -n "$tag_name" ] && echo "$tag_name" > "$HOME/.bash.d/data/.current_version"
+
+  if [ -f "$CONFIG_MANAGER" ] && [ -f "$CONFIG_FILE" ]; then
+    python3 "$CONFIG_MANAGER" migrate
+  fi
+
+  echo -e "${CB_GREEN}✅ Updated to ${tag_name:-$(git -C "$repo_dir" rev-parse --short HEAD 2> /dev/null)}.${C_RESET}"
+}
+
+#######################################
+# System: Download and install profile updates from GitHub releases --
+# or, on a machine already cut over by mt-migrate-symlink, pull the
+# latest code directly via git instead (see __mt_get_update_git_pull).
 # Usage: mt-get-update [-v version]
 # Options:
 #   -v <version>  Specify a target release version (e.g., v1.1.0)
@@ -864,6 +932,12 @@ mt-get-update() {
   done
   shift $((OPTIND - 1))
 
+  local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
+  if __mt_bashd_is_symlinked_into_repo "$repo_dir"; then
+    __mt_get_update_git_pull "$target_version"
+    return $?
+  fi
+
   echo -e "${CB_BLUE}⬇️ Fetching release information...${C_RESET}"
 
   local download_url="" tag_name=""
@@ -882,6 +956,111 @@ mt-get-update() {
 
   __mt_get_update_install "$ext_root" "$tag_name"
   rm -rf "$tmp_dir"
+}
+
+#######################################
+# Git: One-time, idempotent cutover that replaces ~/.bash.d as a
+# standalone directory with a symlink into the sync repo's own
+# .bash.d subtree, so there's exactly one physical copy of the
+# framework on this machine instead of two kept in sync by
+# mt-push-update/mt-get-update's copy steps. This is the fix for the
+# collaborator merge-conflict root cause __mt_push_update_check_staleness
+# only warns about: a deployed tree that's silently drifted from the
+# checkout it gets pushed from becomes structurally impossible once
+# there's nothing left to drift between. Once run,
+# __mt_bashd_is_symlinked_into_repo starts returning true, which is
+# what unlocks the faster git-based paths in __git_sync_copy_files,
+# __mt_get_update_git_pull, and mt-restore.
+# Refuses to run unless the sync repo checkout is clean, on its
+# default branch, correctly pointed at SYNC_REPO_URL, and identical to
+# ~/.bash.d already (i.e. right after a fresh 'mt-push-update') --
+# anything else means there's real, uncopied local work that would be
+# stranded the moment ~/.bash.d stops being its own directory. Safe to
+# re-run: no-ops immediately if ~/.bash.d is already a symlink.
+# Usage: mt-migrate-symlink
+# Globals:
+#   DOTFILES_DIR, SYNC_REPO_DIR, SYNC_REPO_URL
+#######################################
+mt-migrate-symlink() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  if [ -L "$HOME/.bash.d" ]; then
+    echo -e "${CB_GREEN}✅ ~/.bash.d is already a symlink (-> $(readlink -f "$HOME/.bash.d")). Nothing to do.${C_RESET}"
+    return 0
+  fi
+
+  local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
+  if [ ! -d "$repo_dir/.git" ]; then
+    echo -e "${CB_RED}🚨 ${repo_dir} isn't a git checkout yet. Run 'mt-push-update' first.${C_RESET}"
+    return 1
+  fi
+
+  local default_branch
+  default_branch=$(__mt_git_default_branch "$repo_dir")
+  default_branch="${default_branch:-main}"
+
+  local current_branch
+  current_branch=$(git -C "$repo_dir" branch --show-current)
+  if [ "$current_branch" != "$default_branch" ]; then
+    echo -e "${CB_RED}🚨 ${repo_dir} is on '${current_branch}', not '${default_branch}'. Run 'mt-push-update' to land or clean up that branch first.${C_RESET}"
+    return 1
+  fi
+
+  if [ -n "$(git -C "$repo_dir" status --porcelain 2> /dev/null)" ]; then
+    echo -e "${CB_RED}🚨 ${repo_dir} has uncommitted changes. Run 'mt-push-update' first.${C_RESET}"
+    return 1
+  fi
+
+  local actual_origin
+  actual_origin=$(git -C "$repo_dir" remote get-url origin 2> /dev/null)
+  if [ -n "${SYNC_REPO_URL:-}" ] && [ "$actual_origin" != "$SYNC_REPO_URL" ]; then
+    echo -e "${CB_RED}🚨 ${repo_dir}'s origin doesn't match SYNC_REPO_URL. Run 'mt-push-update' first -- it fixes this automatically.${C_RESET}"
+    return 1
+  fi
+
+  echo -e "${CB_BLUE}🔍 Checking ~/.bash.d matches ${repo_dir}/.bash.d before cutover...${C_RESET}"
+  local drift
+  drift=$(diff -rq \
+    --exclude='config.yaml' --exclude='.env.cache' --exclude='*_token.sh' \
+    --exclude='secrets_metadata.yaml' --exclude='.vcs_hub.json' --exclude='.syncignore' \
+    --exclude='data' --exclude='40-private' --exclude='private' \
+    "$HOME/.bash.d" "$repo_dir/.bash.d" 2> /dev/null)
+  if [ -n "$drift" ]; then
+    echo -e "${CB_RED}🚨 ~/.bash.d and ${repo_dir}/.bash.d differ:${C_RESET}"
+    echo "  ${drift//$'\n'/$'\n  '}"
+    echo -e "${CB_YELLOW}Run 'mt-push-update' first so they match, then re-run 'mt-migrate-symlink'.${C_RESET}"
+    return 1
+  fi
+  echo -e "${CB_GREEN}✅ Trees match.${C_RESET}"
+
+  echo -e "${CB_BLUE}📦 Copying local-only files (config, secrets, cache, private content) into ${repo_dir}/.bash.d...${C_RESET}"
+  local local_only_paths=(
+    "config/config.yaml" "config/.env.cache" "config/secrets_metadata.yaml"
+    "data/.current_version" "data/cache" "data/logs" "40-private" "lib/private"
+  )
+  local rel_path
+  for rel_path in "${local_only_paths[@]}"; do
+    [ -e "$HOME/.bash.d/$rel_path" ] || continue
+    mkdir -p "$(dirname "$repo_dir/.bash.d/$rel_path")"
+    cp -a "$HOME/.bash.d/$rel_path" "$repo_dir/.bash.d/$rel_path"
+  done
+  local token_file
+  for token_file in "$HOME/.bash.d/config/"*_token.sh; do
+    [ -f "$token_file" ] || continue
+    cp -p "$token_file" "$repo_dir/.bash.d/config/$(basename "$token_file")"
+  done
+
+  local backup_dir
+  backup_dir="$HOME/.bash.d.pre-symlink-backup-$(date +%Y%m%d%H%M%S)"
+  mv "$HOME/.bash.d" "$backup_dir"
+  ln -s "$repo_dir/.bash.d" "$HOME/.bash.d"
+
+  echo -e "${CB_GREEN}✅ ~/.bash.d is now a symlink into ${repo_dir}/.bash.d.${C_RESET}"
+  echo -e "${C_DIM}   Your previous deployed tree is safely kept at ${backup_dir} -- delete it once you're confident everything works.${C_RESET}"
+  echo -e "${CB_YELLOW}Open a new terminal (or run 'source ~/.bashrc') and 'mt-doctor' to verify.${C_RESET}"
 }
 
 #######################################

@@ -8,7 +8,11 @@
 # System: Back up ~/.bash.d and ~/.bashrc to a timestamped directory
 # under BACKUP_DIR before mt-uninstall removes them, mirroring the same
 # backup-before-destroy pattern mt-push-update and mt-get-update already
-# use elsewhere in the framework.
+# use elsewhere in the framework. Uses 'cp -aL' rather than 'cp -a' so
+# that on a machine migrated via mt-migrate-symlink -- where ~/.bash.d
+# is itself a symlink -- the backup captures the real files it points
+# to instead of just a copy of the symlink (which 'cp -a' alone would
+# leave dangling the moment the target is ever removed).
 # Globals:
 #   BACKUP_DIR
 # Outputs:
@@ -19,7 +23,7 @@ __mt_uninstall_backup() {
   backup_dir="${BACKUP_DIR:-$HOME/backups}/uninstall/$(date +%Y%m%d_%H%M%S)"
   mkdir -p "$backup_dir"
 
-  [ -d "$HOME/.bash.d" ] && cp -a "$HOME/.bash.d" "$backup_dir/.bash.d"
+  [ -d "$HOME/.bash.d" ] && cp -aL "$HOME/.bash.d" "$backup_dir/.bash.d"
   [ -f "$HOME/.bashrc" ] && cp -p "$HOME/.bashrc" "$backup_dir/.bashrc"
 
   echo "$backup_dir"
@@ -150,6 +154,9 @@ mt-uninstall() {
   local restore_bashrc=false
   __mt_uninstall_bashrc_backup_trustworthy "$repo_dir" && restore_bashrc=true
 
+  local bashd_is_symlink=false
+  [ -L "$HOME/.bash.d" ] && bashd_is_symlink=true
+
   echo -e "${CB_RED}==========================================================${C_RESET}"
   echo -e "${CB_RED}            MT DEVOPS FRAMEWORK - UNINSTALL                ${C_RESET}"
   echo -e "${CB_RED}==========================================================${C_RESET}\n"
@@ -176,7 +183,11 @@ mt-uninstall() {
   fi
 
   echo -e "${CB_YELLOW}This will:${C_RESET}"
-  echo -e "  ${CB_RED}🗑️  Delete${C_RESET}  ~/.bash.d (the entire framework)"
+  if [ "$bashd_is_symlink" = true ]; then
+    echo -e "  ${CB_YELLOW}🔗 Remove${C_RESET}  the ~/.bash.d symlink (the framework's actual code lives in ${repo_dir}, not deleted here)"
+  else
+    echo -e "  ${CB_RED}🗑️  Delete${C_RESET}  ~/.bash.d (the entire framework)"
+  fi
   if [ "$restore_bashrc" = true ]; then
     echo -e "  ${CB_YELLOW}♻️  Restore${C_RESET} ~/.bashrc from ~/.bashrc.bak (your pre-install bashrc)"
   else

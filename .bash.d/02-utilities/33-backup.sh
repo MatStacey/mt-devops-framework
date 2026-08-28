@@ -272,7 +272,9 @@ mt-restore() {
 
   # 3. Sync to Git Workspace
   local git_repo_path="${DOTFILES_DIR:-$HOME/vcs/personal/mt-devops-framework}"
-  if [ -d "$git_repo_path" ]; then
+  if __mt_bashd_is_symlinked_into_repo "$git_repo_path"; then
+    echo -e "${C_DIM}↪️  ~/.bash.d is already a symlink into ${git_repo_path}/.bash.d -- nothing separate to sync.${C_RESET}"
+  elif [ -d "$git_repo_path" ]; then
     echo -e "${CB_BLUE}🔄 Syncing restored files to Git workspace (${git_repo_path})...${C_RESET}"
     rsync -a -u --delete "$HOME/.bash.d/" "${git_repo_path}/.bash.d/"
   fi
