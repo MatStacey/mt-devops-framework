@@ -309,6 +309,7 @@ __mt_push_update_reconcile_branch() {
       exit 1
     fi
   fi
+  return 0
 }
 
 #######################################
