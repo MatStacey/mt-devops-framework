@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Fixed Native Linux URL Opening**: Restored the `xdg-open` fallback in `__open_url` that PR #188 had inadvertently dropped while improving WSL URL-launching, which had left `git-raise-pr` silently unable to open URLs on non-WSL, non-macOS Linux systems.
+- **AWK Portability & README History Fixes**: Extracted `mt-help`'s inline docstring-splitting AWK script to `lib/awk/mt_render_help.awk` (closing a duplicate-logic gap that had let a cross-platform escaping bug reappear), and tightened the AI README-summary prompt to cap bullet output so a single verbose push can no longer evict the entire rolling update history.
 - **Git PR Helpers**: Streamlined output messages when pushing changes to existing pull requests.
 - **CLI Cleanup**: Removed duplicate display of the Pull Request URL before the interactive prompt.
 - **Git Helpers**: Enhanced terminal feedback when an existing open Pull Request is detected to explicitly confirm that recent local commits have been pushed.
 - **User Interface**: Streamlined output logging format during PR creation workflows in `50-git.sh`.
 - **Improved GitHub PR Detection**: Refactored existing pull request checks to query the authenticated GitHub user via `gh api user` instead of parsing local git remote URLs.
 - **Enhanced Cross-Fork PR Matching**: Dynamically constructs the head repository path using the logged-in user's namespace, ensuring more reliable detection of open PRs across forks.
-- Improved open Pull Request detection logic to accurately support cross-repository and fork workflows using the GitHub API.
-- Added a conditional check (`is_github`) to ensure PR lookup operations only execute within GitHub repository contexts.
 
 ---
 
