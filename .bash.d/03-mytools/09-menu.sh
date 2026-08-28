@@ -159,12 +159,12 @@ __mt_menu_pick_theme() {
 }
 
 #######################################
-# System: fzf-pick a prompt segment (git/gcp/ai) and toggle its
+# System: fzf-pick a prompt segment (git/gcp/ai/k8s) and toggle its
 # visibility via mt-toggle-display
 #######################################
 __mt_menu_toggle_display_element() {
   local element
-  element=$(printf '%s\n' git gcp ai | fzf --prompt="🎨 Toggle Prompt Element > " --height=~10 --layout=reverse --border)
+  element=$(printf '%s\n' git gcp ai k8s | fzf --prompt="🎨 Toggle Prompt Element > " --height=~10 --layout=reverse --border)
   if [ -z "$element" ]; then
     echo -e "${CB_YELLOW}⚠️  Selection cancelled.${C_RESET}"
     return 0
@@ -193,6 +193,25 @@ __mt_menu_pick_gcp_display_mode() {
 #######################################
 __mt_menu_toggle_ai_model() {
   mt-toggle-display --ai-model
+}
+
+#######################################
+# System: Toggle compact icon labels for prompt segments via
+# mt-toggle-display --compact -- wrapped since __mt_menu_submenu
+# commands can't take inline arguments
+#######################################
+__mt_menu_toggle_compact_labels() {
+  mt-toggle-display --compact
+}
+
+#######################################
+# System: Prompt for a max Git branch name length and apply it via
+# mt-toggle-display --git-branch-len
+#######################################
+__mt_menu_set_git_branch_len() {
+  local len
+  read -r -p "Max Git branch name length before truncation, 0 = unlimited [30]: " len < /dev/tty
+  mt-toggle-display --git-branch-len "${len:-30}"
 }
 
 #######################################
@@ -296,9 +315,11 @@ __mt_menu_setup_terminal() {
     "Change Theme (mt-set-theme)" __mt_menu_pick_theme \
     "Gemini Status (mt-get-gemini-status)" mt-get-gemini-status \
     "View Prompt Display Settings (mt-toggle-display)" mt-toggle-display \
-    "Toggle a Prompt Element -- Git/GCP/AI (mt-toggle-display)" __mt_menu_toggle_display_element \
+    "Toggle a Prompt Element -- Git/GCP/AI/K8s (mt-toggle-display)" __mt_menu_toggle_display_element \
     "Set GCP Display Mode (mt-toggle-display)" __mt_menu_pick_gcp_display_mode \
-    "Toggle AI Model/Version Detail (mt-toggle-display)" __mt_menu_toggle_ai_model
+    "Toggle AI Model/Version Detail (mt-toggle-display)" __mt_menu_toggle_ai_model \
+    "Toggle Compact Icon Labels (mt-toggle-display)" __mt_menu_toggle_compact_labels \
+    "Set Max Git Branch Name Length (mt-toggle-display)" __mt_menu_set_git_branch_len
 }
 
 #######################################

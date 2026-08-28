@@ -245,8 +245,13 @@ def load_env():
     export("DISPLAY_SHOW_GIT", disp_cfg.get("show_git", True), to_lower=True)
     export("DISPLAY_SHOW_GCP", disp_cfg.get("show_gcp", True), to_lower=True)
     export("DISPLAY_SHOW_AI", disp_cfg.get("show_ai", True), to_lower=True)
+    export("DISPLAY_SHOW_K8S", disp_cfg.get("show_k8s", True), to_lower=True)
     export("DISPLAY_SHOW_AI_MODEL", disp_cfg.get("show_ai_model", True), to_lower=True)
+    export(
+        "DISPLAY_COMPACT_LABELS", disp_cfg.get("compact_labels", False), to_lower=True
+    )
     export("DISPLAY_GCP_MODE", disp_cfg.get("gcp_display", "both"), to_lower=True)
+    export("DISPLAY_GIT_BRANCH_MAX_LEN", disp_cfg.get("git_branch_max_len", 30))
 
 
 _MISSING = object()

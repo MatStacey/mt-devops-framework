@@ -64,5 +64,8 @@ display:
   show_git: true
   show_gcp: true
   show_ai: true
+  show_k8s: true
   show_ai_model: true
+  compact_labels: false
   gcp_display: both
+  git_branch_max_len: 30
