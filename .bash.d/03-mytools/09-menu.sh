@@ -328,6 +328,7 @@ __mt_menu_setup_terminal() {
 __mt_menu_setup_maintenance() {
   __mt_menu_submenu "🔧 Maintenance & View" \
     "Run Diagnostics (mt-doctor)" mt-doctor \
+    "Symlink ~/.bash.d Into Sync Repo (mt-migrate-symlink)" mt-migrate-symlink \
     "Reload Config from Disk (mt-load-config)" mt-load-config \
     "Clean Up Legacy config.yaml Keys (mt-migrate-config)" mt-migrate-config \
     "Open config.yaml in IDE (mt-open-config)" mt-open-config \

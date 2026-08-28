@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added symlink detection logic to bypass redundant file copying during sync and restore operations when `~/.bash.d` is symlinked to the git workspace.
+- Enhanced uninstall and backup processes to correctly resolve, back up, and remove symlinked framework directories and display accurate status messages.
+- Added an option to the maintenance menu for running `mt-migrate-symlink`.
 - Added a framework staleness check to `mt-push-update` that compares the local version against the latest GitHub release.
 - Introduced an interactive confirmation prompt and warning to prevent outdated local deployments from silently overwriting upstream changes.
 - **Git Utilities:** Added `__mt_git_default_branch` to optimize default branch detection by checking local cached refs before attempting network calls.
 - **Pull Request Workflow:** Refactored browser confirmation prompts into a dedicated helper to defer unnecessary API calls until confirmed.
 - **Code Maintenance:** Removed redundant byte formatting logic in LLM cleanup scripts in favor of shared size helper functions.
-- Refactored utility, tool, and VCS shell scripts by extracting embedded AWK and Python logic into dedicated library files under `.bash.d/lib/`.
-- Added Kubernetes (`k8s`) segment visibility controls to prompt display configuration.
-- Introduced `--compact` label toggling and configurable Git branch name length truncation settings.
 
 ---
 
