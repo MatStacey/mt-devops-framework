@@ -64,6 +64,7 @@ def load_env():
     dock_cfg = d.get("docker") or {}
     srv_cfg = d.get("server") or {}
     cicd_cfg = d.get("cicd") or {}
+    disp_cfg = d.get("display") or {}
 
     # CI/CD
     export(
@@ -239,6 +240,12 @@ def load_env():
         to_lower=True,
     )
     export("HTTP_SERVER_IDLE_TIMEOUT_SEC", srv_cfg.get("idle_timeout_sec", 1800))
+
+    # Display (prompt segment visibility -- see __cloud_ps1 in 10-prompt.sh)
+    export("DISPLAY_SHOW_GIT", disp_cfg.get("show_git", True), to_lower=True)
+    export("DISPLAY_SHOW_GCP", disp_cfg.get("show_gcp", True), to_lower=True)
+    export("DISPLAY_SHOW_AI", disp_cfg.get("show_ai", True), to_lower=True)
+    export("DISPLAY_GCP_MODE", disp_cfg.get("gcp_display", "both"), to_lower=True)
 
 
 _MISSING = object()

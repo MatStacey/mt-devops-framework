@@ -59,3 +59,9 @@ server:
 
 cicd:
   default_provider: github
+
+display:
+  show_git: true
+  show_gcp: true
+  show_ai: true
+  gcp_display: both
