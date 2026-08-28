@@ -227,26 +227,31 @@ mt-toggle-ai() {
 }
 
 #######################################
-# Config: Show/hide individual prompt segments (Git, GCP, AI provider),
-# pick which GCP identity field(s) the GCP segment shows, or show/hide
-# the AI segment's model/version parenthetical (e.g. "AI: Gemini
-# (3.6-flash)" vs "AI: Gemini"). This is purely a prompt-display
-# setting -- separate from mt-toggle-ai, which controls whether AI
-# integration runs at all elsewhere in the framework. Called with no
-# arguments, prints the current display configuration instead of
-# changing anything.
-# Usage: mt-toggle-display [-e|--element <git|gcp|ai>] [--gcp-mode <project|account|both>] [--ai-model]
+# Config: Show/hide individual prompt segments (Git, GCP, AI provider,
+# K8s), pick which GCP identity field(s) the GCP segment shows,
+# show/hide the AI segment's model/version parenthetical (e.g. "AI:
+# Gemini (3.6-flash)" vs "AI: Gemini"), swap text labels for compact
+# icons, or cap how long a Git branch name can get before truncating
+# with an ellipsis. This is purely a prompt-display setting -- separate
+# from mt-toggle-ai, which controls whether AI integration runs at all
+# elsewhere in the framework. Called with no arguments, prints the
+# current display configuration instead of changing anything.
+# Usage: mt-toggle-display [-e|--element <git|gcp|ai|k8s>] [--gcp-mode <project|account|both>] [--ai-model] [--compact] [--git-branch-len <n>]
 # Options:
-#   -e, --element <git|gcp|ai>          Show/hide the given prompt segment
+#   -e, --element <git|gcp|ai|k8s>      Show/hide the given prompt segment
 #   --gcp-mode <project|account|both>   Which GCP identity field(s) to show
 #   --ai-model                          Show/hide the AI segment's model/version detail
+#   --compact                           Toggle icon labels instead of text labels
+#   --git-branch-len <n>                Max Git branch name length before truncation (0 = unlimited)
 #   -h, --help                          Show this help menu
 # Globals:
-#   DISPLAY_SHOW_GIT, DISPLAY_SHOW_GCP, DISPLAY_SHOW_AI,
-#   DISPLAY_SHOW_AI_MODEL, DISPLAY_GCP_MODE
+#   DISPLAY_SHOW_GIT, DISPLAY_SHOW_GCP, DISPLAY_SHOW_AI, DISPLAY_SHOW_K8S,
+#   DISPLAY_SHOW_AI_MODEL, DISPLAY_COMPACT_LABELS, DISPLAY_GCP_MODE,
+#   DISPLAY_GIT_BRANCH_MAX_LEN
 #######################################
 mt-toggle-display() {
-  local element="" gcp_mode="" toggle_ai_model=false
+  local element="" gcp_mode="" toggle_ai_model=false toggle_compact=false
+  local branch_len=""
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -266,6 +271,14 @@ mt-toggle-display() {
         toggle_ai_model=true
         shift
         ;;
+      --compact)
+        toggle_compact=true
+        shift
+        ;;
+      --git-branch-len)
+        branch_len="$2"
+        shift 2
+        ;;
       *)
         echo "🚨 Unknown option: $1"
         return 1
@@ -273,13 +286,16 @@ mt-toggle-display() {
     esac
   done
 
-  if [ -z "$element" ] && [ -z "$gcp_mode" ] && [ "$toggle_ai_model" = false ]; then
+  if [ -z "$element" ] && [ -z "$gcp_mode" ] && [ "$toggle_ai_model" = false ] &&
+    [ "$toggle_compact" = false ] && [ -z "$branch_len" ]; then
     echo -e "${CB_BLUE}==========================================================${C_RESET}"
     echo -e "${CB_BLUE}               PROMPT DISPLAY SETTINGS                    ${C_RESET}"
     echo -e "${CB_BLUE}==========================================================${C_RESET}"
-    echo -e " ${CB_CYAN}git${C_RESET} : ${DISPLAY_SHOW_GIT:-true}"
-    echo -e " ${CB_CYAN}gcp${C_RESET} : ${DISPLAY_SHOW_GCP:-true} (mode: ${DISPLAY_GCP_MODE:-both})"
-    echo -e " ${CB_CYAN}ai ${C_RESET} : ${DISPLAY_SHOW_AI:-true} (model: ${DISPLAY_SHOW_AI_MODEL:-true})"
+    echo -e " ${CB_CYAN}git    ${C_RESET} : ${DISPLAY_SHOW_GIT:-true} (max-len: ${DISPLAY_GIT_BRANCH_MAX_LEN:-30})"
+    echo -e " ${CB_CYAN}gcp    ${C_RESET} : ${DISPLAY_SHOW_GCP:-true} (mode: ${DISPLAY_GCP_MODE:-both})"
+    echo -e " ${CB_CYAN}ai     ${C_RESET} : ${DISPLAY_SHOW_AI:-true} (model: ${DISPLAY_SHOW_AI_MODEL:-true})"
+    echo -e " ${CB_CYAN}k8s    ${C_RESET} : ${DISPLAY_SHOW_K8S:-true}"
+    echo -e " ${CB_CYAN}compact${C_RESET} : ${DISPLAY_COMPACT_LABELS:-false}"
     echo -e "${CB_BLUE}==========================================================${C_RESET}"
     return 0
   fi
@@ -294,12 +310,30 @@ mt-toggle-display() {
     echo "✅ GCP prompt display set to $gcp_mode."
   fi
 
+  if [ -n "$branch_len" ]; then
+    if ! [[ "$branch_len" =~ ^[0-9]+$ ]]; then
+      echo "Usage: mt-toggle-display --git-branch-len <n> (0 = unlimited)"
+      return 1
+    fi
+    python3 "$CONFIG_MANAGER" update "display" "git_branch_max_len" "$branch_len"
+    export DISPLAY_GIT_BRANCH_MAX_LEN="$branch_len"
+    echo "✅ Git branch name max length set to $branch_len."
+  fi
+
   if [ "$toggle_ai_model" = true ]; then
     local next_ai_model="true"
     [ "${DISPLAY_SHOW_AI_MODEL:-true}" = "true" ] && next_ai_model="false"
     python3 "$CONFIG_MANAGER" update "display" "show_ai_model" "$next_ai_model"
     export DISPLAY_SHOW_AI_MODEL="$next_ai_model"
     echo "✅ AI model/version display set to $next_ai_model."
+  fi
+
+  if [ "$toggle_compact" = true ]; then
+    local next_compact="true"
+    [ "${DISPLAY_COMPACT_LABELS:-false}" = "true" ] && next_compact="false"
+    python3 "$CONFIG_MANAGER" update "display" "compact_labels" "$next_compact"
+    export DISPLAY_COMPACT_LABELS="$next_compact"
+    echo "✅ Compact icon labels set to $next_compact."
   fi
 
   if [ -n "$element" ]; then
@@ -317,8 +351,12 @@ mt-toggle-display() {
         key="show_ai"
         current="${DISPLAY_SHOW_AI:-true}"
         ;;
+      k8s)
+        key="show_k8s"
+        current="${DISPLAY_SHOW_K8S:-true}"
+        ;;
       *)
-        echo "Usage: mt-toggle-display -e|--element <git|gcp|ai>"
+        echo "Usage: mt-toggle-display -e|--element <git|gcp|ai|k8s>"
         return 1
         ;;
     esac
@@ -331,6 +369,7 @@ mt-toggle-display() {
       git) export DISPLAY_SHOW_GIT="$next" ;;
       gcp) export DISPLAY_SHOW_GCP="$next" ;;
       ai) export DISPLAY_SHOW_AI="$next" ;;
+      k8s) export DISPLAY_SHOW_K8S="$next" ;;
     esac
 
     echo "✅ Prompt element '$element' display set to $next."

@@ -208,7 +208,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-setup-paths` | Config: Interactive Paths Setup Menu (deprecated alias) |
 | `mt-setup-system` | Config: Interactive System Setup Menu (deprecated alias) |
 | `mt-toggle-ai` | Config: Toggle global AI prompt and workflow integration (true/false) |
-| `mt-toggle-display` | Config: Show/hide individual prompt segments (Git, GCP, AI provider), |
+| `mt-toggle-display` | Config: Show/hide individual prompt segments (Git, GCP, AI provider, |
 | `mt-toggle-format-on-push` | Config: Toggle global format-on-push behavior (true/false) |
 | `mt-toggle-update-confirm` | Config: Toggle whether mt-get-update pauses to confirm before overwriting |
 | `mt-wizard-ai` | Config: Interactive AI Setup Menu |
