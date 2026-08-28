@@ -35,7 +35,7 @@ set +e
 while IFS= read -r -d '' f; do
   # shellcheck source=/dev/null
   source "$f"
-done < <(find "$HOME/.bash.d" -type f -name "*.sh" -not -path "*/config/themes/*" -not -path "*/.dev/*" -not -name "install.sh" -print0 | sort -z)
+done < <(find -L "$HOME/.bash.d" -type f -name "*.sh" -not -path "*/config/themes/*" -not -path "*/.dev/*" -not -name "install.sh" -print0 | sort -z)
 
 echo
 echo -e "${WZ_CYAN}--- Install Type ---${WZ_RESET}"

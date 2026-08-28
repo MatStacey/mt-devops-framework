@@ -834,7 +834,7 @@ HDR
     echo "" >> "$out_file"
     echo "Private functions prefixed with \`_\` or \`__\` used internally by the framework." >> "$out_file"
 
-    find "$HOME/.bash.d" -type f -name "*.sh" -exec grep -HnE "^_{1,2}[a-zA-Z0-9_-]+\(\)[ \t]*\{" {} + | while read -r line; do
+    find -L "$HOME/.bash.d" -type f -name "*.sh" -exec grep -HnE "^_{1,2}[a-zA-Z0-9_-]+\(\)[ \t]*\{" {} + | while read -r line; do
       local fpath
       fpath=$(echo "$line" | cut -d: -f1)
       local func_name

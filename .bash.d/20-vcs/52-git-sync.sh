@@ -181,7 +181,7 @@ __mt_push_update_run_shellcheck() {
     echo -e "${CB_YELLOW}⚠️ ShellCheck is not installed locally. Skipping...${C_RESET}"
     return 0
   fi
-  if ! find "$HOME/.bash.d" -type f -name "*.sh" -not -path "*/data/cache/*" -not -path "*/40-private/*" -not -path "*/lib/private/*" -print0 | xargs -0 shellcheck -e SC1090,SC1091,SC2119,SC2120,SC2207,SC2015,SC2317,SC2016,SC2129,SC2028,SC1003; then
+  if ! find -L "$HOME/.bash.d" -type f -name "*.sh" -not -path "*/data/cache/*" -not -path "*/40-private/*" -not -path "*/lib/private/*" -print0 | xargs -0 shellcheck -e SC1090,SC1091,SC2119,SC2120,SC2207,SC2015,SC2317,SC2016,SC2129,SC2028,SC1003; then
     echo -e "${CB_RED}🚨 ShellCheck failed! Please fix the errors above before syncing.${C_RESET}"
     return 1
   fi
