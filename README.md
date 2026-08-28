@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Git PR Helpers**: Streamlined output messages when pushing changes to existing pull requests.
+- **CLI Cleanup**: Removed duplicate display of the Pull Request URL before the interactive prompt.
 - **Git Helpers**: Enhanced terminal feedback when an existing open Pull Request is detected to explicitly confirm that recent local commits have been pushed.
 - **User Interface**: Streamlined output logging format during PR creation workflows in `50-git.sh`.
 - **Improved GitHub PR Detection**: Refactored existing pull request checks to query the authenticated GitHub user via `gh api user` instead of parsing local git remote URLs.
 - **Enhanced Cross-Fork PR Matching**: Dynamically constructs the head repository path using the logged-in user's namespace, ensuring more reliable detection of open PRs across forks.
 - Improved open Pull Request detection logic to accurately support cross-repository and fork workflows using the GitHub API.
 - Added a conditional check (`is_github`) to ensure PR lookup operations only execute within GitHub repository contexts.
-- **Existing PR Detection**: Added automated checks for pre-existing open Pull Requests before creation, preventing failure on repeated pushes and offering an option to view the existing PR in a browser.
-- **Targeted PR Queries**: Updated `gh pr view` lookup commands to explicitly specify the target branch and repository flag.
 
 ---
 
