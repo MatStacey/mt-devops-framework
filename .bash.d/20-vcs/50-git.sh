@@ -374,29 +374,29 @@ ${pr_body}"
 
     local pr_success=0
 
+    local pr_url=""
+
     if [ -n "$pr_title" ]; then
-      gh pr create \
+      pr_url=$(gh pr create \
         --base "$target_branch" \
         "${repo_flag[@]}" \
         --title "$pr_title" \
-        --body "$pr_body" || pr_success=1
+        --body "$pr_body") || pr_success=1
     else
-      gh pr create \
+      pr_url=$(gh pr create \
         --base "$target_branch" \
         "${repo_flag[@]}" \
-        --fill || pr_success=1
+        --fill) || pr_success=1
     fi
 
     if [ $pr_success -ne 0 ]; then
-      echo -e "${CB_RED}🚨 Pull Request creation failed.${C_RESET}"
+      echo -e "${CB_RED}❌ Pull Request creation failed.${C_RESET}"
       return 1
     fi
 
     echo -e "${CB_GREEN}✅ Pull Request created successfully!${C_RESET}"
 
     if __git_raise_pr_confirm_open_browser; then
-      local pr_url
-      pr_url=$(gh pr view "$current_branch" "${repo_flag[@]}" --json url -q .url)
       __open_url "$pr_url"
     fi
   else
