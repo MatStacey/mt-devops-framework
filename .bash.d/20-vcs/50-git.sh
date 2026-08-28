@@ -311,13 +311,15 @@ __git_raise_pr_create_or_open() {
     # as a failure.
     local existing_pr_url=""
     if [ "$is_github" = true ]; then
-      local head_repo
-      head_repo=$(git config --get remote.origin.url | sed -E \
-        's#^git@github\.com:(.+)$#\1#; s#^https://github\.com/([^/]+/[^/]+)(\.git)?$#\1#')
-      existing_pr_url=$(gh api \
-        "repos/${UPSTREAM_REPO_PATH}/pulls?state=open&per_page=100" \
-        --jq ".[] | select(.head.repo.full_name == \"$head_repo\" and .head.ref == \"$current_branch\") | .html_url" \
-        2> /dev/null | head -n 1)
+      local github_user
+      github_user=$(gh api user --jq '.login' 2> /dev/null || true)
+
+      if [ -n "$github_user" ]; then
+        existing_pr_url=$(gh api \
+          "repos/${UPSTREAM_REPO_PATH}/pulls?state=open&per_page=100" \
+          --jq ".[] | select(.head.repo.full_name == \"${github_user}/$(basename "$UPSTREAM_REPO_PATH")\" and .head.ref == \"$current_branch\") | .html_url" \
+          2> /dev/null | head -n 1)
+      fi
     fi
 
     if [ -n "$existing_pr_url" ]; then
