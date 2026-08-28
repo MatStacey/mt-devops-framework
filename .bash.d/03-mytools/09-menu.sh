@@ -159,6 +159,34 @@ __mt_menu_pick_theme() {
 }
 
 #######################################
+# System: fzf-pick a prompt segment (git/gcp/ai) and toggle its
+# visibility via mt-toggle-display
+#######################################
+__mt_menu_toggle_display_element() {
+  local element
+  element=$(printf '%s\n' git gcp ai | fzf --prompt="🎨 Toggle Prompt Element > " --height=~10 --layout=reverse --border)
+  if [ -z "$element" ]; then
+    echo -e "${CB_YELLOW}⚠️  Selection cancelled.${C_RESET}"
+    return 0
+  fi
+  mt-toggle-display --element "$element"
+}
+
+#######################################
+# System: fzf-pick which GCP identity field(s) the prompt's GCP segment
+# shows, and apply it via mt-toggle-display --gcp-mode
+#######################################
+__mt_menu_pick_gcp_display_mode() {
+  local mode
+  mode=$(printf '%s\n' project account both | fzf --prompt="☁️  GCP Display Mode > " --height=~10 --layout=reverse --border)
+  if [ -z "$mode" ]; then
+    echo -e "${CB_YELLOW}⚠️  Selection cancelled.${C_RESET}"
+    return 0
+  fi
+  mt-toggle-display --gcp-mode "$mode"
+}
+
+#######################################
 # System: Prompt for freeform gcloud command args and run them via
 # gcl-as-json, since gcloud subcommands are multiple separate tokens
 # (e.g. "compute instances list") rather than one single argument
@@ -257,7 +285,10 @@ __mt_menu_setup_secrets() {
 __mt_menu_setup_terminal() {
   __mt_menu_submenu "🎨 Terminal & Display" \
     "Change Theme (mt-set-theme)" __mt_menu_pick_theme \
-    "Gemini Status (mt-get-gemini-status)" mt-get-gemini-status
+    "Gemini Status (mt-get-gemini-status)" mt-get-gemini-status \
+    "View Prompt Display Settings (mt-toggle-display)" mt-toggle-display \
+    "Toggle a Prompt Element -- Git/GCP/AI (mt-toggle-display)" __mt_menu_toggle_display_element \
+    "Set GCP Display Mode (mt-toggle-display)" __mt_menu_pick_gcp_display_mode
 }
 
 #######################################

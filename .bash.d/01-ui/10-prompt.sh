@@ -99,6 +99,11 @@ __prompt_git_info() {
 
 #######################################
 # UI: Generate dynamic zero-lag prompt with clickable links and Git status
+# Globals:
+#   DISPLAY_SHOW_GCP, DISPLAY_SHOW_GIT, DISPLAY_SHOW_AI -- per-segment
+#     visibility toggles set via mt-toggle-display (default: true)
+#   DISPLAY_GCP_MODE -- which GCP identity field(s) the GCP segment
+#     shows: project, account, or both (default: both)
 # Outputs:
 #   Prints formatted prompt string to STDOUT
 #######################################
@@ -109,23 +114,47 @@ __cloud_ps1() {
   local __prompt_gcp_proj="" __prompt_gcp_acct="" __prompt_gcp_color=""
   local __prompt_k8s_ctx="" __prompt_git_branch="" __prompt_git_color="" __prompt_git_url=""
 
-  __prompt_gcp_info
+  local show_gcp="${DISPLAY_SHOW_GCP:-true}" show_git="${DISPLAY_SHOW_GIT:-true}"
+  local show_ai="${DISPLAY_SHOW_AI:-true}"
+
+  [ "$show_gcp" = "true" ] && __prompt_gcp_info
   __prompt_k8s_info
-  __prompt_git_info
+  [ "$show_git" = "true" ] && __prompt_git_info
 
   local out=""
 
-  # 1. Format GCP Segment
-  if [ -n "$__prompt_gcp_proj" ]; then
-    local gcp_text="GCP: ${__prompt_gcp_proj}"
-    [ -n "$__prompt_gcp_acct" ] && gcp_text="${gcp_text} (${__prompt_gcp_acct})"
-    local gcp_url="https://console.cloud.google.com/home/dashboard?project=${__prompt_gcp_proj}"
-    local color_code="${np_start}${__prompt_gcp_color}${np_end}"
-    local link_start="${np_start}${e}]8;;${gcp_url}${e}\\${np_end}"
-    local link_end="${np_start}${e}]8;;${e}\\${np_end}"
-    out="${link_start}${color_code}${gcp_text}${color_reset}${link_end}"
-  elif [ -n "$__prompt_gcp_acct" ]; then
-    out="${np_start}${__prompt_gcp_color}${np_end}GCP: (${__prompt_gcp_acct})${color_reset}"
+  # 1. Format GCP Segment -- gcp_display config (DISPLAY_GCP_MODE) picks
+  # which identity field(s) show. "both" prefers the project (linking to
+  # its console dashboard) and, when the account is also known, appends
+  # just its local-part (before "@") rather than the full email -- the
+  # domain rarely adds signal once a project is already shown, and full
+  # emails are the single biggest contributor to prompt line length.
+  # "account" alone keeps the full email, since there's nothing else to
+  # disambiguate it from.
+  if [ "$show_gcp" = "true" ]; then
+    local gcp_mode="${DISPLAY_GCP_MODE:-both}"
+    local gcp_text="" gcp_linkable=false
+
+    if [ "$gcp_mode" != "account" ] && [ -n "$__prompt_gcp_proj" ]; then
+      gcp_text="GCP: ${__prompt_gcp_proj}"
+      gcp_linkable=true
+      [ "$gcp_mode" = "both" ] && [ -n "$__prompt_gcp_acct" ] &&
+        gcp_text="${gcp_text} (${__prompt_gcp_acct%%@*})"
+    elif [ "$gcp_mode" != "project" ] && [ -n "$__prompt_gcp_acct" ]; then
+      gcp_text="GCP: ${__prompt_gcp_acct}"
+    fi
+
+    if [ -n "$gcp_text" ]; then
+      local color_code="${np_start}${__prompt_gcp_color}${np_end}"
+      if [ "$gcp_linkable" = true ]; then
+        local gcp_url="https://console.cloud.google.com/home/dashboard?project=${__prompt_gcp_proj}"
+        local link_start="${np_start}${e}]8;;${gcp_url}${e}\\${np_end}"
+        local link_end="${np_start}${e}]8;;${e}\\${np_end}"
+        out="${link_start}${color_code}${gcp_text}${color_reset}${link_end}"
+      else
+        out="${color_code}${gcp_text}${color_reset}"
+      fi
+    fi
   fi
 
   # 2. Format Kubernetes Segment (Filtering out literal quotes)
@@ -135,7 +164,7 @@ __cloud_ps1() {
   fi
 
   # 3. Format AI Configuration Segment
-  if [ "${AI_ENABLED:-true}" = "true" ]; then
+  if [ "${AI_ENABLED:-true}" = "true" ] && [ "$show_ai" = "true" ]; then
     [ -n "$out" ] && out="${out} | "
     local provider="${DEFAULT_AI:-gemini}"
     local ai_text=""
@@ -150,7 +179,7 @@ __cloud_ps1() {
   fi
 
   # 4. Format Git Segment
-  if [ -n "$__prompt_git_branch" ]; then
+  if [ "$show_git" = "true" ] && [ -n "$__prompt_git_branch" ]; then
     [ -n "$out" ] && out="${out} | "
     local git_text="Git: ${__prompt_git_branch}"
     if [ -n "$__prompt_git_url" ]; then

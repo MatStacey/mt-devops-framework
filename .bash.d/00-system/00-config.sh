@@ -227,6 +227,101 @@ mt-toggle-ai() {
 }
 
 #######################################
+# Config: Show/hide individual prompt segments (Git, GCP, AI provider),
+# or pick which GCP identity field(s) the GCP segment shows. This is
+# purely a prompt-display setting -- separate from mt-toggle-ai, which
+# controls whether AI integration runs at all elsewhere in the
+# framework. Called with no arguments, prints the current display
+# configuration instead of changing anything.
+# Usage: mt-toggle-display [-e|--element <git|gcp|ai>] [--gcp-mode <project|account|both>]
+# Options:
+#   -e, --element <git|gcp|ai>          Show/hide the given prompt segment
+#   --gcp-mode <project|account|both>   Which GCP identity field(s) to show
+#   -h, --help                          Show this help menu
+# Globals:
+#   DISPLAY_SHOW_GIT, DISPLAY_SHOW_GCP, DISPLAY_SHOW_AI, DISPLAY_GCP_MODE
+#######################################
+mt-toggle-display() {
+  local element="" gcp_mode=""
+
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -e | --element)
+        element="$2"
+        shift 2
+        ;;
+      --gcp-mode)
+        gcp_mode="$2"
+        shift 2
+        ;;
+      *)
+        echo "🚨 Unknown option: $1"
+        return 1
+        ;;
+    esac
+  done
+
+  if [ -z "$element" ] && [ -z "$gcp_mode" ]; then
+    echo -e "${CB_BLUE}==========================================================${C_RESET}"
+    echo -e "${CB_BLUE}               PROMPT DISPLAY SETTINGS                    ${C_RESET}"
+    echo -e "${CB_BLUE}==========================================================${C_RESET}"
+    echo -e " ${CB_CYAN}git${C_RESET} : ${DISPLAY_SHOW_GIT:-true}"
+    echo -e " ${CB_CYAN}gcp${C_RESET} : ${DISPLAY_SHOW_GCP:-true} (mode: ${DISPLAY_GCP_MODE:-both})"
+    echo -e " ${CB_CYAN}ai ${C_RESET} : ${DISPLAY_SHOW_AI:-true}"
+    echo -e "${CB_BLUE}==========================================================${C_RESET}"
+    return 0
+  fi
+
+  if [ -n "$gcp_mode" ]; then
+    if [[ "$gcp_mode" != "project" && "$gcp_mode" != "account" && "$gcp_mode" != "both" ]]; then
+      echo "Usage: mt-toggle-display --gcp-mode <project|account|both>"
+      return 1
+    fi
+    python3 "$CONFIG_MANAGER" update "display" "gcp_display" "$gcp_mode"
+    export DISPLAY_GCP_MODE="$gcp_mode"
+    echo "✅ GCP prompt display set to $gcp_mode."
+  fi
+
+  if [ -n "$element" ]; then
+    local key="" current=""
+    case "$element" in
+      git)
+        key="show_git"
+        current="${DISPLAY_SHOW_GIT:-true}"
+        ;;
+      gcp)
+        key="show_gcp"
+        current="${DISPLAY_SHOW_GCP:-true}"
+        ;;
+      ai)
+        key="show_ai"
+        current="${DISPLAY_SHOW_AI:-true}"
+        ;;
+      *)
+        echo "Usage: mt-toggle-display -e|--element <git|gcp|ai>"
+        return 1
+        ;;
+    esac
+
+    local next="true"
+    [ "$current" = "true" ] && next="false"
+    python3 "$CONFIG_MANAGER" update "display" "$key" "$next"
+
+    case "$element" in
+      git) export DISPLAY_SHOW_GIT="$next" ;;
+      gcp) export DISPLAY_SHOW_GCP="$next" ;;
+      ai) export DISPLAY_SHOW_AI="$next" ;;
+    esac
+
+    echo "✅ Prompt element '$element' display set to $next."
+  fi
+}
+
+#######################################
 # Config: Open bash.d directory and config.yaml in IDE
 # Usage: mt-open-config [-ide vscode|intellij]
 # Options:
