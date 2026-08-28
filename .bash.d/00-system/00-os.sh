@@ -88,13 +88,12 @@ __open_url() {
       open "$url" > /dev/null 2>&1
       ;;
     wsl)
-      explorer.exe "$url" > /dev/null 2>&1
-      ;;
-    *)
-      if command -v xdg-open > /dev/null 2>&1; then
-        xdg-open "$url" > /dev/null 2>&1
+      if command -v cmd.exe > /dev/null 2>&1; then
+        cmd.exe /c start "" "$url" > /dev/null 2>&1
+      elif command -v explorer.exe > /dev/null 2>&1; then
+        explorer.exe "$url" > /dev/null 2>&1
       else
-        echo "⚠️ No browser launcher available. Open manually: $url"
+        echo "⚠️ No Windows URL launcher available. Open manually: $url"
       fi
       ;;
   esac
