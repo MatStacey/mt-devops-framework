@@ -310,10 +310,15 @@ __git_raise_pr_create_or_open() {
     # destination for the newly pushed commits and should not be treated
     # as a failure.
     local existing_pr_url=""
-    existing_pr_url=$(gh pr view "$current_branch" \
-      "${repo_flag[@]}" \
-      --json url,state \
-      -q 'select(.state == "OPEN") | .url' 2> /dev/null || true)
+    if [ "$is_github" = true ]; then
+      local head_repo
+      head_repo=$(git config --get remote.origin.url | sed -E \
+        's#^git@github\.com:(.+)$#\1#; s#^https://github\.com/([^/]+/[^/]+)(\.git)?$#\1#')
+      existing_pr_url=$(gh api \
+        "repos/${UPSTREAM_REPO_PATH}/pulls?state=open&per_page=100" \
+        --jq ".[] | select(.head.repo.full_name == \"$head_repo\" and .head.ref == \"$current_branch\") | .html_url" \
+        2> /dev/null | head -n 1)
+    fi
 
     if [ -n "$existing_pr_url" ]; then
       echo -e "${CB_GREEN}✅ An open Pull Request already exists for this branch.${C_RESET}"
