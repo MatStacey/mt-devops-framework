@@ -14,9 +14,9 @@
 __bashd_latest_mod() {
   local bashd_dir="$1"
   if [ "$OS_FAMILY" = "macos" ]; then
-    find "$bashd_dir" -type f -name "*.sh" -exec stat -f '%m' {} \; 2> /dev/null | sort -n | tail -1
+    find -L "$bashd_dir" -type f -name "*.sh" -exec stat -f '%m' {} \; 2> /dev/null | sort -n | tail -1
   else
-    find "$bashd_dir" -type f -name "*.sh" -printf '%T@\n' 2> /dev/null | sort -n | tail -1
+    find -L "$bashd_dir" -type f -name "*.sh" -printf '%T@\n' 2> /dev/null | sort -n | tail -1
   fi
 }
 
@@ -31,7 +31,7 @@ __rebuild_mytools_cache() {
   local time_file="${cache_file}.time"
 
   local raw_tsv
-  raw_tsv=$(find "$bashd_dir" -type f -name "*.sh" -exec awk -f "$bashd_dir/lib/awk/mytools.awk" {} +)
+  raw_tsv=$(find -L "$bashd_dir" -type f -name "*.sh" -exec awk -f "$bashd_dir/lib/awk/mytools.awk" {} +)
 
   echo "$raw_tsv" | sort -t$'\t' -k1,1r -k2,2f -k3,3f > "$tsv_index"
 

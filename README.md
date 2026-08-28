@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Script Discovery**: Added symlink support (`find -L`) to `mytools` script indexing and modification time checks.
+- **Git Sync & Versioning**: Updated update procedures to explicitly fetch upstream tags and prioritize GitHub release API and target tags over local `git describe` fallbacks.
 - Updated script discovery logic across `.bashrc`, setup wizards, and internal framework tools to follow symbolic links (`find -L`) within `$HOME/.bash.d`.
 - Added symlink detection logic to bypass redundant file copying during sync and restore operations when `~/.bash.d` is symlinked to the git workspace.
 - Enhanced uninstall and backup processes to correctly resolve, back up, and remove symlinked framework directories and display accurate status messages.
 - Added an option to the maintenance menu for running `mt-migrate-symlink`.
 - Added a framework staleness check to `mt-push-update` that compares the local version against the latest GitHub release.
 - Introduced an interactive confirmation prompt and warning to prevent outdated local deployments from silently overwriting upstream changes.
-- **Git Utilities:** Added `__mt_git_default_branch` to optimize default branch detection by checking local cached refs before attempting network calls.
-- **Pull Request Workflow:** Refactored browser confirmation prompts into a dedicated helper to defer unnecessary API calls until confirmed.
 
 ---
 

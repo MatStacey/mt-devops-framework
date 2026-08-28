@@ -888,6 +888,14 @@ __mt_get_update_git_pull() {
 
   (__mt_push_update_reconcile_branch) || return 1
 
+  # __mt_push_update_reconcile_branch's fetch only follows the default
+  # branch ref, never tags -- without this, local tags silently stop
+  # advancing the moment reconcile starts using a fetch URL other than
+  # 'origin' (a plain 'git fetch <url> <branch>' doesn't auto-follow
+  # tags the way fetching a configured remote does), and 'git describe'
+  # below would report a long-stale version.
+  git -C "$repo_dir" fetch --tags "https://github.com/${UPSTREAM_REPO_PATH}.git" > /dev/null 2>&1
+
   if [ -n "$target_version" ]; then
     if ! git -C "$repo_dir" checkout "$target_version" > /dev/null 2>&1; then
       echo -e "${CB_RED}🚨 Could not check out tag ${target_version} in ${repo_dir}.${C_RESET}"
@@ -895,8 +903,15 @@ __mt_get_update_git_pull() {
     fi
   fi
 
-  local tag_name
-  tag_name=$(git -C "$repo_dir" describe --tags --abbrev=0 2> /dev/null)
+  # Prefer the GitHub Release API's tag (the actual source of truth for
+  # "what was published") over a local 'git describe', which can still
+  # be wrong immediately after a release if the tag lands a moment after
+  # the commit it points to.
+  local tag_name="$target_version"
+  if [ -z "$tag_name" ] && command -v gh > /dev/null 2>&1; then
+    tag_name=$(gh release view --repo "$UPSTREAM_REPO_PATH" --json tagName -q .tagName 2> /dev/null)
+  fi
+  [ -z "$tag_name" ] && tag_name=$(git -C "$repo_dir" describe --tags --abbrev=0 2> /dev/null)
   [ -n "$tag_name" ] && echo "$tag_name" > "$HOME/.bash.d/data/.current_version"
 
   if [ -f "$CONFIG_MANAGER" ] && [ -f "$CONFIG_FILE" ]; then
