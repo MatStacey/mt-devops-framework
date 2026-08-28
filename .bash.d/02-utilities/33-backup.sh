@@ -52,20 +52,9 @@ __mt_backup_list() {
   echo -e "${CB_CYAN}📦 Found $count backup(s) for '${safe_dir_name}':${C_RESET}\n"
 
   # ls -lth sorts by time (latest first), -h gives human-readable sizes
-  command ls -lth --time-style=+"%Y-%m-%d %H:%M:%S" "$dest" | grep -v '^total' | awk -v blue="$CB_BLUE" -v cyan="$CB_CYAN" -v yellow="$CB_YELLOW" -v green="$CB_GREEN" -v rst="$C_RESET" '
-    BEGIN {
-      printf "%s%-55s %-25s %-15s%s\n", blue, "FILENAME", "DATE CREATED", "SIZE", rst
-      printf "%s%s%s\n", blue, "-------------------------------------------------------------------------------------------------", rst
-    }
-    {
-      size = $5
-      date_created = $6 " " $7
-      name = ""
-      # Support filenames with spaces just in case
-      for(i=8; i<=NF; i++) name = name (i==8?"":" ") $i
-      printf "%s%-55s%s %s%-25s%s %s%-15s%s\n", cyan, name, rst, yellow, date_created, rst, green, size, rst
-    }
-  '
+  local awk_script="$HOME/.bash.d/lib/awk/backup_list_table.awk"
+  command ls -lth --time-style=+"%Y-%m-%d %H:%M:%S" "$dest" | grep -v '^total' |
+    awk -v blue="$CB_BLUE" -v cyan="$CB_CYAN" -v yellow="$CB_YELLOW" -v green="$CB_GREEN" -v rst="$C_RESET" -f "$awk_script"
   echo ""
 }
 

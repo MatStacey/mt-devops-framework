@@ -386,21 +386,11 @@ mt-hub() {
 
   sort -t'|' -k1,1 -k2,2 "$tmp_out" -o "$tmp_out"
 
-  # The raw repo path is prepended as a hidden, tab-delimited first field
-  # so fzf's --preview and the post-selection cd below can recover it
-  # exactly -- {4}/awk -F' │ ' against the visible, space-padded display
-  # text is not reliable since fzf's default field-splitting is
-  # whitespace-based and the box-drawing separator sits inside padding.
+  # See vcs_hub_table.awk for why the raw path rides along as a hidden
+  # tab-delimited first field, recovered below via fzf's {1}.
+  local awk_script="$HOME/.bash.d/lib/awk/vcs_hub_table.awk"
   local selected
-  selected=$(awk -F'|' '
-    function pad(str, len) {
-      if (length(str) > len) return substr(str, 1, len-3) "..."
-      return str sprintf("%*s", len - length(str), "")
-    }
-    {
-      printf "%s\t%s │ %s │ %s │ %s\n", $4, pad($1, 15), pad($2, 35), pad($3, 20), $4
-    }
-  ' "$tmp_out" | fzf --ansi --delimiter=$'\t' --with-nth=2 --prompt="VCS Hub > " --header="TYPE            │ REPOSITORY                          │ BRANCH               " --preview="bash -c 'source ~/.bash.d/01-ui/01-colors.sh; source ~/.bash.d/20-vcs/53-vcs-insight.sh; __mt_hub_preview \"{1}\" \"$cache_file\"'")
+  selected=$(awk -f "$awk_script" "$tmp_out" | fzf --ansi --delimiter=$'\t' --with-nth=2 --prompt="VCS Hub > " --header="TYPE            │ REPOSITORY                          │ BRANCH               " --preview="bash -c 'source ~/.bash.d/01-ui/01-colors.sh; source ~/.bash.d/20-vcs/53-vcs-insight.sh; __mt_hub_preview \"{1}\" \"$cache_file\"'")
 
   rm -f "$tmp_out"
 

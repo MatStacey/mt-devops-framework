@@ -28,25 +28,8 @@ __mt_export_calc_output_name() {
 #   schema_file, s_name, s_inc, s_exc, all_files, file_list
 #######################################
 __mt_export_build_file_lists() {
-  local py_script="
-import os, yaml, sys
-schemas_dir = sys.argv[1]
-query = sys.argv[2].lower()
-for f in os.listdir(schemas_dir):
-    if not f.endswith('.yaml'): continue
-    path = os.path.join(schemas_dir, f)
-    try:
-        with open(path, 'r') as yf:
-            data = yaml.safe_load(yf)
-            aliases = data.get('aliases', [])
-            if query in aliases or query == data.get('name', '').lower() or query == f.split('.')[0]:
-                print(path)
-                sys.exit(0)
-    except: pass
-print('')
-"
   if command -v python3 > /dev/null 2>&1; then
-    schema_file=$(python3 -c "$py_script" "$schemas_dir" "$schema_query")
+    schema_file=$(python3 "$HOME/.bash.d/lib/python/resolve_export_schema.py" "$schemas_dir" "$schema_query")
   fi
 
   if [ -z "$schema_file" ] || [ ! -f "$schema_file" ]; then

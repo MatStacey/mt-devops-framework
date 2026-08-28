@@ -134,19 +134,7 @@ mt-alias() {
   read -r -e -i "$default_desc" -p "4️⃣  Description                : " alias_desc
   [ -z "$alias_desc" ] && alias_desc="Custom shortcut for ${alias_cmd}"
   if [ -n "$update_name" ]; then
-    python3 -c "import sys; p, n = sys.argv[1], sys.argv[2]
-with open(p, 'r') as f: l = f.read().split('\n')
-o, i = [], 0
-while i < len(l):
-    if l[i].startswith('#######################################'):
-        if any(x.startswith(f'alias {n}=') for x in l[i+1:i+10]):
-            while not l[i].startswith(f'alias {n}='): i += 1
-            i += 1
-            continue
-    if l[i].startswith(f'alias {n}='): i += 1; continue
-    o.append(l[i]); i += 1
-while o and o[-1].strip() == '': o.pop()
-with open(p, 'w') as f: f.write('\n'.join(o) + '\n')" "$aliases_file" "$alias_name"
+    python3 "$HOME/.bash.d/lib/python/remove_alias_block.py" "$aliases_file" "$alias_name"
   fi
   if [ ! -f "$aliases_file" ]; then
     cat << HEADEREOF > "$aliases_file"
@@ -225,26 +213,11 @@ mt-cmd-history() {
   local hist_source="$HOME/.bash_history"
 
   if [ -f "$hist_source" ]; then
+    local awk_script="$HOME/.bash.d/lib/awk/history_filter.awk"
     # Force grep -a (text mode) and strip non-printable characters
     strings "$hist_source" 2> /dev/null | grep -a -v -E "^(#|[[:space:]]*$)" |
       sed "s/^[[:space:]]*[0-9]*[[:space:]]*//" |
-      awk -v cmd_file="$tmp_cmds" '
-      BEGIN {
-        while ((getline line < cmd_file) > 0) {
-          if (line != "") cmds[line] = 1
-        }
-        close(cmd_file)
-      }
-      {
-        cmd = $1
-        sub(/^.*::/, "", cmd)
-
-        # Match only if the FIRST word is an exact framework tool name
-        if (cmd in cmds) {
-          print $0
-        }
-      }
-    ' | awk "!seen[\$0]++" | tail -n "$limit" > "$tmp_hist"
+      awk -v cmd_file="$tmp_cmds" -f "$awk_script" | awk "!seen[\$0]++" | tail -n "$limit" > "$tmp_hist"
   fi
 
   rm -f "$tmp_cmds"

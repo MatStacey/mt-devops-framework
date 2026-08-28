@@ -6,6 +6,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Refactored utility, tool, and VCS shell scripts by extracting embedded AWK and Python logic into dedicated library files under `.bash.d/lib/`.
 - Added Kubernetes (`k8s`) segment visibility controls to prompt display configuration.
 - Introduced `--compact` label toggling and configurable Git branch name length truncation settings.
 - Added a prompt display option (`--ai-model`) to show or hide AI model and version details in the terminal prompt.
@@ -13,7 +14,6 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 - Added `mt-toggle-display` CLI command to toggle visibility for Git, GCP, and AI prompt segments and configure GCP display modes.
 - Updated shell prompt rendering to respect display visibility flags and optimize prompt line length by shortening GCP account domains.
 - **Fixed Native Linux URL Opening**: Restored the `xdg-open` fallback in `__open_url` that PR #188 had inadvertently dropped while improving WSL URL-launching, which had left `git-raise-pr` silently unable to open URLs on non-WSL, non-macOS Linux systems.
-- **AWK Portability & README History Fixes**: Extracted `mt-help`'s inline docstring-splitting AWK script to `lib/awk/mt_render_help.awk` (closing a duplicate-logic gap that had let a cross-platform escaping bug reappear), and tightened the AI README-summary prompt to cap bullet output so a single verbose push can no longer evict the entire rolling update history.
 
 ---
 
