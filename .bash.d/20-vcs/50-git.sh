@@ -323,8 +323,7 @@ __git_raise_pr_create_or_open() {
     fi
 
     if [ -n "$existing_pr_url" ]; then
-      echo -e "${CB_GREEN}✅ Open Pull Request found. Latest changes have been pushed to the existing PR.${C_RESET}" echo -e "${CB_BLUE}🌐 $existing_pr_url${C_RESET}"
-
+      echo -e "${CB_GREEN}✅ Open Pull Request found. Latest changes have been pushed to the existing PR.${C_RESET}"
       read -r -p "🌐 View Pull Request in browser? [Y/n] " -n 1 < /dev/tty || REPLY="n"
       echo
 
