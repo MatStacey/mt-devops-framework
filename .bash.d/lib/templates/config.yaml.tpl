@@ -64,4 +64,5 @@ display:
   show_git: true
   show_gcp: true
   show_ai: true
+  show_ai_model: true
   gcp_display: both

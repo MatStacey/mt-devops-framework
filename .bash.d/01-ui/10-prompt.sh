@@ -102,6 +102,9 @@ __prompt_git_info() {
 # Globals:
 #   DISPLAY_SHOW_GCP, DISPLAY_SHOW_GIT, DISPLAY_SHOW_AI -- per-segment
 #     visibility toggles set via mt-toggle-display (default: true)
+#   DISPLAY_SHOW_AI_MODEL -- whether the AI segment's model/version
+#     parenthetical is shown, e.g. "AI: Gemini (3.6-flash)" vs "AI:
+#     Gemini" (default: true)
 #   DISPLAY_GCP_MODE -- which GCP identity field(s) the GCP segment
 #     shows: project, account, or both (default: both)
 # Outputs:
@@ -163,17 +166,23 @@ __cloud_ps1() {
     out="${out}K8s: ${__prompt_k8s_ctx}"
   fi
 
-  # 3. Format AI Configuration Segment
+  # 3. Format AI Configuration Segment -- show_ai_model (DISPLAY_SHOW_AI_MODEL)
+  # picks whether the model/version parenthetical is appended, e.g.
+  # "AI: Gemini (3.6-flash)" vs just "AI: Gemini".
   if [ "${AI_ENABLED:-true}" = "true" ] && [ "$show_ai" = "true" ]; then
     [ -n "$out" ] && out="${out} | "
     local provider="${DEFAULT_AI:-gemini}"
+    local show_ai_model="${DISPLAY_SHOW_AI_MODEL:-true}"
     local ai_text=""
     if [ "$provider" = "gemini" ]; then
-      ai_text="AI: Gemini (${GEMINI_VERSION#gemini-})"
+      ai_text="AI: Gemini"
+      [ "$show_ai_model" = "true" ] && ai_text="${ai_text} (${GEMINI_VERSION#gemini-})"
     elif [ "$provider" = "claude" ]; then
-      ai_text="AI: Claude (${CLAUDE_VERSION#claude-})"
+      ai_text="AI: Claude"
+      [ "$show_ai_model" = "true" ] && ai_text="${ai_text} (${CLAUDE_VERSION#claude-})"
     elif [ "$provider" = "local" ]; then
-      ai_text="AI: Local (${LOCAL_AI_MODEL})"
+      ai_text="AI: Local"
+      [ "$show_ai_model" = "true" ] && ai_text="${ai_text} (${LOCAL_AI_MODEL})"
     fi
     out="${out}${np_start}${CB_CYAN}${np_end}${ai_text}${color_reset}"
   fi

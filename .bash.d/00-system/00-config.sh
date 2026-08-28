@@ -228,21 +228,25 @@ mt-toggle-ai() {
 
 #######################################
 # Config: Show/hide individual prompt segments (Git, GCP, AI provider),
-# or pick which GCP identity field(s) the GCP segment shows. This is
-# purely a prompt-display setting -- separate from mt-toggle-ai, which
-# controls whether AI integration runs at all elsewhere in the
-# framework. Called with no arguments, prints the current display
-# configuration instead of changing anything.
-# Usage: mt-toggle-display [-e|--element <git|gcp|ai>] [--gcp-mode <project|account|both>]
+# pick which GCP identity field(s) the GCP segment shows, or show/hide
+# the AI segment's model/version parenthetical (e.g. "AI: Gemini
+# (3.6-flash)" vs "AI: Gemini"). This is purely a prompt-display
+# setting -- separate from mt-toggle-ai, which controls whether AI
+# integration runs at all elsewhere in the framework. Called with no
+# arguments, prints the current display configuration instead of
+# changing anything.
+# Usage: mt-toggle-display [-e|--element <git|gcp|ai>] [--gcp-mode <project|account|both>] [--ai-model]
 # Options:
 #   -e, --element <git|gcp|ai>          Show/hide the given prompt segment
 #   --gcp-mode <project|account|both>   Which GCP identity field(s) to show
+#   --ai-model                          Show/hide the AI segment's model/version detail
 #   -h, --help                          Show this help menu
 # Globals:
-#   DISPLAY_SHOW_GIT, DISPLAY_SHOW_GCP, DISPLAY_SHOW_AI, DISPLAY_GCP_MODE
+#   DISPLAY_SHOW_GIT, DISPLAY_SHOW_GCP, DISPLAY_SHOW_AI,
+#   DISPLAY_SHOW_AI_MODEL, DISPLAY_GCP_MODE
 #######################################
 mt-toggle-display() {
-  local element="" gcp_mode=""
+  local element="" gcp_mode="" toggle_ai_model=false
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -258,6 +262,10 @@ mt-toggle-display() {
         gcp_mode="$2"
         shift 2
         ;;
+      --ai-model)
+        toggle_ai_model=true
+        shift
+        ;;
       *)
         echo "🚨 Unknown option: $1"
         return 1
@@ -265,13 +273,13 @@ mt-toggle-display() {
     esac
   done
 
-  if [ -z "$element" ] && [ -z "$gcp_mode" ]; then
+  if [ -z "$element" ] && [ -z "$gcp_mode" ] && [ "$toggle_ai_model" = false ]; then
     echo -e "${CB_BLUE}==========================================================${C_RESET}"
     echo -e "${CB_BLUE}               PROMPT DISPLAY SETTINGS                    ${C_RESET}"
     echo -e "${CB_BLUE}==========================================================${C_RESET}"
     echo -e " ${CB_CYAN}git${C_RESET} : ${DISPLAY_SHOW_GIT:-true}"
     echo -e " ${CB_CYAN}gcp${C_RESET} : ${DISPLAY_SHOW_GCP:-true} (mode: ${DISPLAY_GCP_MODE:-both})"
-    echo -e " ${CB_CYAN}ai ${C_RESET} : ${DISPLAY_SHOW_AI:-true}"
+    echo -e " ${CB_CYAN}ai ${C_RESET} : ${DISPLAY_SHOW_AI:-true} (model: ${DISPLAY_SHOW_AI_MODEL:-true})"
     echo -e "${CB_BLUE}==========================================================${C_RESET}"
     return 0
   fi
@@ -284,6 +292,14 @@ mt-toggle-display() {
     python3 "$CONFIG_MANAGER" update "display" "gcp_display" "$gcp_mode"
     export DISPLAY_GCP_MODE="$gcp_mode"
     echo "✅ GCP prompt display set to $gcp_mode."
+  fi
+
+  if [ "$toggle_ai_model" = true ]; then
+    local next_ai_model="true"
+    [ "${DISPLAY_SHOW_AI_MODEL:-true}" = "true" ] && next_ai_model="false"
+    python3 "$CONFIG_MANAGER" update "display" "show_ai_model" "$next_ai_model"
+    export DISPLAY_SHOW_AI_MODEL="$next_ai_model"
+    echo "✅ AI model/version display set to $next_ai_model."
   fi
 
   if [ -n "$element" ]; then

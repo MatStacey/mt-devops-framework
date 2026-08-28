@@ -187,6 +187,15 @@ __mt_menu_pick_gcp_display_mode() {
 }
 
 #######################################
+# System: Toggle the AI segment's model/version parenthetical via
+# mt-toggle-display --ai-model -- wrapped since __mt_menu_submenu
+# commands can't take inline arguments
+#######################################
+__mt_menu_toggle_ai_model() {
+  mt-toggle-display --ai-model
+}
+
+#######################################
 # System: Prompt for freeform gcloud command args and run them via
 # gcl-as-json, since gcloud subcommands are multiple separate tokens
 # (e.g. "compute instances list") rather than one single argument
@@ -288,7 +297,8 @@ __mt_menu_setup_terminal() {
     "Gemini Status (mt-get-gemini-status)" mt-get-gemini-status \
     "View Prompt Display Settings (mt-toggle-display)" mt-toggle-display \
     "Toggle a Prompt Element -- Git/GCP/AI (mt-toggle-display)" __mt_menu_toggle_display_element \
-    "Set GCP Display Mode (mt-toggle-display)" __mt_menu_pick_gcp_display_mode
+    "Set GCP Display Mode (mt-toggle-display)" __mt_menu_pick_gcp_display_mode \
+    "Toggle AI Model/Version Detail (mt-toggle-display)" __mt_menu_toggle_ai_model
 }
 
 #######################################
