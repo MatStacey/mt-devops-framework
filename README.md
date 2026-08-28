@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Improved open Pull Request detection logic to accurately support cross-repository and fork workflows using the GitHub API.
+- Added a conditional check (`is_github`) to ensure PR lookup operations only execute within GitHub repository contexts.
 - **Existing PR Detection**: Added automated checks for pre-existing open Pull Requests before creation, preventing failure on repeated pushes and offering an option to view the existing PR in a browser.
 - **Targeted PR Queries**: Updated `gh pr view` lookup commands to explicitly specify the target branch and repository flag.
 - **Code Maintenance**: Refactored `gh pr create` command invocations for improved script readability.
 - Improved URL opening handling under WSL by prioritizing `cmd.exe /c start` over `explorer.exe` for better browser dispatching.
 - Added fallback checks for URL launchers in WSL environments with updated warning messaging when no compatible launcher is found.
 - Fixed character escaping in AWK regex patterns to reliably match shell function declarations within mytools.
-- Added an explicit success return status (`return 0`) to the Git branch reconciliation workflow.
-- **Removed Auto-Sync for Repo-Root Files**: Discontinued automatic copying of repository-root files and directories (including `install.sh`, `README.md`, `.gitignore`, `.dockerignore`, `Dockerfile`, `.gitleaks.toml`, `.github/`, and `.devcontainer/`) from local candidate paths during `mt-push-update`. Found and fixed the confirmed root cause of a real, twice-repeated bug where a stray leftover `install.sh` sitting in `$HOME` was silently overwriting the repository's real installer on every sync.
 
 ---
 
