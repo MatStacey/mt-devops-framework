@@ -6,13 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-- **Removed Auto-Sync for Repo-Root Files**: Discontinued automatic copying of repository-root files and directories (including `install.sh`, `README.md`, `.gitignore`, `.dockerignore`, `Dockerfile`, `.gitleaks.toml`, `.github/`, and `.devcontainer/`) from local candidate paths during `mt-push-update`. Found and fixed the confirmed root cause of a real, twice-repeated bug where a stray leftover `install.sh` sitting in `$HOME` was silently overwriting the repository's real installer on every sync.
-- **Improved Stash Conflict Handling**: Introduced `__mt_push_update_restore_stash` during branch reconciliation to safely pop auto-stashed changes and alert users with actionable recovery instructions if conflicts occur, preventing silent failure and lost work.
-- **Automated Ignore Pattern Reconciliation**: Added `__mt_reconcile_ignore_patterns` helper to continuously merge new default patterns from `.tpl` templates into active `.syncignore` and `.gitignore` files without overwriting user modifications.
-- **Private Directory Support**: Added `~/.bash.d/40-private/` and `~/.bash.d/lib/private/` for local-only scripts, functions, and aliases -- excluded from `mt-push-update` sync, the pre-push ShellCheck gate, and never overwritten by `mt-get-update`.
-- **State Preservation**: Added state-saving functionality during uninstallation to back up `config.yaml`, `secrets_metadata.yaml`, and `.vcs_hub.json` for seamless framework reinstalls.
-- **Git Repository Safety Checks**: Introduced validation checks to ensure local repository checkouts are only deleted if the working tree is clean and all local commits are pushed upstream.
-- **Interactive Uninstall Prompts**: Enhanced `mt-uninstall` with interactive prompts to confirm setting preservation and optional removal of secrets or repository checkouts.
+- **Git PR Helpers**: Streamlined output messages when pushing changes to existing pull requests.
+- **CLI Cleanup**: Removed duplicate display of the Pull Request URL before the interactive prompt.
+- **Git Helpers**: Enhanced terminal feedback when an existing open Pull Request is detected to explicitly confirm that recent local commits have been pushed.
+- **User Interface**: Streamlined output logging format during PR creation workflows in `50-git.sh`.
+- **Improved GitHub PR Detection**: Refactored existing pull request checks to query the authenticated GitHub user via `gh api user` instead of parsing local git remote URLs.
+- **Enhanced Cross-Fork PR Matching**: Dynamically constructs the head repository path using the logged-in user's namespace, ensuring more reliable detection of open PRs across forks.
+- Improved open Pull Request detection logic to accurately support cross-repository and fork workflows using the GitHub API.
+- Added a conditional check (`is_github`) to ensure PR lookup operations only execute within GitHub repository contexts.
 
 ---
 
