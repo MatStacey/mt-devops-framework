@@ -245,6 +245,7 @@ def load_env():
     export("DISPLAY_SHOW_GIT", disp_cfg.get("show_git", True), to_lower=True)
     export("DISPLAY_SHOW_GCP", disp_cfg.get("show_gcp", True), to_lower=True)
     export("DISPLAY_SHOW_AI", disp_cfg.get("show_ai", True), to_lower=True)
+    export("DISPLAY_SHOW_AI_MODEL", disp_cfg.get("show_ai_model", True), to_lower=True)
     export("DISPLAY_GCP_MODE", disp_cfg.get("gcp_display", "both"), to_lower=True)
 
 
