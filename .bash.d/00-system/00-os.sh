@@ -96,6 +96,13 @@ __open_url() {
         echo "⚠️ No Windows URL launcher available. Open manually: $url"
       fi
       ;;
+    *)
+      if command -v xdg-open > /dev/null 2>&1; then
+        xdg-open "$url" > /dev/null 2>&1
+      else
+        echo "⚠️ No browser launcher available. Open manually: $url"
+      fi
+      ;;
   esac
 }
 

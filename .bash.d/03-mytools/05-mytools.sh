@@ -530,21 +530,7 @@ mt-help() {
 
     # Use AWK to cleanly separate the docstring from the codeblock
     local raw_data
-    raw_data=$(awk -v target="$cmd" '
-      BEGIN { flag=0; doc=""; code="" }
-      !flag && /^#######################################/ { next }
-      !flag && /^#/ {
-          line = substr($0, 2)
-          sub(/^[ \t]/, "", line)
-          doc = doc line "\n"
-          next
-      }
-      $0 ~ "^alias " target "=" { code = $0 "\n"; exit }
-      $0 ~ "^" target "\\(\\)[ \t]*\\{" { code = $0 "\n"; flag=1; next }
-      flag { code = code $0 "\n"; if ($0 ~ /^}$/) exit }
-      { if (!flag) { doc=""; code="" } }
-      END { print doc; print "---MT_CODE_DELIMITER---"; print code }
-    ' "$fpath")
+    raw_data=$(awk -v target="$cmd" -f "$HOME/.bash.d/lib/awk/mt_render_help.awk" "$fpath")
 
     local docstring="${raw_data%%---MT_CODE_DELIMITER---*}"
     local codeblock="${raw_data#*---MT_CODE_DELIMITER---}"
