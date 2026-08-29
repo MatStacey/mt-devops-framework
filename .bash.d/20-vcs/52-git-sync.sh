@@ -242,6 +242,27 @@ __mt_push_update_restore_stash() {
 }
 
 #######################################
+# System: Best-effort push of the just-reconciled default branch to
+# origin, so a collaborator's fork doesn't silently drift further and
+# further behind real upstream on GitHub (forks are never auto-synced).
+# Without this, mt-doctor's "N commits not yet pushed to origin/main"
+# warning grows forever even though nothing is actually wrong -- local
+# main only ever gets here by resetting onto true upstream, so this is
+# always a plain fast-forward from origin's perspective. Never force,
+# and never fatal: if it fails (no push access, or origin has genuinely
+# diverged some other way), it just warns and lets the caller continue.
+# Globals (read, set by mt-push-update):
+#   repo_dir
+# Arguments:
+#   $1 - Branch name to push (the default branch)
+#######################################
+__mt_push_update_sync_origin_default_branch() {
+  local branch="$1"
+  git push origin "$branch" > /dev/null 2>&1 ||
+    echo -e "${CB_YELLOW}⚠️  Could not push ${branch} to origin (non-fatal -- your fork's ${branch} may just be behind).${C_RESET}"
+}
+
+#######################################
 # System: Reconcile the sync repo's local branch with the true upstream
 # repository (UPSTREAM_REPO_PATH) before copying files -- deliberately
 # NOT with 'origin', since for a collaborator origin is their own fork,
@@ -297,6 +318,7 @@ __mt_push_update_reconcile_branch() {
         fi
         if git checkout "$default_branch" > /dev/null 2>&1; then
           git fetch "$upstream_url" "$default_branch" > /dev/null 2>&1 && git reset --hard FETCH_HEAD > /dev/null 2>&1
+          __mt_push_update_sync_origin_default_branch "$default_branch"
           git branch -D "$current_branch" > /dev/null 2>&1
           current_branch="$default_branch"
         else
@@ -321,6 +343,7 @@ __mt_push_update_reconcile_branch() {
       stashed=true
     fi
     git fetch "$upstream_url" "$default_branch" > /dev/null 2>&1 && git reset --hard FETCH_HEAD > /dev/null 2>&1
+    __mt_push_update_sync_origin_default_branch "$default_branch"
     [ "$stashed" = true ] && __mt_push_update_restore_stash
   else
     echo -e "${CB_BLUE}🔄 Ensuring ${current_branch} is up to date with ${UPSTREAM_REPO_PATH}/${default_branch}...${C_RESET}"
