@@ -1,12 +1,3 @@
-config/config.yaml
-config/secrets_metadata.yaml
-data/cache/
-.mt_cache*
-.update_check_cache
-.profile_update_cache
-data/.current_version
-.*_pending
-.mt_data.tsv
 __pycache__
 .ruff_cache
 .vscode

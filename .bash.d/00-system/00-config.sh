@@ -10,8 +10,9 @@
 # relative value is invalid per spec and ignored), otherwise
 # ~/<fallback_rel>, with the framework's own directory appended either
 # way. Needed here, before config.yaml can even be parsed, to compute
-# ENV_CACHE's own bootstrap-time default (ENV_CACHE is itself the
-# parsed-config cache, so it can't depend on config.yaml content).
+# CONFIG_FILE/ENV_CACHE's own bootstrap-time defaults (both can't
+# depend on config.yaml content -- CONFIG_FILE because it's the file
+# itself, ENV_CACHE because it's the parsed-config cache).
 # Arguments:
 #   $1 - XDG environment variable name (e.g. "XDG_CACHE_HOME")
 #   $2 - Fallback path relative to $HOME (e.g. ".cache")
@@ -28,7 +29,7 @@ __mt_xdg_dir() {
   fi
 }
 
-CONFIG_FILE="${CONFIG_FILE:-$HOME/.bash.d/config/config.yaml}"
+CONFIG_FILE="${CONFIG_FILE:-$(__mt_xdg_dir XDG_CONFIG_HOME .config)/config.yaml}"
 CONFIG_MANAGER="$HOME/.bash.d/lib/python/config_manager.py"
 SECRETS_MANAGER="$HOME/.bash.d/lib/python/secrets_manager.py"
 ENV_CACHE="$(__mt_xdg_dir XDG_CACHE_HOME .cache)/.env.cache"
@@ -49,6 +50,22 @@ SECRETS_FILE="$SECRETS_DIR/secrets.sh"
 # (mt-add-sync-url / mt-become-collaborator) -- this value only changes if
 # the maintainer moves the repo itself.
 UPSTREAM_REPO_PATH="MatStacey/mt-devops-framework"
+
+# One-time move of config.yaml/.syncignore/secrets_metadata.yaml from
+# the pre-XDG ~/.bash.d/config/ location, before the scaffold-if-
+# missing check below -- otherwise a not-yet-migrated install would
+# find nothing at the new CONFIG_FILE path and create a fresh default
+# there, stranding the user's real settings unread at the old path.
+# Runs once per new shell (this file isn't re-sourced per-prompt) and
+# is a cheap no-op on every run after the first.
+if [ -f "$CONFIG_MANAGER" ]; then
+  __mt_config_files_moved="$(python3 "$CONFIG_MANAGER" migrate-config-files)"
+  if [ -n "$__mt_config_files_moved" ]; then
+    echo "📦 Moved config files to their new XDG location:"
+    echo "   - ${__mt_config_files_moved//$'\n'/$'\n   - '}"
+  fi
+  unset __mt_config_files_moved
+fi
 
 if [ ! -s "$CONFIG_FILE" ]; then
   mkdir -p "$(dirname "$CONFIG_FILE")"

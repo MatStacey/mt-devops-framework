@@ -118,7 +118,7 @@ __git_sync_copy_files() {
   if __mt_bashd_is_symlinked_into_repo "$repo_dir"; then
     echo -e "${C_DIM}↪️  ~/.bash.d is already a symlink into ${repo_dir}/.bash.d -- skipping the copy, they're the same directory.${C_RESET}"
   else
-    local syncignore="$HOME/.bash.d/config/.syncignore"
+    local syncignore="$CONFIG_DIR/.syncignore"
     local syncignore_tpl="$HOME/.bash.d/lib/templates/syncignore.tpl"
     __mt_reconcile_ignore_patterns "$syncignore_tpl" "$syncignore"
 
@@ -435,7 +435,12 @@ __mt_push_update_commit_and_raise_pr() {
   default_branch="${default_branch:-main}"
 
   local branch_name="$current_branch"
-  local pr_title="$user_msg"
+  # PR titles can't contain newlines -- GitHub just joins them into one
+  # run-on line instead of rejecting the request, silently mangling any
+  # multi-paragraph commit message (subject + blank line + body, the
+  # normal git convention) into unreadable text. Match standard git
+  # convention: use only the first line as the title.
+  local pr_title="${user_msg%%$'\n'*}"
 
   if [ "$current_branch" = "$default_branch" ]; then
     if [ -n "$user_msg" ]; then

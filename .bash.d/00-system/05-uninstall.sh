@@ -61,7 +61,7 @@ __mt_uninstall_bashrc_backup_trustworthy() {
 # timestamped folder. Re-running this overwrites the previous save with
 # the latest, matching .bashrc.bak's own single-most-recent-copy model.
 # Globals:
-#   BACKUP_DIR
+#   BACKUP_DIR, CONFIG_FILE, CONFIG_DIR, CACHE_DIR
 # Outputs:
 #   Prints the directory the files were saved to
 #######################################
@@ -69,8 +69,8 @@ __mt_uninstall_preserve_state() {
   local save_dir="${BACKUP_DIR:-$HOME/backups}/uninstall-preserved-config"
   mkdir -p "$save_dir"
 
-  [ -f "$HOME/.bash.d/config/config.yaml" ] && cp -p "$HOME/.bash.d/config/config.yaml" "$save_dir/"
-  [ -f "$HOME/.bash.d/config/secrets_metadata.yaml" ] && cp -p "$HOME/.bash.d/config/secrets_metadata.yaml" "$save_dir/"
+  [ -f "$CONFIG_FILE" ] && cp -p "$CONFIG_FILE" "$save_dir/"
+  [ -f "$CONFIG_DIR/secrets_metadata.yaml" ] && cp -p "$CONFIG_DIR/secrets_metadata.yaml" "$save_dir/"
   [ -f "$CACHE_DIR/.vcs_hub.json" ] && cp -p "$CACHE_DIR/.vcs_hub.json" "$save_dir/"
 
   echo "$save_dir"
@@ -250,5 +250,5 @@ mt-uninstall() {
   echo -e "\n${CB_GREEN}✅ MT DevOps Framework uninstalled.${C_RESET}"
   echo -e "${C_DIM}This terminal session still has its functions loaded in memory -- open a new terminal (or close this one) to finish.${C_RESET}"
   echo -e "${C_DIM}Backup saved to: ${backup_dir}${C_RESET}"
-  [ -n "$preserved_dir" ] && echo -e "${C_DIM}Settings preserved at: ${preserved_dir} -- copy them into a fresh ~/.bash.d/config/ (and data/cache/) after reinstalling.${C_RESET}"
+  [ -n "$preserved_dir" ] && echo -e "${C_DIM}Settings preserved at: ${preserved_dir} -- a fresh reinstall creates new defaults at \${XDG_CONFIG_HOME:-~/.config}/mt-devops-framework/, so copy these back in over top of them afterward.${C_RESET}"
 }

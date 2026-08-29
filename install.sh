@@ -44,8 +44,12 @@ mkdir -p "$TARGET_BASHD"
 # user-added, local-only script directories (kept out of the repo by
 # .syncignore -- see syncignore.tpl) that never exist in the repo source
 # by design, so --delete would otherwise erase them from the deployed
-# tree on every single update.
+# tree on every single update. config/.syncignore itself is excluded
+# too, for the same reason as config.yaml: it's gitignored user state
+# this rsync runs against before the config-file migration below has
+# a chance to move it out of .bash.d/config entirely.
 rsync -a --delete \
+  --exclude 'config/.syncignore' \
   --exclude 'config/config.yaml' \
   --exclude 'config/.env.cache' \
   --exclude 'config/*_token.sh' \
@@ -58,8 +62,15 @@ rsync -a --delete \
   --exclude 'lib/private/' \
   "$REPO_DIR/.bash.d/" "$TARGET_BASHD/"
 
-# 3. Scaffold config.yaml from template if missing
-CONFIG_FILE="$TARGET_BASHD/config/config.yaml"
+# 3. Move config.yaml/.syncignore/secrets_metadata.yaml from the
+# pre-XDG ~/.bash.d/config/ location if this install predates that
+# move, then scaffold config.yaml from the template if still missing
+# (a genuinely fresh install). The migration must run first: without
+# it, a not-yet-migrated install would find nothing at the new
+# CONFIG_FILE path and create a fresh default there, stranding the
+# user's real settings unread at the old path.
+python3 "$TARGET_BASHD/lib/python/config_manager.py" migrate-config-files > /dev/null
+CONFIG_FILE="$(python3 "$TARGET_BASHD/lib/python/config_manager.py" get-config-path)"
 TEMPLATE_FILE="$TARGET_BASHD/lib/templates/config.yaml.tpl"
 if [ ! -s "$CONFIG_FILE" ] && [ -f "$TEMPLATE_FILE" ]; then
   echo "⚙️ Scaffolding initial config.yaml from template..."
@@ -83,7 +94,7 @@ echo "✅ Files successfully synced to home directory."
 source "$TARGET_BASHD/00-system/00-os.sh"
 source "$TARGET_BASHD/00-system/04-bootstrap.sh"
 
-mkdir -p "$HOME/.bash.d/data/cache" "$HOME/.bash.d/data/logs" "$HOME/.bash.d/config"
+mkdir -p "$HOME/.bash.d/config"
 
 if [ -z "${MT_INSTALL_WIZARD:-}" ]; then
   echo "🔍 Checking for missing system dependencies..."
