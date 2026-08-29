@@ -148,7 +148,7 @@ When launched, the Dev Container automatically builds the base image, installs a
 | `01-ui/` | Color variables and the dynamic terminal prompt. |
 | `02-utilities/` | General purpose aliases, Docker handlers, path launchers, and centralized `mt-log`. |
 | `03-mytools/` | The core documentation engine and your LLM context extractors. |
-| `10-infra/` | GCP authentication/project switchers, concurrent Terraform validation, and comprehensive Kubectl aliases. |
+| `10-infra/` | GCP authentication/project switchers, concurrent Terraform validation, and interactive Kubernetes tooling (context/GKE cluster switching, log tailing, guarded destructive ops). |
 | `20-vcs/` | Git wrappers, AI-assisted feature-grouped commit automation (`git-ai-push-all`), profile syncing, and web launching. |
 | `30-ai/` | API integrations for Google Gemini, Anthropic Claude, local OpenAI-compatible endpoints, and debugging tools (`mt-ai-debug`). |
 | `40-private/` | *(User-created, optional)* Local-only scripts, functions, and aliases -- sourced automatically like any other module, but excluded from `mt-push-update` sync and never overwritten by `mt-get-update`. |

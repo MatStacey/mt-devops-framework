@@ -405,16 +405,37 @@ __mt_menu_docker() {
 }
 
 #######################################
-# System: "GCP & Kubernetes" submenu -- the individual "show active
+# System: "Kubernetes Tools" submenu -- status/context come first since
+# everything below them needs a working context, followed by everyday
+# usage, then broad-impact/irreversible actions (scale, delete) flagged
+# with a ⚠️ label prefix so the warning is visible before the item is
+# even selected, not just after. Mirrors __mt_menu_docker's structure.
+#######################################
+__mt_menu_k8s() {
+  __mt_menu_submenu "⎈  Kubernetes Tools" \
+    "Show Status (k8s-status)" k8s-status \
+    "Switch Context (k8s-ctx)" k8s-ctx \
+    "Connect to GKE Cluster (k8s-gke-connect)" k8s-gke-connect \
+    "Get/Set Namespace (k8s-ns)" k8s-ns \
+    "List Pods (k8s-pods)" k8s-pods \
+    "Shell into Pod (k8s-shell)" k8s-shell \
+    "Tail Pod Logs (k8s-tail)" k8s-tail \
+    "Restart Deployment (k8s-restart)" k8s-restart \
+    "⚠️  Scale Deployment (k8s-scale)" k8s-scale \
+    "⚠️  Delete Resource (k8s-delete)" k8s-delete
+}
+
+#######################################
+# System: "GCP" submenu -- the individual "show active
 # project/region/zone/user" one-liners were removed since 'gcl-config'
 # (gcloud config list) already prints all of them together in one view;
 # 'gcl-get-project-number' is kept since it makes its own distinct API
-# call for data 'config list' doesn't have.
+# call for data 'config list' doesn't have. Kubernetes now has its own
+# "Kubernetes Tools" submenu (see __mt_menu_k8s).
 #######################################
 __mt_menu_gcp() {
-  __mt_menu_submenu "☁️  GCP & Kubernetes" \
+  __mt_menu_submenu "☁️  GCP" \
     "Switch GCP Project (gcp-set-project)" gcp-set-project \
-    "Get/Set Kube Namespace (kns)" kns \
     "List gcloud Config (gcl-config)" gcl-config \
     "Export Project Vars (gcl-export-vars)" gcl-export-vars \
     "Show Project Number (gcl-get-project-number)" gcl-get-project-number \
@@ -612,7 +633,8 @@ mt-menu() {
     "📦 Code Exports"
     "🔍 Search & Docs"
     "🐳 Docker Tools"
-    "☁️  GCP & Kubernetes"
+    "⎈  Kubernetes Tools"
+    "☁️  GCP"
     "🏔️  Terraform"
     "🌿 Git Workflows"
     "🛠️  General Utilities"
@@ -626,6 +648,7 @@ mt-menu() {
     __mt_menu_exports
     __mt_menu_docs
     __mt_menu_docker
+    __mt_menu_k8s
     __mt_menu_gcp
     __mt_menu_terraform
     __mt_menu_git
