@@ -188,6 +188,54 @@ mt-add-bitbucket-secret() {
 }
 
 #######################################
+# System: Interactively add or update your Docker Hub credentials,
+# paired with the account username -- Docker Hub authenticates pushes
+# via 'docker login -u <username> --password-stdin', so both are always
+# collected and stored together, same reasoning as Bitbucket's
+# email+token pairing.
+# Usage: mt-add-dockerhub-secret
+# Globals:
+#   Writes to ~/secrets/secrets.sh (never touches config.yaml or git)
+#   and exports DOCKERHUB_USERNAME/DOCKERHUB_TOKEN into the current
+#   shell immediately.
+#######################################
+mt-add-dockerhub-secret() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local username
+  read -r -p "🐳 Docker Hub username: " username < /dev/tty
+  if [ -z "$username" ]; then
+    echo -e "${CB_YELLOW}⚠️  No username entered. Aborted.${C_RESET}"
+    return 1
+  fi
+
+  local token
+  read -r -s -p "🔑 Enter your Docker Hub access token (input hidden): " token < /dev/tty
+  echo
+  if [ -z "$token" ]; then
+    echo -e "${CB_YELLOW}⚠️  No token entered. Aborted.${C_RESET}"
+    return 1
+  fi
+
+  local expiry
+  read -r -p "📅 Token expiry date, YYYY-MM-DD (leave blank if unknown): " expiry < /dev/tty
+  if [ -n "$expiry" ] && ! [[ "$expiry" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    echo -e "${CB_YELLOW}⚠️  '$expiry' doesn't look like YYYY-MM-DD -- saving without an expiry date.${C_RESET}"
+    expiry=""
+  fi
+
+  __mt_write_secret "DOCKERHUB_USERNAME" "$username"
+  __mt_write_secret "DOCKERHUB_TOKEN" "$token"
+  export DOCKERHUB_USERNAME="$username"
+  export DOCKERHUB_TOKEN="$token"
+  python3 "$SECRETS_MANAGER" register "DOCKERHUB_TOKEN" "$expiry"
+  echo -e "${CB_GREEN}🎉 Docker Hub credentials saved to ~/secrets/secrets.sh and loaded into this shell.${C_RESET}"
+}
+
+#######################################
 # System: Print the framework's supported-secrets registry as a
 # colorized status table -- never displays secret values, only whether
 # each is configured plus its tracked metadata (system, description,
@@ -327,7 +375,7 @@ __mt_secrets_info() {
 
 #######################################
 # System: Interactive menu for managing the framework's supported
-# secrets (currently Gemini, Claude, Bitbucket) -- add/update, delete,
+# secrets (currently Gemini, Claude, Bitbucket, Docker Hub) -- add/update, delete,
 # and view metadata (system, features using it, expiry, last used).
 # Secret VALUES are never displayed, only whether each is configured.
 # Usage: mt-secrets

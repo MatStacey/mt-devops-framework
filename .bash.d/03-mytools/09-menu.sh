@@ -421,6 +421,11 @@ __mt_menu_docker() {
     "Shell into Container (docker-shell)" docker-shell \
     "Launch Throwaway Sandbox (docker-sandbox)" docker-sandbox \
     "Tail Container Logs (docker-tail)" docker-tail \
+    "Build Image (docker-build)" docker-build \
+    "Tag Image for Registry (docker-tag)" docker-tag \
+    "Push Image (docker-push)" docker-push \
+    "Build + Push Release (docker-release)" docker-release \
+    "Deploy via Helm (docker-deploy)" docker-deploy \
     "⚠️  Restart All Running Containers (docker-reboot-all)" docker-reboot-all \
     "⚠️  Nuke Unused Resources (docker-nuke)" docker-nuke
 }
