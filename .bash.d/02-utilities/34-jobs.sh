@@ -320,6 +320,7 @@ mt-jobs() {
   fi
 
   if [ "$watch" = true ]; then
+    local current_time
     while true; do
       if [ ! -f "$jobs_file" ] || [ ! -s "$jobs_file" ]; then
         printf '\033[H\033[2J'
