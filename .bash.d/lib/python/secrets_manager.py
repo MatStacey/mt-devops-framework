@@ -50,6 +50,12 @@ SUPPORTED_SECRETS = {
         "add_command": "mt-add-bitbucket-secret",
         "paired_with": "BITBUCKET_EMAIL",
     },
+    "DOCKERHUB_TOKEN": {
+        "system": "Docker Hub",
+        "description": "Image pushes (docker-push, docker-release, docker-deploy)",
+        "add_command": "mt-add-dockerhub-secret",
+        "paired_with": "DOCKERHUB_USERNAME",
+    },
 }
 
 

@@ -50,6 +50,10 @@ llm_exports:
 
 docker:
   restart_blocklist_csv: "redis,postgres,local-db"
+  default_registry: gar
+  gar_region: europe-west2
+  gar_repo: ""
+  dockerhub_namespace: ""
 
 server:
   default_port: 8000

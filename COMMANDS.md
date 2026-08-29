@@ -177,7 +177,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-toggle-update-confirm` | Config: Toggle whether mt-get-update pauses to confirm before overwriting |
 | `mt-wizard-ai` | Config: Interactive AI Setup Menu |
 | `mt-wizard-cicd` | Config: Interactive CI/CD Setup Menu |
-| `mt-wizard-docker` | Config: Interactive Docker Setup Menu |
+| `mt-wizard-docker` | Config: Interactive Docker Configuration Wizard -- restart blocklist |
 | `mt-wizard-exports` | Config: Interactive Exports Setup Menu |
 | `mt-wizard-git` | Config: Interactive Git Setup Menu |
 | `mt-wizard-minikube` | Config: Interactive Minikube Configuration Wizard -- sets the |
@@ -214,6 +214,19 @@ Complex bash functions, framework utilities, and automated workflows.
 | `docker-sandbox` | Docker: Spin up a temporary, throwaway container sandbox |
 | `docker-shell` | Docker: Interactive fuzzy-finder to exec into a running container |
 | `docker-tail` | Docker: Concurrently tail logs from multiple selected containers |
+
+### Docker: Image Build, Versioning & Registry Push
+| Command | Description |
+|---|---|
+| `docker-build` | Docker: Build an image from a Dockerfile, auto-versioning it (see |
+| `docker-push` | Docker: Tag (via docker-tag) and push a locally-built image to a |
+| `docker-release` | Docker: Build and push in one step -- the convenience wrapper around |
+| `docker-tag` | Docker: Tag a locally-built image with a registry's fully-qualified |
+
+### Docker -> Kubernetes/Helm/Minikube Bridge
+| Command | Description |
+|---|---|
+| `docker-deploy` | Docker->Helm bridge: Run a locally-built image on whichever cluster is |
 
 ### Framework: Repository Scaffolding from Blueprints
 | Command | Description |
@@ -361,6 +374,7 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `mt-add-bitbucket-secret` | System: Interactively add or update your Bitbucket API token, paired |
 | `mt-add-claude-key` | AI: Interactively add or update your Claude API key |
+| `mt-add-dockerhub-secret` | System: Interactively add or update your Docker Hub credentials, |
 | `mt-add-gemini-key` | AI: Interactively add or update your Gemini API key |
 | `mt-secrets` | System: Interactive menu for managing the framework's supported |
 

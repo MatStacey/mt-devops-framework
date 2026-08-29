@@ -767,7 +767,11 @@ mt-setup-cicd() {
 }
 
 #######################################
-# Config: Interactive Docker Setup Menu
+# Config: Interactive Docker Configuration Wizard -- restart blocklist
+# plus the registry defaults docker-push/docker-release/docker-deploy
+# use (default registry, GAR region/repo, Docker Hub namespace), so none
+# of those are hardcoded at the call site.
+# Usage: mt-wizard-docker
 #######################################
 mt-wizard-docker() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -777,6 +781,14 @@ mt-wizard-docker() {
   echo -e "${CB_BLUE}--- Docker Configuration ---${C_RESET}"
   read -r -p "Restart Blocklist (comma-separated) [${DOCKER_BLOCKLIST:-redis,postgres,local-db}]: " blk
   [ -n "$blk" ] && python3 "$CONFIG_MANAGER" update "docker" "restart_blocklist_csv" "$blk"
+  read -r -p "Default Registry for docker-push/docker-release (gar/dockerhub) [${DOCKER_DEFAULT_REGISTRY:-gar}]: " reg
+  [ -n "$reg" ] && python3 "$CONFIG_MANAGER" update "docker" "default_registry" "$reg"
+  read -r -p "Google Artifact Registry Region [${DOCKER_GAR_REGION:-europe-west2}]: " gar_region
+  [ -n "$gar_region" ] && python3 "$CONFIG_MANAGER" update "docker" "gar_region" "$gar_region"
+  read -r -p "Google Artifact Registry Repository Name [${DOCKER_GAR_REPO:-none}]: " gar_repo
+  [ -n "$gar_repo" ] && python3 "$CONFIG_MANAGER" update "docker" "gar_repo" "$gar_repo"
+  read -r -p "Docker Hub Namespace (username/org) [${DOCKER_DOCKERHUB_NAMESPACE:-none}]: " dh_ns
+  [ -n "$dh_ns" ] && python3 "$CONFIG_MANAGER" update "docker" "dockerhub_namespace" "$dh_ns"
   echo -e "${CB_GREEN}✅ Docker config updated.${C_RESET}"
 }
 
