@@ -203,6 +203,94 @@ __docker_reboot_wait_for_project() {
 }
 
 #######################################
+# Docker: Recreate a single Compose project
+#
+# Usage:
+#   docker-reboot <container|project> [--verbose]
+#
+# Examples:
+#   docker-reboot immich
+#   docker-reboot immich --verbose
+#######################################
+docker-reboot() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  __docker_ensure_running || return 1
+
+  local target="$1"
+  local verbose=false
+
+  if [[ "$2" == "--verbose" ]]; then
+    verbose=true
+  fi
+
+  if [[ -z "$target" ]]; then
+    echo "Usage: docker-reboot <container|project> [--verbose]"
+    return 1
+  fi
+
+  local project=""
+  local compose_file=""
+
+  # Resolve container name to compose metadata
+  if docker inspect "$target" > /dev/null 2>&1; then
+    if ! __docker_reboot_compose_metadata "$target" project compose_file; then
+      echo -e "${CB_RED}❌ Unable to resolve Compose project for: $target${C_RESET}"
+      return 1
+    fi
+  else
+    # Allow project name directly
+    local container
+    container=$(docker ps --format "{{.Names}}" | while read -r c; do
+      local p
+      # f is required by __docker_reboot_compose_metadata's 3-arg signature; only $p is checked here
+      # shellcheck disable=SC2034
+      local f
+      __docker_reboot_compose_metadata "$c" p f || continue
+      [[ "$p" == "$target" ]] && echo "$c" && break
+    done)
+
+    if [[ -z "$container" ]]; then
+      echo -e "${CB_RED}❌ Compose project not found: $target${C_RESET}"
+      return 1
+    fi
+
+    __docker_reboot_compose_metadata "$container" project compose_file
+  fi
+
+  echo "🔄 Restarting Docker Compose project: ${project}"
+
+  if $verbose; then
+    echo "📁 Compose: ${compose_file}"
+  fi
+
+  if $verbose; then
+    docker compose -f "$compose_file" down
+  else
+    docker compose -f "$compose_file" down > /dev/null 2>&1
+  fi
+
+  if $verbose; then
+    docker compose -f "$compose_file" up -d
+  else
+    docker compose -f "$compose_file" up -d > /dev/null 2>&1
+  fi
+
+  echo "⏳ Waiting for recovery..."
+
+  if __docker_reboot_wait_for_project "$compose_file"; then
+    echo -e "${CB_GREEN}✅ Project recreated: ${project}${C_RESET}"
+    return 0
+  fi
+
+  echo -e "${CB_YELLOW}⚠️  Project did not become healthy: ${project}${C_RESET}"
+  return 1
+}
+
+#######################################
 # Docker: Recreate every running Docker Compose project on this host --
 # a full 'down' then 'up -d' per project rather than a naive per-
 # container 'docker restart', so shared networks/volumes and startup
@@ -226,17 +314,28 @@ docker-reboot-all() {
   __docker_ensure_running || return 1
 
   local manual_excludes=""
-  local OPTIND opt
-  while getopts "x:" opt; do
-    case ${opt} in
-      x) manual_excludes="$OPTARG" ;;
-      \?)
-        echo "Usage: docker-reboot-all [-x container1,container2]" >&2
+  local verbose=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -x)
+        manual_excludes="$2"
+        shift 2
+        ;;
+      --verbose | -v)
+        verbose=true
+        shift
+        ;;
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      *)
+        echo "Usage: docker-reboot-all [-x container1,container2] [--verbose]" >&2
         return 1
         ;;
     esac
   done
-  shift $((OPTIND - 1))
 
   local full_excludes="${DOCKER_BLOCKLIST:-}"
   [ -n "$manual_excludes" ] && full_excludes="${full_excludes:+${full_excludes},}${manual_excludes}"
@@ -295,15 +394,32 @@ docker-reboot-all() {
     compose_file="${project_files[$project]}"
     echo -e "\n▶ Restarting project: ${project}"
 
-    if ! docker compose -f "$compose_file" down > /dev/null 2>&1; then
-      echo -e "${CB_RED}🚨 Failed stopping: ${project}${C_RESET}"
-      ((failures++))
-      continue
+    if "$verbose"; then
+      if ! docker compose -f "$compose_file" down; then
+        echo -e "${CB_RED}🚨 Failed stopping: ${project}${C_RESET}"
+        ((failures++))
+        continue
+      fi
+    else
+      if ! docker compose -f "$compose_file" down > /dev/null 2>&1; then
+        echo -e "${CB_RED}🚨 Failed stopping: ${project}${C_RESET}"
+        ((failures++))
+        continue
+      fi
     fi
-    if ! docker compose -f "$compose_file" up -d > /dev/null 2>&1; then
-      echo -e "${CB_RED}🚨 Failed starting: ${project}${C_RESET}"
-      ((failures++))
-      continue
+
+    if "$verbose"; then
+      if ! docker compose -f "$compose_file" up -d; then
+        echo -e "${CB_RED}🚨 Failed starting: ${project}${C_RESET}"
+        ((failures++))
+        continue
+      fi
+    else
+      if ! docker compose -f "$compose_file" up -d > /dev/null 2>&1; then
+        echo -e "${CB_RED}🚨 Failed starting: ${project}${C_RESET}"
+        ((failures++))
+        continue
+      fi
     fi
 
     if __docker_reboot_wait_for_project "$compose_file"; then
