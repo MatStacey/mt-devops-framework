@@ -3,7 +3,7 @@ BEGIN {
     FS = "\t"
     prev_cat = ""
 }
-$1 == target_type {
+$1 == target_type && $5 !~ /\/40-private\// && $5 !~ /\/lib\/private\// {
     if ($2 != prev_cat) {
         if (prev_cat != "") print ""
         print "### " $2
