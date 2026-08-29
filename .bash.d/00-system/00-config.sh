@@ -37,11 +37,15 @@ fi
 chmod 600 "$CONFIG_FILE" 2> /dev/null
 
 #######################################
-# System: Intercept shell prompt to intelligently reload config.yaml if modified
+# System: Intercept shell prompt to intelligently reload config.yaml if
+# modified -- also invalidates when config_manager.py itself is newer
+# than the cache, since a new export line (e.g. a schema addition) can
+# make the cache stale even though the user's own config.yaml data
+# never changed.
 #######################################
 __reload_config_if_modified() {
   if [ -f "$CONFIG_MANAGER" ]; then
-    if [ ! -f "$ENV_CACHE" ] || [ "$CONFIG_FILE" -nt "$ENV_CACHE" ]; then
+    if [ ! -f "$ENV_CACHE" ] || [ "$CONFIG_FILE" -nt "$ENV_CACHE" ] || [ "$CONFIG_MANAGER" -nt "$ENV_CACHE" ]; then
       local old_theme="$BASH_THEME"
       python3 "$CONFIG_MANAGER" load-env > "$ENV_CACHE"
       chmod 600 "$ENV_CACHE" 2> /dev/null

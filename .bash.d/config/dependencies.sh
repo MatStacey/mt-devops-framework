@@ -25,6 +25,7 @@ export APT_DEPENDENCIES=(
   "pip3:python3-pip"
   "pipx:pipx"
   "python_yaml:python3-yaml"
+  "pytest:python3-pytest"
   "zip:zip"
   "unzip:unzip"
 )
@@ -42,6 +43,7 @@ export BREW_DEPENDENCIES=(
   "pipx:pipx"
   "gh:gh"
   "python_yaml:pyyaml"
+  "pytest:pytest"
   "zip:zip"
   "unzip:unzip"
 )
