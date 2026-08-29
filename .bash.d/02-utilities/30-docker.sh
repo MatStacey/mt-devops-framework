@@ -311,6 +311,7 @@ docker-reboot-all() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
+
   __docker_ensure_running || return 1
 
   local manual_excludes=""
@@ -319,6 +320,10 @@ docker-reboot-all() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -x)
+        if [[ -z "$2" ]]; then
+          echo -e "${CB_RED}❌ -x requires a comma-separated exclusion list.${C_RESET}"
+          return 1
+        fi
         manual_excludes="$2"
         shift 2
         ;;
@@ -331,7 +336,7 @@ docker-reboot-all() {
         return 0
         ;;
       *)
-        echo "Usage: docker-reboot-all [-x container1,container2] [--verbose]" >&2
+        echo "Usage: docker-reboot-all [-x container1,container2] [--verbose]" 1>&2
         return 1
         ;;
     esac
@@ -341,12 +346,11 @@ docker-reboot-all() {
   [ -n "$manual_excludes" ] && full_excludes="${full_excludes:+${full_excludes},}${manual_excludes}"
 
   local exclude_pattern=""
-  # Docker's own negative-filter syntax is unreliable across versions;
-  # grab everything running and exclude via grep instead.
   [ -n "$full_excludes" ] && exclude_pattern=$(echo "$full_excludes" | sed 's/,/|/g; s/ //g')
 
   local running_containers
   running_containers=$(docker ps --format "{{.Names}}")
+
   if [ -z "$running_containers" ]; then
     mt-log WARN "No running Docker containers found."
     return 0
@@ -354,6 +358,7 @@ docker-reboot-all() {
 
   local -A project_files=() project_seen=() project_excluded=()
   local project_order=()
+
   local container project compose_file
 
   while read -r container; do
@@ -381,61 +386,40 @@ docker-reboot-all() {
     return 0
   fi
 
-  echo "🔄 Restarting Docker Compose projects..."
-  local failures=0 skipped=0
+  echo -e "${CB_BLUE}🚀 Queueing Docker Compose projects for parallel restart...${C_RESET}"
+
+  local queued=0 skipped=0
+  local log_dir="${LOG_DIR:-$HOME/.bash.d/data/logs}"
+  local timestamp
+  timestamp=$(date +%Y%m%d-%H%M%S)
 
   for project in "${project_order[@]}"; do
+
     if [ -n "${project_excluded[$project]:-}" ]; then
       echo -e "${CB_YELLOW}⚠️  Skipping project: ${project} (excluded)${C_RESET}"
       ((skipped++))
       continue
     fi
 
-    compose_file="${project_files[$project]}"
-    echo -e "\n▶ Restarting project: ${project}"
+    local verbose_arg=""
+    [ "$verbose" = true ] && verbose_arg=" --verbose"
 
-    if "$verbose"; then
-      if ! docker compose -f "$compose_file" down; then
-        echo -e "${CB_RED}🚨 Failed stopping: ${project}${C_RESET}"
-        ((failures++))
-        continue
-      fi
-    else
-      if ! docker compose -f "$compose_file" down > /dev/null 2>&1; then
-        echo -e "${CB_RED}🚨 Failed stopping: ${project}${C_RESET}"
-        ((failures++))
-        continue
-      fi
-    fi
+    local log_file="${log_dir}/docker-reboot_${project}_${timestamp}.log"
+    local cmd_string="docker-reboot '${project}'${verbose_arg}"
 
-    if "$verbose"; then
-      if ! docker compose -f "$compose_file" up -d; then
-        echo -e "${CB_RED}🚨 Failed starting: ${project}${C_RESET}"
-        ((failures++))
-        continue
-      fi
-    else
-      if ! docker compose -f "$compose_file" up -d > /dev/null 2>&1; then
-        echo -e "${CB_RED}🚨 Failed starting: ${project}${C_RESET}"
-        ((failures++))
-        continue
-      fi
-    fi
+    __mt_bg_run "docker-reboot: ${project}" "$log_file" "$cmd_string"
 
-    if __docker_reboot_wait_for_project "$compose_file"; then
-      echo -e "${CB_GREEN}✅ Project recreated: ${project}${C_RESET}"
-    else
-      echo -e "${CB_YELLOW}⚠️  Project did not become healthy in time: ${project} (continuing)${C_RESET}"
-      ((failures++))
-    fi
+    ((queued++))
   done
 
-  [ "$skipped" -gt 0 ] && echo -e "${CB_YELLOW}⚠️  ${skipped} project(s) skipped due to exclusions.${C_RESET}"
-  if [ "$failures" -gt 0 ]; then
-    echo -e "${CB_YELLOW}⚠️  Docker restart complete with ${failures} warning(s) above.${C_RESET}"
-    return 0
+  echo
+  echo -e "${CB_GREEN}✅ ${queued} Docker reboot job(s) queued.${C_RESET}"
+
+  if [ "$skipped" -gt 0 ]; then
+    echo -e "${CB_YELLOW}⚠️  ${skipped} project(s) skipped due to exclusions.${C_RESET}"
   fi
-  echo -e "${CB_GREEN}✅ Docker restart complete.${C_RESET}"
+
+  echo -e "${C_DIM}Run 'mt-jobs' to monitor progress.${C_RESET}"
 }
 
 #######################################
