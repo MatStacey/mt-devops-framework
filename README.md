@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Logging Security**: Eliminated potential command injection vulnerabilities in `mt-logs` by replacing dynamic `eval` execution with structured pipe-filtering helpers.
+- **Docker Utilities**: Refactored image semver tracking from inline Bash/awk scripts into a dedicated Python module (`docker_versions.py`).
+- **Config & Dependencies**: Added `pytest` to system package dependencies and ensured environment cache reloads when `config_manager.py` is updated.
 - **Docker Configuration Wizard:** Updated `mt-wizard-docker` to prompt for and store default registry settings, Google Artifact Registry (GAR) parameters, and Docker Hub namespaces.
 - **Docker Hub Secrets Integration:** Added `mt-add-dockerhub-secret` to securely store and export Docker Hub credentials (username and personal access token) into the shell environment.
 - **Docker Versioning Utilities:** Introduced a new utility script (`36-docker-registry.sh`) providing automatic semantic version tracking and incrementing for Docker image builds.
 - **Minikube Configuration Wizard**: Added `mt-wizard-minikube` to interactively configure default driver, CPU, and memory settings.
 - **Helm Tooling Module**: Introduced `43-helm.sh` providing context readiness checks and status reporting functions.
-- **CLI Menu Submenus**: Expanded `mt-menu` with dedicated submenus and wizards for Helm chart lifecycle and Minikube cluster operations.
-- **Kubernetes Tooling Rebuilt**: Replaced the vendored `kubectl-aliases`-style shortcut file with rich, interactive `k8s-*` commands (fzf pod/context/deployment pickers, color-coded multi-pod log tailing, GKE cluster connect, and a production-aware destructive-op confirmation guard).
-- Updated `commands_md.awk` to automatically filter out private directory paths from generated command documentation.
 
 ---
 

@@ -4,11 +4,14 @@
 # ------------------------------------------
 # ~/.bash.d/02-utilities/36-docker-registry.sh
 
+DOCKER_VERSIONS="$HOME/.bash.d/lib/python/docker_versions.py"
+
 #######################################
-# Docker: Compute the next auto-incremented semver for an image, based
-# on the last version recorded for it (see __docker_record_version).
-# Read-only -- does not persist anything, so a failed build never
-# consumes a version number.
+# Docker: Compute the next auto-incremented semver for an image. Thin
+# wrapper over lib/python/docker_versions.py -- version bookkeeping is
+# pure data-shape logic with no need to touch the calling shell's
+# state, so it lives in Python (like config_manager.py/secrets_manager.py)
+# rather than as bash/awk.
 # Arguments:
 #   $1 - Image name
 # Outputs:
@@ -16,20 +19,7 @@
 #   v1.2.4 following a recorded v1.2.3) to stdout
 #######################################
 __docker_next_version() {
-  local image="$1"
-  local version_file="$HOME/.bash.d/data/cache/.docker_image_versions.tsv"
-
-  local last_version
-  last_version=$([ -f "$version_file" ] && awk -F'\t' -v img="$image" '$1==img {print $2}' "$version_file")
-
-  if [ -z "$last_version" ]; then
-    echo "v0.1.0"
-    return 0
-  fi
-
-  local major minor patch
-  IFS='.' read -r major minor patch <<< "${last_version#v}"
-  echo "v${major}.${minor}.$((patch + 1))"
+  python3 "$DOCKER_VERSIONS" next-version "$1"
 }
 
 #######################################
@@ -44,9 +34,7 @@ __docker_next_version() {
 #   been built via docker-build
 #######################################
 __docker_last_version() {
-  local image="$1"
-  local version_file="$HOME/.bash.d/data/cache/.docker_image_versions.tsv"
-  [ -f "$version_file" ] && awk -F'\t' -v img="$image" '$1==img {print $2}' "$version_file"
+  python3 "$DOCKER_VERSIONS" last-version "$1"
 }
 
 #######################################
@@ -59,19 +47,7 @@ __docker_last_version() {
 #   $2 - Version that was just built (e.g. v0.1.0)
 #######################################
 __docker_record_version() {
-  local image="$1" version="$2"
-  local version_file="$HOME/.bash.d/data/cache/.docker_image_versions.tsv"
-  mkdir -p "$(dirname "$version_file")"
-  touch "$version_file"
-
-  local tmp
-  tmp=$(mktemp)
-  awk -F'\t' -v img="$image" -v ver="$version" '
-    BEGIN { OFS = "\t" }
-    $1 == img { found = 1; print img, ver; next }
-    { print }
-    END { if (!found) print img, ver }
-  ' "$version_file" > "$tmp" && mv "$tmp" "$version_file"
+  python3 "$DOCKER_VERSIONS" record-version "$1" "$2"
 }
 
 #######################################

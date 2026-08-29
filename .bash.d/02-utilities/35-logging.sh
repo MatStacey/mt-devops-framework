@@ -41,6 +41,40 @@ mt-log() {
 }
 
 #######################################
+# System: Pass stdin through unchanged, or through a literal-string level
+# filter if one is given -- one leg of mt-logs' filter pipeline, kept as
+# a real command rather than a string handed to eval so a level value
+# can never be interpreted as shell syntax.
+# Arguments:
+#   $1 - Level to filter on (e.g. "ERROR"), or empty to pass through
+#######################################
+__mt_logs_filter_level() {
+  if [ -n "$1" ]; then
+    grep -F "[$1]"
+  else
+    cat
+  fi
+}
+
+#######################################
+# System: Pass stdin through unchanged, or through a case-insensitive
+# search filter if one is given -- the other leg of mt-logs' filter
+# pipeline. See __mt_logs_filter_level for why this is a real command
+# rather than an eval'd string: a search term is arbitrary user input,
+# and building it into a shell string before executing it is exactly
+# how mt-logs used to be vulnerable to command injection.
+# Arguments:
+#   $1 - Search term, or empty to pass through
+#######################################
+__mt_logs_filter_search() {
+  if [ -n "$1" ]; then
+    grep -i -- "$1"
+  else
+    cat
+  fi
+}
+
+#######################################
 # System: View, filter, and manage framework logs
 # Usage: mt-logs [-n lines] [-l level] [-s keyword] [-o] [-f] [-c]
 # Options:
@@ -116,15 +150,10 @@ mt-logs() {
     return 0
   fi
 
-  local cmd="cat \"$log_file\""
-  [ -n "$level_filter" ] && cmd="$cmd | grep \"\[$level_filter\]\""
-  [ -n "$search_term" ] && cmd="$cmd | grep -i \"$search_term\""
-  cmd="$cmd | tail -n $lines"
-
   echo -e "${CB_CYAN}📜 Showing last $lines lines of framework logs...${C_RESET}"
   [ -n "$level_filter" ] && echo -e "${C_DIM}   Level: $level_filter${C_RESET}"
   [ -n "$search_term" ] && echo -e "${C_DIM}   Search: $search_term${C_RESET}"
   echo -e "${CB_BLUE}----------------------------------------------------------${C_RESET}"
 
-  eval "$cmd"
+  __mt_logs_filter_level "$level_filter" < "$log_file" | __mt_logs_filter_search "$search_term" | tail -n "$lines"
 }

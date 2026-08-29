@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install System Dependencies
-        run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt yamllint jq
+        run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt yamllint jq python3-yaml python3-pytest
 
       - name: Run ShellCheck
         run: |
@@ -51,6 +51,11 @@ jobs:
         uses: astral-sh/ruff-action@278981a28ce3188b1e39527901f38254bf3aac89 # v4.1.0
         with:
           args: "check ."
+
+      - name: Run Python Test Suite
+        run: |
+          echo "🧪 Running pytest..."
+          python3 -m pytest tests/python/ -v
 
       - name: Verify Dockerfile (Hadolint)
         uses: hadolint/hadolint-action@2a66e89f53d0771bb131a7fa31f3136336094aa6 # v3.4.0
