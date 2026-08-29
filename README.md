@@ -6,6 +6,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Kubernetes Tooling Rebuilt**: Replaced the vendored `kubectl-aliases`-style shortcut file with rich, interactive `k8s-*` commands (fzf pod/context/deployment pickers, color-coded multi-pod log tailing, GKE cluster connect, and a production-aware destructive-op confirmation guard).
 - Updated `commands_md.awk` to automatically filter out private directory paths from generated command documentation.
 - Added `-w` / `--watch` flag to `mt-jobs` for live, real-time background job monitoring.
 - **Asynchronous Project Restarts**: Refactored `docker-reboot-all` to queue Docker Compose restarts in the background for parallel execution rather than running sequentially, with live progress viewable via `mt-jobs -w`.
@@ -13,7 +14,6 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 - **CLI Validation**: Added input validation to ensure the `-x` exclusion flag receives a required comma-separated argument.
 - Introduced `docker-reboot` utility command to targetedly tear down and recreate individual Docker Compose projects or containers with optional verbose logging.
 - **Script Discovery**: Added symlink support (`find -L`) to `mytools` script indexing and modification time checks.
-- **Git Sync & Versioning**: Updated update procedures to explicitly fetch upstream tags and prioritize GitHub release API and target tags over local `git describe` fallbacks.
 
 ---
 
