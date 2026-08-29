@@ -356,7 +356,7 @@ docker-reboot-all() {
     return 0
   fi
 
-  local -A project_files=() project_seen=() project_excluded=()
+  local -A project_seen=() project_excluded=()
   local project_order=()
 
   local container project compose_file
@@ -376,7 +376,6 @@ docker-reboot-all() {
 
     if [ -z "${project_seen[$project]:-}" ]; then
       project_seen["$project"]=1
-      project_files["$project"]="$compose_file"
       project_order+=("$project")
     fi
   done <<< "$running_containers"
