@@ -444,10 +444,15 @@ __mt_push_update_commit_and_raise_pr() {
 
   if [ "$current_branch" = "$default_branch" ]; then
     if [ -n "$user_msg" ]; then
+      # Derive from pr_title (the first line only), not the full,
+      # possibly multi-paragraph $user_msg -- grep/sed anchor ^/$ to
+      # every LINE, not the whole string, so feeding them a multi-line
+      # message produces one match per line and a garbled, multi-line
+      # $type/$slug instead of a single value.
       local type
-      type=$(echo "$user_msg" | grep -oE '^[a-zA-Z]+' || echo "chore")
+      type=$(echo "$pr_title" | grep -oE '^[a-zA-Z]+' || echo "chore")
       local slug
-      slug=$(echo "$user_msg" | sed -E 's/^[a-zA-Z]+(\([^)]+\))?:[[:space:]]*//' | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g' | sed -E 's/^-|-$//g' | cut -c1-40)
+      slug=$(echo "$pr_title" | sed -E 's/^[a-zA-Z]+(\([^)]+\))?:[[:space:]]*//' | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g' | sed -E 's/^-|-$//g' | cut -c1-40)
       [ -z "$slug" ] && slug="update-$(date +%s)"
       branch_name="${type}/${slug}"
     else
