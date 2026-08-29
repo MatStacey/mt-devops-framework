@@ -267,6 +267,26 @@ __mt_menu_base64_encode() { __mt_menu_prompt_arg "Text to encode" base64-enc; }
 __mt_menu_base64_decode() { __mt_menu_prompt_arg "Base64 text to decode" base64-dec; }
 
 #######################################
+# System: Prompt for a repo name then a repo URL and pass both to
+# helm-repo add -- wrapped since __mt_menu_submenu commands can't take
+# inline arguments and this one needs two separate prompted values
+#######################################
+__mt_menu_helm_repo_add() {
+  local name url
+  read -r -p "Repo name: " name < /dev/tty
+  if [ -z "$name" ]; then
+    echo -e "${CB_YELLOW}⚠️  Cancelled.${C_RESET}"
+    return 0
+  fi
+  read -r -p "Repo URL: " url < /dev/tty
+  if [ -z "$url" ]; then
+    echo -e "${CB_YELLOW}⚠️  Cancelled.${C_RESET}"
+    return 0
+  fi
+  helm-repo add "$name" "$url"
+}
+
+#######################################
 # System: "Setup & Config" -> "Guided Wizards" submenu -- full
 # multi-question configuration flows
 #######################################
@@ -277,6 +297,7 @@ __mt_menu_setup_wizards() {
     "Git Configuration (mt-wizard-git)" mt-wizard-git \
     "CI/CD Configuration (mt-wizard-cicd)" mt-wizard-cicd \
     "Docker Configuration (mt-wizard-docker)" mt-wizard-docker \
+    "Minikube Configuration (mt-wizard-minikube)" mt-wizard-minikube \
     "Exports Configuration (mt-wizard-exports)" mt-wizard-exports \
     "Paths Configuration (mt-wizard-paths)" mt-wizard-paths
 }
@@ -423,6 +444,46 @@ __mt_menu_k8s() {
     "Restart Deployment (k8s-restart)" k8s-restart \
     "⚠️  Scale Deployment (k8s-scale)" k8s-scale \
     "⚠️  Delete Resource (k8s-delete)" k8s-delete
+}
+
+#######################################
+# System: "Helm Tools" submenu -- status/repos/search come first as
+# read-only lookups, then the release lifecycle in the order you'd
+# actually use it (install -> upgrade -> inspect), with rollback/
+# uninstall flagged with a ⚠️ label prefix since both are routed through
+# the destructive-op guard. Mirrors __mt_menu_k8s's structure.
+#######################################
+__mt_menu_helm() {
+  __mt_menu_submenu "⛵ Helm Tools" \
+    "Show Status (helm-status)" helm-status \
+    "List Repos (helm-repo)" helm-repo \
+    "Add Repo (helm-repo add)" __mt_menu_helm_repo_add \
+    "Search Charts (helm-search)" helm-search \
+    "List Releases (helm-list)" helm-list \
+    "Install Chart (helm-install)" helm-install \
+    "Upgrade Release (helm-upgrade)" helm-upgrade \
+    "View Release Values (helm-values)" helm-values \
+    "⚠️  Roll Back Release (helm-rollback)" helm-rollback \
+    "⚠️  Uninstall Release (helm-uninstall)" helm-uninstall
+}
+
+#######################################
+# System: "Minikube (Local Cluster)" submenu -- status/start come first
+# since everything below needs a running cluster, followed by everyday
+# usage, then the irreversible delete flagged with a ⚠️ label prefix.
+# Mirrors __mt_menu_k8s's structure.
+#######################################
+__mt_menu_minikube() {
+  __mt_menu_submenu "🧪 Minikube (Local Cluster)" \
+    "Show Status (mk-status)" mk-status \
+    "Start Cluster (mk-start)" mk-start \
+    "Stop Cluster (mk-stop)" mk-stop \
+    "Open Dashboard (mk-dashboard)" mk-dashboard \
+    "Shell into Node (mk-ssh)" mk-ssh \
+    "Start Tunnel (mk-tunnel)" mk-tunnel \
+    "Toggle Addon (mk-addons)" mk-addons \
+    "Load Local Image (mk-load-image)" mk-load-image \
+    "⚠️  Delete Cluster (mk-delete)" mk-delete
 }
 
 #######################################
@@ -634,6 +695,8 @@ mt-menu() {
     "🔍 Search & Docs"
     "🐳 Docker Tools"
     "⎈  Kubernetes Tools"
+    "⛵ Helm Tools"
+    "🧪 Minikube (Local Cluster)"
     "☁️  GCP"
     "🏔️  Terraform"
     "🌿 Git Workflows"
@@ -649,6 +712,8 @@ mt-menu() {
     __mt_menu_docs
     __mt_menu_docker
     __mt_menu_k8s
+    __mt_menu_helm
+    __mt_menu_minikube
     __mt_menu_gcp
     __mt_menu_terraform
     __mt_menu_git

@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- **Minikube Configuration Wizard**: Added `mt-wizard-minikube` to interactively configure default driver, CPU, and memory settings.
+- **Helm Tooling Module**: Introduced `43-helm.sh` providing context readiness checks and status reporting functions.
+- **CLI Menu Submenus**: Expanded `mt-menu` with dedicated submenus and wizards for Helm chart lifecycle and Minikube cluster operations.
 - **Kubernetes Tooling Rebuilt**: Replaced the vendored `kubectl-aliases`-style shortcut file with rich, interactive `k8s-*` commands (fzf pod/context/deployment pickers, color-coded multi-pod log tailing, GKE cluster connect, and a production-aware destructive-op confirmation guard).
 - Updated `commands_md.awk` to automatically filter out private directory paths from generated command documentation.
 - Added `-w` / `--watch` flag to `mt-jobs` for live, real-time background job monitoring.
 - **Asynchronous Project Restarts**: Refactored `docker-reboot-all` to queue Docker Compose restarts in the background for parallel execution rather than running sequentially, with live progress viewable via `mt-jobs -w`.
 - **Logging & Job Monitoring**: Added log file generation for background reboot tasks and integrated job status tracking via `mt-jobs`.
-- **CLI Validation**: Added input validation to ensure the `-x` exclusion flag receives a required comma-separated argument.
-- Introduced `docker-reboot` utility command to targetedly tear down and recreate individual Docker Compose projects or containers with optional verbose logging.
-- **Script Discovery**: Added symlink support (`find -L`) to `mytools` script indexing and modification time checks.
 
 ---
 
@@ -148,7 +148,7 @@ When launched, the Dev Container automatically builds the base image, installs a
 | `01-ui/` | Color variables and the dynamic terminal prompt. |
 | `02-utilities/` | General purpose aliases, Docker handlers, path launchers, and centralized `mt-log`. |
 | `03-mytools/` | The core documentation engine and your LLM context extractors. |
-| `10-infra/` | GCP authentication/project switchers, concurrent Terraform validation, and interactive Kubernetes tooling (context/GKE cluster switching, log tailing, guarded destructive ops). |
+| `10-infra/` | GCP authentication/project switchers, concurrent Terraform validation, interactive Kubernetes tooling (context/GKE cluster switching, log tailing, guarded destructive ops), Helm release management, and local Minikube cluster lifecycle tooling. |
 | `20-vcs/` | Git wrappers, AI-assisted feature-grouped commit automation (`git-ai-push-all`), profile syncing, and web launching. |
 | `30-ai/` | API integrations for Google Gemini, Anthropic Claude, local OpenAI-compatible endpoints, and debugging tools (`mt-ai-debug`). |
 | `40-private/` | *(User-created, optional)* Local-only scripts, functions, and aliases -- sourced automatically like any other module, but excluded from `mt-push-update` sync and never overwritten by `mt-get-update`. |

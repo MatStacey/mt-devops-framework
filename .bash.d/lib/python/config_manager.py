@@ -65,6 +65,7 @@ def load_env():
     srv_cfg = d.get("server") or {}
     cicd_cfg = d.get("cicd") or {}
     disp_cfg = d.get("display") or {}
+    mk_cfg = d.get("minikube") or {}
 
     # CI/CD
     export(
@@ -230,6 +231,11 @@ def load_env():
         "DOCKER_BLOCKLIST",
         dock_cfg.get("restart_blocklist_csv", dock_cfg.get("restart_blocklist", "")),
     )
+
+    # Minikube (local cluster driver/resource defaults for mk-start)
+    export("MK_DRIVER", mk_cfg.get("driver", "docker"), to_lower=True)
+    export("MK_CPUS", mk_cfg.get("cpus", 2))
+    export("MK_MEMORY_MB", mk_cfg.get("memory_mb", 4000))
 
     # HTTP Server (mt-http-server)
     export("HTTP_SERVER_DEFAULT_PORT", srv_cfg.get("default_port", 8000))
