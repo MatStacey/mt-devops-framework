@@ -9,6 +9,17 @@
 # writable directory under that throwaway $HOME -- never symlinked --
 # so a test can safely drop a fake pre-XDG config.yaml there without
 # ever touching this repo's own .bash.d/config/.
+#
+# Every test runs with ISOLATE_ENV as its baseline: unsetting every
+# XDG/framework-path env var 00-config.sh reads or exports, regardless
+# of whatever the ambient shell (a dev machine, a CI runner) happens
+# to already have set for them. Without this, a test asserting against
+# $TEST_HOME/.config/... can pass locally (nothing pre-set) yet fail on
+# a runner that exports its own XDG_CONFIG_HOME -- 00-config.sh would
+# then resolve CONFIG_FILE under *that* ambient path instead of the
+# sandbox, and the migration would write somewhere the test never
+# looks. A test then layers only the one var it actually wants to
+# control on top of this baseline.
 
 setup() {
   local repo_bashd
@@ -17,10 +28,16 @@ setup() {
   mkdir -p "$TEST_HOME/.bash.d"
   ln -s "$repo_bashd/00-system" "$TEST_HOME/.bash.d/00-system"
   ln -s "$repo_bashd/lib" "$TEST_HOME/.bash.d/lib"
+
+  ISOLATE_ENV=(
+    -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME
+    -u CONFIG_FILE -u ENV_CACHE -u VERSION_FILE
+    -u CACHE_DIR -u LOG_DIR -u CONFIG_DIR
+  )
 }
 
 @test "CONFIG_FILE defaults to \${XDG_CONFIG_HOME:-~/.config}/mt-devops-framework/config.yaml" {
-  run env -u XDG_CONFIG_HOME -u CONFIG_FILE HOME="$TEST_HOME" bash -c '
+  run env "${ISOLATE_ENV[@]}" HOME="$TEST_HOME" bash -c '
     source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1
     printf %s "$CONFIG_FILE"
   '
@@ -29,7 +46,7 @@ setup() {
 }
 
 @test "CONFIG_FILE honors an absolute XDG_CONFIG_HOME override" {
-  run env HOME="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/custom-config" bash -c '
+  run env "${ISOLATE_ENV[@]}" HOME="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/custom-config" bash -c '
     source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1
     printf %s "$CONFIG_FILE"
   '
@@ -38,7 +55,7 @@ setup() {
 }
 
 @test "CONFIG_FILE ignores a relative XDG_CONFIG_HOME (invalid per spec) and falls back to ~/.config" {
-  run env HOME="$TEST_HOME" XDG_CONFIG_HOME="relative/path" bash -c '
+  run env "${ISOLATE_ENV[@]}" HOME="$TEST_HOME" XDG_CONFIG_HOME="relative/path" bash -c '
     source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1
     printf %s "$CONFIG_FILE"
   '
@@ -47,7 +64,7 @@ setup() {
 }
 
 @test "a pre-set CONFIG_FILE env var overrides the XDG default entirely" {
-  run env HOME="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/custom-config" CONFIG_FILE="$TEST_HOME/explicit/config.yaml" bash -c '
+  run env "${ISOLATE_ENV[@]}" HOME="$TEST_HOME" XDG_CONFIG_HOME="$TEST_HOME/custom-config" CONFIG_FILE="$TEST_HOME/explicit/config.yaml" bash -c '
     source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1
     printf %s "$CONFIG_FILE"
   '
@@ -56,7 +73,7 @@ setup() {
 }
 
 @test "ENV_CACHE defaults to \${XDG_CACHE_HOME:-~/.cache}/mt-devops-framework/.env.cache" {
-  run env -u XDG_CACHE_HOME HOME="$TEST_HOME" bash -c '
+  run env "${ISOLATE_ENV[@]}" HOME="$TEST_HOME" bash -c '
     source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1
     printf %s "$ENV_CACHE"
   '
@@ -68,7 +85,7 @@ setup() {
   mkdir -p "$TEST_HOME/.bash.d/config"
   echo "sync_repo_url: git@github.com:example/fork.git" > "$TEST_HOME/.bash.d/config/config.yaml"
 
-  run env HOME="$TEST_HOME" bash -c '
+  run env "${ISOLATE_ENV[@]}" HOME="$TEST_HOME" bash -c '
     source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1
     cat "$CONFIG_FILE"
   '
@@ -83,7 +100,7 @@ setup() {
   echo "real secrets metadata" > "$TEST_HOME/.bash.d/config/secrets_metadata.yaml"
   echo "sync_repo_url: git@github.com:example/fork.git" > "$TEST_HOME/.bash.d/config/config.yaml"
 
-  HOME="$TEST_HOME" bash -c 'source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1'
+  env "${ISOLATE_ENV[@]}" HOME="$TEST_HOME" bash -c 'source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1'
 
   [ "$(cat "$TEST_HOME/.config/mt-devops-framework/.syncignore")" = "real syncignore" ]
   [ "$(cat "$TEST_HOME/.config/mt-devops-framework/secrets_metadata.yaml")" = "real secrets metadata" ]
@@ -93,9 +110,9 @@ setup() {
   mkdir -p "$TEST_HOME/.bash.d/config"
   echo "sync_repo_url: git@github.com:example/fork.git" > "$TEST_HOME/.bash.d/config/config.yaml"
 
-  HOME="$TEST_HOME" bash -c 'source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1'
+  env "${ISOLATE_ENV[@]}" HOME="$TEST_HOME" bash -c 'source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1'
 
-  run env HOME="$TEST_HOME" bash -c '
+  run env "${ISOLATE_ENV[@]}" HOME="$TEST_HOME" bash -c '
     source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1
     cat "$CONFIG_FILE"
   '
@@ -108,7 +125,7 @@ setup() {
   echo "STALE OLD" > "$TEST_HOME/.bash.d/config/config.yaml"
   echo "REAL CURRENT" > "$TEST_HOME/.config/mt-devops-framework/config.yaml"
 
-  run env HOME="$TEST_HOME" bash -c '
+  run env "${ISOLATE_ENV[@]}" HOME="$TEST_HOME" bash -c '
     source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1
   '
   [ "$status" -eq 0 ]
@@ -117,7 +134,7 @@ setup() {
 }
 
 @test "no config.yaml anywhere -- a fresh shell scaffolds one from the template at the new location" {
-  run env HOME="$TEST_HOME" bash -c '
+  run env "${ISOLATE_ENV[@]}" HOME="$TEST_HOME" bash -c '
     source "$HOME/.bash.d/00-system/00-config.sh" > /dev/null 2>&1
     [ -s "$CONFIG_FILE" ] && echo "scaffolded"
   '
