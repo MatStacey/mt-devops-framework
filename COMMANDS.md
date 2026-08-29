@@ -11,42 +11,6 @@ Shortcuts for common commands and CLI replacements.
 |---|---|
 | `mt-reload-config` | Config: Forcefully re-parse config.yaml and reload environment variables |
 
-### Container Orchestration (Kubernetes) Aliases
-| Command | Description |
-|---|---|
-| `k` | Kubernetes: Core Kubectl Wrapper |
-| `ka` | Kubernetes: Apply configuration from file |
-| `kak` | Kubernetes: Apply configuration using Kustomize |
-| `kd` | Kubernetes: Describe resources |
-| `kdcm` | Kubernetes: Describe configmaps |
-| `kddep` | Kubernetes: Describe deployments |
-| `kding` | Kubernetes: Describe ingresses |
-| `kdno` | Kubernetes: Describe nodes |
-| `kdpo` | Kubernetes: Describe pods |
-| `kdsec` | Kubernetes: Describe secrets |
-| `kdsts` | Kubernetes: Describe statefulsets |
-| `kdsvc` | Kubernetes: Describe services |
-| `kex` | Kubernetes: Exec into a pod interactively |
-| `kg` | Kubernetes: Get resources |
-| `kgall` | Kubernetes: Get resources across all namespaces |
-| `kgcm` | Kubernetes: Get configmaps |
-| `kgdep` | Kubernetes: Get deployments |
-| `kging` | Kubernetes: Get ingresses |
-| `kgno` | Kubernetes: Get nodes |
-| `kgns` | Kubernetes: Get namespaces |
-| `kgpo` | Kubernetes: Get pods |
-| `kgsec` | Kubernetes: Get secrets |
-| `kgsts` | Kubernetes: Get statefulsets |
-| `kgsvc` | Kubernetes: Get services |
-| `klo` | Kubernetes: Tail logs for a pod |
-| `klop` | Kubernetes: Tail logs for a previous instance of a pod |
-| `kpf` | Kubernetes: Port forward to a pod or service |
-| `krm` | Kubernetes: Delete resources by name |
-| `krmdep` | Kubernetes: Delete deployments |
-| `krmf` | Kubernetes: Delete resources from file |
-| `krmpo` | Kubernetes: Delete pods |
-| `ksys` | Kubernetes: Shortcut for the kube-system namespace |
-
 ### Development & Build Tools
 | Command | Description |
 |---|---|
@@ -224,10 +188,19 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `kubectl` | Kubernetes: Core kubectl wrapper (preserves args) |
 
-### Container Orchestration (Kubernetes) Aliases
+### Container Orchestration (Kubernetes) Tools
 | Command | Description |
 |---|---|
-| `kns` | Kubernetes: Get or explicitly set the active namespace in the current context |
+| `k8s-ctx` | Kubernetes: Switch the active kubectl context |
+| `k8s-delete` | Kubernetes: Delete a resource, always confirmed via the destructive-op |
+| `k8s-gke-connect` | Kubernetes: Fetch credentials for a live GKE cluster and switch to it |
+| `k8s-ns` | Kubernetes: Get or interactively set the active namespace in the |
+| `k8s-pods` | Kubernetes: List pods in a clean table |
+| `k8s-restart` | Kubernetes: Trigger a rolling restart of a deployment -- the correct |
+| `k8s-scale` | Kubernetes: Scale a deployment's replica count. Routed through the |
+| `k8s-shell` | Kubernetes: Interactive fuzzy-finder to exec into a running pod |
+| `k8s-status` | Kubernetes: Dashboard summarizing the active context -- cluster, |
+| `k8s-tail` | Kubernetes: Concurrently tail logs from multiple selected pods |
 
 ### Docker: Container Management Utilities
 | Command | Description |
