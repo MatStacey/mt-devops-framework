@@ -644,7 +644,14 @@ mt-push-update() {
     esac
   done
 
-  user_msg=$(echo "$user_msg" | xargs)
+  # Trim leading/trailing whitespace only -- xargs would do this too, but
+  # treats every whitespace character (including embedded newlines) as a
+  # token separator and joins the result back with single spaces,
+  # silently flattening any multi-paragraph message (the normal git
+  # convention: subject, blank line, body) into one run-on line before
+  # it ever reaches the commit or the PR title derived from it.
+  user_msg="${user_msg#"${user_msg%%[![:space:]]*}"}"
+  user_msg="${user_msg%"${user_msg##*[![:space:]]}"}"
 
   if [ "$run_shellcheck" = true ]; then
     __mt_push_update_run_shellcheck || return 1
