@@ -7,6 +7,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 ## 🚀 Recent Updates & Enhancements
 
 - Updated `commands_md.awk` to automatically filter out private directory paths from generated command documentation.
+- Added `-w` / `--watch` flag to `mt-jobs` for live, real-time background job monitoring.
 - **Asynchronous Project Restarts**: Refactored `docker-reboot-all` to queue Docker Compose restarts in the background for parallel execution rather than running sequentially, with live progress viewable via `mt-jobs -w`.
 - **Logging & Job Monitoring**: Added log file generation for background reboot tasks and integrated job status tracking via `mt-jobs`.
 - **CLI Validation**: Added input validation to ensure the `-x` exclusion flag receives a required comma-separated argument.

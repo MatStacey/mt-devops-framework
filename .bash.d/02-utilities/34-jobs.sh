@@ -282,21 +282,23 @@ ${CB_BLUE}▶ Selected Job: ${j_name} (${j_id})${C_RESET}"
 
 #######################################
 # System: List and manage MT background jobs
-# Usage: mt-jobs [-i|--interactive] [-p|--purge] [-c|--clean]
+# Usage: mt-jobs [-i|--interactive] [-p|--purge] [-c|--clean] [-w|--watch]
 #######################################
 mt-jobs() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
-  local jobs_file="$HOME/.bash.d/data/cache/.mt_jobs.tsv"
 
-  local interactive=false do_purge=false do_clean=false
+  local jobs_file="$HOME/.bash.d/data/cache/.mt_jobs.tsv"
+  local interactive=false do_purge=false do_clean=false watch=false
+
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
       -i | --interactive) interactive=true ;;
       -p | --purge) do_purge=true ;;
       -c | --clean) do_clean=true ;;
+      -w | --watch) watch=true ;;
       *)
         echo -e "${CB_RED}🚨 Unknown option: $1${C_RESET}"
         return 1
@@ -305,15 +307,9 @@ mt-jobs() {
     shift
   done
 
-  if [ ! -f "$jobs_file" ] || [ ! -s "$jobs_file" ]; then
-    echo -e "${CB_YELLOW}⚠️ No background jobs found.${C_RESET}"
-    return 0
-  fi
-
-  local current_time
-  current_time=$(date +%s)
-
   if [ "$do_purge" = true ]; then
+    local current_time
+    current_time=$(date +%s)
     __mt_jobs_purge
     return 0
   fi
@@ -322,6 +318,39 @@ mt-jobs() {
     __mt_jobs_clean
     return 0
   fi
+
+  if [ "$watch" = true ]; then
+    while true; do
+      if [ ! -f "$jobs_file" ] || [ ! -s "$jobs_file" ]; then
+        printf '\033[H\033[2J'
+        echo -e "${CB_YELLOW}⚠️ No background jobs found.${C_RESET}"
+        echo -e "${C_DIM}Watching for jobs... Press Ctrl+C to exit.${C_RESET}"
+        sleep 1
+        continue
+      fi
+
+      current_time=$(date +%s)
+      __mt_jobs_reap_orphans
+
+      printf '\033[H\033[2J'
+      echo -e "${CB_BLUE}📊 MT Background Jobs — Live${C_RESET}"
+      echo -e "${C_DIM}Refreshing every second • Press Ctrl+C to exit${C_RESET}"
+      echo
+
+      __mt_jobs_render_table
+      __mt_jobs_print_table
+
+      sleep 1
+    done
+  fi
+
+  if [ ! -f "$jobs_file" ] || [ ! -s "$jobs_file" ]; then
+    echo -e "${CB_YELLOW}⚠️ No background jobs found.${C_RESET}"
+    return 0
+  fi
+
+  local current_time
+  current_time=$(date +%s)
 
   __mt_jobs_reap_orphans
 
