@@ -34,7 +34,7 @@ docker-deploy() {
 
   local image="$1"
   if [ -z "$image" ]; then
-    local version_file="$HOME/.bash.d/data/cache/.docker_image_versions.tsv"
+    local version_file="$CACHE_DIR/.docker_image_versions.tsv"
     image=$([ -f "$version_file" ] && cut -f1 "$version_file" | fzf --prompt="🐳 Select Built Image > " --height=~15 --layout=reverse --border)
     if [ -z "$image" ]; then
       echo -e "${CB_YELLOW}⚠️  Selection cancelled.${C_RESET}"

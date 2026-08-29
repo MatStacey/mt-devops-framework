@@ -71,7 +71,7 @@ __mt_uninstall_preserve_state() {
 
   [ -f "$HOME/.bash.d/config/config.yaml" ] && cp -p "$HOME/.bash.d/config/config.yaml" "$save_dir/"
   [ -f "$HOME/.bash.d/config/secrets_metadata.yaml" ] && cp -p "$HOME/.bash.d/config/secrets_metadata.yaml" "$save_dir/"
-  [ -f "$HOME/.bash.d/data/cache/.vcs_hub.json" ] && cp -p "$HOME/.bash.d/data/cache/.vcs_hub.json" "$save_dir/"
+  [ -f "$CACHE_DIR/.vcs_hub.json" ] && cp -p "$CACHE_DIR/.vcs_hub.json" "$save_dir/"
 
   echo "$save_dir"
 }

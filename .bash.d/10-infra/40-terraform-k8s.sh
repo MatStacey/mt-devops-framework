@@ -67,9 +67,9 @@ tf-val-all() {
 # upgraded, so generate it once and source the cached copy (same pattern as
 # the zoxide cache in 02-utilities/20-aliases.sh).
 if command -v kubectl > /dev/null 2>&1; then
-  KUBECTL_COMPLETION_CACHE="$HOME/.bash.d/data/cache/.kubectl_completion.bash"
+  KUBECTL_COMPLETION_CACHE="$CACHE_DIR/.kubectl_completion.bash"
   if [ ! -f "$KUBECTL_COMPLETION_CACHE" ]; then
-    mkdir -p "$HOME/.bash.d/data/cache"
+    mkdir -p "$CACHE_DIR"
     command kubectl completion bash > "$KUBECTL_COMPLETION_CACHE" 2> /dev/null
   fi
   # shellcheck disable=SC1090

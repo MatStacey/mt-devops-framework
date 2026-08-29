@@ -25,9 +25,9 @@ __bashd_latest_mod() {
 #######################################
 __rebuild_mytools_cache() {
   local bashd_dir="$HOME/.bash.d"
-  mkdir -p "$bashd_dir/data/cache" 2> /dev/null
-  local cache_file="$bashd_dir/data/cache/.mt_cache"
-  local tsv_index="$bashd_dir/data/cache/.mt_data.tsv"
+  mkdir -p "$CACHE_DIR" 2> /dev/null
+  local cache_file="$CACHE_DIR/.mt_cache"
+  local tsv_index="$CACHE_DIR/.mt_data.tsv"
   local time_file="${cache_file}.time"
 
   local raw_tsv
@@ -76,7 +76,7 @@ mytools() {
   }
 
   local bashd_dir="$HOME/.bash.d"
-  local cache_file="$bashd_dir/data/cache/.mt_cache"
+  local cache_file="$CACHE_DIR/.mt_cache"
   local time_file="${cache_file}.time"
   local latest_mod
   latest_mod=$(__bashd_latest_mod "$bashd_dir")
@@ -195,7 +195,7 @@ __mt_dispatcher_scrape_flags() {
 #######################################
 _mt_dispatcher_completions() {
   local cur="${COMP_WORDS[COMP_CWORD]}"
-  local tsv="$HOME/.bash.d/data/cache/.mt_data.tsv"
+  local tsv="$CACHE_DIR/.mt_data.tsv"
 
   if [ "$COMP_CWORD" -eq 1 ]; then
     [ -f "$tsv" ] || return 0
@@ -245,25 +245,25 @@ mt-list() {
   case "$1" in
     "")
       echo -e "\n${CB_BLUE}▶ AVAILABLE CATEGORIES${C_RESET}"
-      cut -f2 "$HOME/.bash.d/data/cache/.mt_data.tsv" 2> /dev/null | sort -u | while read -r cat; do
+      cut -f2 "$CACHE_DIR/.mt_data.tsv" 2> /dev/null | sort -u | while read -r cat; do
         [ -n "$cat" ] && echo -e "  ${CB_YELLOW}[${cat}]${C_RESET}"
       done
       echo ""
       ;;
     -f | --func)
       echo -e "\n${CB_BLUE}▶ FUNCTIONS${C_RESET}\n"
-      awk -F'\t' -v dim="$C_DIM" -v cyan="$CB_CYAN" -v yellow="$CB_YELLOW" -v white="$C_WHITE" -v rst="$C_RESET" '$1 == "func" { printf "  %s•%s %s%-24s%s (%s%s%s) %s→%s %s%s%s\n", dim, rst, cyan, $3, rst, yellow, $2, rst, dim, rst, white, $4, rst }' "$HOME/.bash.d/data/cache/.mt_data.tsv"
+      awk -F'\t' -v dim="$C_DIM" -v cyan="$CB_CYAN" -v yellow="$CB_YELLOW" -v white="$C_WHITE" -v rst="$C_RESET" '$1 == "func" { printf "  %s•%s %s%-24s%s (%s%s%s) %s→%s %s%s%s\n", dim, rst, cyan, $3, rst, yellow, $2, rst, dim, rst, white, $4, rst }' "$CACHE_DIR/.mt_data.tsv"
       echo ""
       ;;
     -a | --alias)
       echo -e "\n${CB_BLUE}▶ ALIASES${C_RESET}\n"
-      awk -F'\t' -v dim="$C_DIM" -v cyan="$CB_CYAN" -v yellow="$CB_YELLOW" -v white="$C_WHITE" -v rst="$C_RESET" '$1 == "alias" { printf "  %s•%s %s%-24s%s (%s%s%s) %s→%s %s%s%s\n", dim, rst, cyan, $3, rst, yellow, $2, rst, dim, rst, white, $4, rst }' "$HOME/.bash.d/data/cache/.mt_data.tsv"
+      awk -F'\t' -v dim="$C_DIM" -v cyan="$CB_CYAN" -v yellow="$CB_YELLOW" -v white="$C_WHITE" -v rst="$C_RESET" '$1 == "alias" { printf "  %s•%s %s%-24s%s (%s%s%s) %s→%s %s%s%s\n", dim, rst, cyan, $3, rst, yellow, $2, rst, dim, rst, white, $4, rst }' "$CACHE_DIR/.mt_data.tsv"
       echo ""
       ;;
     *)
       local target_cat="${1,,}"
       echo -e "\n${CB_BLUE}▶ CATEGORY: ${1}${C_RESET}\n"
-      awk -F'\t' -v target="$target_cat" -v dim="$C_DIM" -v cyan="$CB_CYAN" -v white="$C_WHITE" -v rst="$C_RESET" 'tolower($2) == target { printf "  %s•%s %s%-24s%s %s→%s %s%s%s\n", dim, rst, cyan, $3, rst, dim, rst, white, $4, rst }' "$HOME/.bash.d/data/cache/.mt_data.tsv"
+      awk -F'\t' -v target="$target_cat" -v dim="$C_DIM" -v cyan="$CB_CYAN" -v white="$C_WHITE" -v rst="$C_RESET" 'tolower($2) == target { printf "  %s•%s %s%-24s%s %s→%s %s%s%s\n", dim, rst, cyan, $3, rst, dim, rst, white, $4, rst }' "$CACHE_DIR/.mt_data.tsv"
       echo ""
       ;;
   esac
@@ -330,7 +330,7 @@ mt-run() {
   }
   mytools > /dev/null
   local selected
-  selected=$(awk -F'\t' '{ printf "%-24s │ %-20s │ %s\n", $3, $2, $4 }' "$HOME/.bash.d/data/cache/.mt_data.tsv" | fzf --ansi --prompt="Run Tool > " --header="COMMAND                  │ CATEGORY             │ DESCRIPTION")
+  selected=$(awk -F'\t' '{ printf "%-24s │ %-20s │ %s\n", $3, $2, $4 }' "$CACHE_DIR/.mt_data.tsv" | fzf --ansi --prompt="Run Tool > " --header="COMMAND                  │ CATEGORY             │ DESCRIPTION")
   if [ -n "$selected" ]; then
     local cmd_name
     cmd_name=$(echo "$selected" | awk '{print $1}')
@@ -371,7 +371,7 @@ mt-lookup() {
   done
 
   mytools > /dev/null
-  local tsv_file="$HOME/.bash.d/data/cache/.mt_data.tsv"
+  local tsv_file="$CACHE_DIR/.mt_data.tsv"
 
   # Trigger the menu if -i or -v is passed
   if [ "$interactive" = true ] || [ "$verbose" = true ]; then
@@ -408,7 +408,7 @@ alias mt-search='mt-lookup'
 
 _mt_lookup_completions() {
   local cur="${COMP_WORDS[COMP_CWORD]}"
-  local tsv="$HOME/.bash.d/data/cache/.mt_data.tsv"
+  local tsv="$CACHE_DIR/.mt_data.tsv"
   if [ -f "$tsv" ]; then
     local candidates
     candidates=$(awk -F'\t' '{print $3 "\n" $2}' "$tsv" | sort -u)
@@ -427,7 +427,7 @@ mt-fzf() {
   }
   mytools > /dev/null
   local selected
-  selected=$(awk -F'\t' '{ printf "%-24s │ %-20s │ %s\n", $3, $2, $4 }' "$HOME/.bash.d/data/cache/.mt_data.tsv" | fzf --ansi --prompt="Search MyTools > " --header="COMMAND                  │ CATEGORY             │ DESCRIPTION")
+  selected=$(awk -F'\t' '{ printf "%-24s │ %-20s │ %s\n", $3, $2, $4 }' "$CACHE_DIR/.mt_data.tsv" | fzf --ansi --prompt="Search MyTools > " --header="COMMAND                  │ CATEGORY             │ DESCRIPTION")
   [ -n "$selected" ] && echo "$selected" | awk '{print $1}'
 }
 
@@ -550,7 +550,7 @@ mt-help() {
   fi
 
   mytools > /dev/null
-  local tsv_file="$HOME/.bash.d/data/cache/.mt_data.tsv"
+  local tsv_file="$CACHE_DIR/.mt_data.tsv"
   local candidates=()
 
   if [ -f "$tsv_file" ]; then
@@ -584,14 +584,14 @@ mt-help() {
 _mt_cat_completions() {
   local IFS=$'\n'
   local cats
-  cats=$(cut -f2 "$HOME/.bash.d/data/cache/.mt_data.tsv" 2> /dev/null | sort -u)
+  cats=$(cut -f2 "$CACHE_DIR/.mt_data.tsv" 2> /dev/null | sort -u)
   mapfile -t COMPREPLY < <(compgen -W "$cats" -- "${COMP_WORDS[COMP_CWORD]}")
 }
 complete -F _mt_cat_completions mt-cat mt-list
 
 _mt_help_completions() {
   local tools
-  tools=$(cut -f3 "$HOME/.bash.d/data/cache/.mt_data.tsv" 2> /dev/null)
+  tools=$(cut -f3 "$CACHE_DIR/.mt_data.tsv" 2> /dev/null)
   mapfile -t COMPREPLY < <(compgen -W "$tools" -- "${COMP_WORDS[COMP_CWORD]}")
 }
 complete -F _mt_help_completions mt-help
@@ -605,9 +605,9 @@ mt-get-version() {
     return 0
   fi
 
-  if [ -f "$HOME/.bash.d/data/.current_version" ]; then
+  if [ -f "$VERSION_FILE" ]; then
     local current_version
-    current_version=$(command cat "$HOME/.bash.d/data/.current_version")
+    current_version=$(command cat "$VERSION_FILE")
     echo -e "${CB_CYAN}Profile Version:${C_RESET} ${current_version}"
   elif [ -n "$DOTFILES_DIR" ] && [ -d "$DOTFILES_DIR/.git" ] && command -v git > /dev/null 2>&1; then
     local current_version
@@ -627,7 +627,7 @@ mt-get-version() {
 #######################################
 mt-refresh-caches() {
   # Self-heal missing cache directories (e.g., after clean git clone or update)
-  mkdir -p "$HOME/.bash.d/data/cache" "$HOME/.bash.d/data/logs" "$HOME/.bash.d/config"
+  mkdir -p "$CACHE_DIR" "$LOG_DIR" "$CONFIG_DIR"
 
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
@@ -635,24 +635,24 @@ mt-refresh-caches() {
   fi
 
   echo -e "${CB_YELLOW}🧹 Clearing background caches...${C_RESET}"
-  rm -f "$HOME/.bash.d/data/cache/.env.cache"
+  rm -f "$CACHE_DIR/.env.cache"
   rm -f "$HOME/.bash.d/config/.env.cache" # stray pre-fix location, harmless no-op once cleaned up
   # Legacy pre-migration cache locations (harmless no-op post-migration)
   rm -f "$HOME/.bash.d/.mt_cache" "$HOME/.bash.d/.mt_cache.time" "$HOME/.bash.d/.mt_data.tsv" 2> /dev/null
   rm -f "$HOME/.bash.d/.zoxide_cache.sh" "$HOME/.bash.d/.update_check_cache" "$HOME/.bash.d/.update_pending" 2> /dev/null
   rm -f "$HOME/.bash.d/.profile_update_cache" "$HOME/.bash.d/.profile_update_pending" 2> /dev/null
-  rm -f "$HOME/.bash.d/data/cache/.mt_cache" "$HOME/.bash.d/data/cache/.mt_cache.time" "$HOME/.bash.d/data/cache/.mt_data.tsv"
-  rm -f "$HOME/.bash.d/data/cache/.update_check_cache" "$HOME/.bash.d/data/cache/.update_pending"
-  rm -f "$HOME/.bash.d/data/cache/.zoxide_cache.sh"
-  rm -f "$HOME/.bash.d/data/cache/.profile_update_cache" "$HOME/.bash.d/data/cache/.profile_update_pending"
-  rm -f "$HOME/.bash.d/data/cache/.kubectl_completion.bash"
-  rm -f "$HOME/.bash.d/data/cache/.deps_check_cache" "$HOME/.bash.d/data/cache/.deps_pending"
+  rm -f "$CACHE_DIR/.mt_cache" "$CACHE_DIR/.mt_cache.time" "$CACHE_DIR/.mt_data.tsv"
+  rm -f "$CACHE_DIR/.update_check_cache" "$CACHE_DIR/.update_pending"
+  rm -f "$CACHE_DIR/.zoxide_cache.sh"
+  rm -f "$CACHE_DIR/.profile_update_cache" "$CACHE_DIR/.profile_update_pending"
+  rm -f "$CACHE_DIR/.kubectl_completion.bash"
+  rm -f "$CACHE_DIR/.deps_check_cache" "$CACHE_DIR/.deps_pending"
 
   echo -e "${CB_BLUE}🔄 Rebuilding configurations and tool indexes...${C_RESET}"
   if [ -f "$HOME/.bash.d/lib/python/config_manager.py" ]; then
-    mkdir -p "$HOME/.bash.d/data/cache" "$HOME/.bash.d/data/logs" "$HOME/.bash.d/config"
-    python3 "$HOME/.bash.d/lib/python/config_manager.py" load-env > "$HOME/.bash.d/data/cache/.env.cache"
-    chmod 600 "$HOME/.bash.d/data/cache/.env.cache" 2> /dev/null
+    mkdir -p "$CACHE_DIR" "$LOG_DIR" "$CONFIG_DIR"
+    python3 "$HOME/.bash.d/lib/python/config_manager.py" load-env > "$CACHE_DIR/.env.cache"
+    chmod 600 "$CACHE_DIR/.env.cache" 2> /dev/null
   fi
 
   __rebuild_mytools_cache
@@ -675,7 +675,7 @@ mt-status() {
   echo -e "${CB_BLUE}==========================================================${C_RESET}"
 
   local current_version="Local"
-  [ -f "$HOME/.bash.d/data/.current_version" ] && current_version=$(tr -d '[:space:]' < "$HOME/.bash.d/data/.current_version")
+  [ -f "$VERSION_FILE" ] && current_version=$(tr -d '[:space:]' < "$VERSION_FILE")
   echo -e "${CB_YELLOW}▶ FRAMEWORK${C_RESET}"
   echo -e "  ${CB_CYAN}Version       ${C_RESET}: ${current_version}"
   echo -e "  ${CB_CYAN}Theme         ${C_RESET}: ${BASH_THEME:-default}"
@@ -712,17 +712,17 @@ mt-status() {
   fi
 
   echo -e "\n${CB_YELLOW}▶ SYSTEM UPDATES${C_RESET}"
-  if [ -f "$HOME/.bash.d/data/cache/.update_pending" ]; then
+  if [ -f "$CACHE_DIR/.update_pending" ]; then
     local sys_updates
-    sys_updates=$(tr -d '[:space:]' < "$HOME/.bash.d/data/cache/.update_pending")
+    sys_updates=$(tr -d '[:space:]' < "$CACHE_DIR/.update_pending")
     echo -e "  ${CB_CYAN}OS Packages   ${C_RESET}: ${CB_RED}${sys_updates} available (Run sys-install)${C_RESET}"
   else
     echo -e "  ${CB_CYAN}OS Packages   ${C_RESET}: ${CB_GREEN}Up to date${C_RESET}"
   fi
 
-  if [ -f "$HOME/.bash.d/data/cache/.profile_update_pending" ]; then
+  if [ -f "$CACHE_DIR/.profile_update_pending" ]; then
     local prof_update
-    prof_update=$(tr -d '[:space:]' < "$HOME/.bash.d/data/cache/.profile_update_pending")
+    prof_update=$(tr -d '[:space:]' < "$CACHE_DIR/.profile_update_pending")
     echo -e "  ${CB_CYAN}Framework     ${C_RESET}: ${CB_RED}${prof_update} available (Run mt-get-update)${C_RESET}"
   else
     echo -e "  ${CB_CYAN}Framework     ${C_RESET}: ${CB_GREEN}Up to date${C_RESET}"
@@ -780,7 +780,7 @@ mt-dump() {
 
 HDR
 
-  local tsv_index="$HOME/.bash.d/data/cache/.mt_data.tsv"
+  local tsv_index="$CACHE_DIR/.mt_data.tsv"
   mytools > /dev/null
 
   if [ -f "$tsv_index" ]; then

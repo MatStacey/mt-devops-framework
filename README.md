@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Refactored core system scripts to adopt standard XDG Base Directory specifications for runtime cache, logs, and version tracking.
+- Added automatic migration utilities to seamlessly transition legacy `~/.bash.d/data` directories to their modern XDG paths during configuration updates.
 - Granted execution permissions (`0755`) to `.bash.d/lib/python/docker_versions.py`.
 - **Logging Security**: Eliminated potential command injection vulnerabilities in `mt-logs` by replacing dynamic `eval` execution with structured pipe-filtering helpers.
 - **Docker Utilities**: Refactored image semver tracking from inline Bash/awk scripts into a dedicated Python module (`docker_versions.py`).
 - **Config & Dependencies**: Added `pytest` to system package dependencies and ensured environment cache reloads when `config_manager.py` is updated.
 - **Docker Configuration Wizard:** Updated `mt-wizard-docker` to prompt for and store default registry settings, Google Artifact Registry (GAR) parameters, and Docker Hub namespaces.
 - **Docker Hub Secrets Integration:** Added `mt-add-dockerhub-secret` to securely store and export Docker Hub credentials (username and personal access token) into the shell environment.
-- **Docker Versioning Utilities:** Introduced a new utility script (`36-docker-registry.sh`) providing automatic semantic version tracking and incrementing for Docker image builds.
-- **Minikube Configuration Wizard**: Added `mt-wizard-minikube` to interactively configure default driver, CPU, and memory settings.
 
 ---
 

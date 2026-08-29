@@ -307,10 +307,10 @@ This document is automatically generated on every sync and lists all available f
 Shortcuts for common commands and CLI replacements.
 MARKDOWN_EOF
 
-  [ -f "$HOME/.bash.d/data/cache/.mt_data.tsv" ] || return 0
+  [ -f "$CACHE_DIR/.mt_data.tsv" ] || return 0
 
   local awk_script="$HOME/.bash.d/lib/awk/commands_md.awk"
-  local tsv_data="$HOME/.bash.d/data/cache/.mt_data.tsv"
+  local tsv_data="$CACHE_DIR/.mt_data.tsv"
 
   # shellcheck disable=SC2129  # sequential appends interleaved with a heredoc block below; grouping would hurt readability
   awk -v target_type="alias" -f "$awk_script" <(sort -t$'	' -k2,2 -k3,3 "$tsv_data") >> "$repo_dir/COMMANDS.md"

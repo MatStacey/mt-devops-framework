@@ -309,7 +309,7 @@ __mt_hub_preview() {
 #   -h, --help                 Show this help menu
 #######################################
 mt-hub() {
-  local cache_file="$HOME/.bash.d/data/cache/.vcs_hub.json"
+  local cache_file="$CACHE_DIR/.vcs_hub.json"
   mkdir -p "$(dirname "$cache_file")"
   [ ! -f "$cache_file" ] && echo "{}" > "$cache_file"
 
@@ -352,7 +352,7 @@ mt-hub() {
   if [ "$do_index" = true ]; then
     if [ "$run_bg" = true ]; then
       local log_out
-      log_out="${LOG_DIR:-$HOME/.bash.d/data/logs}/indexer_$(date +%s).log"
+      log_out="$LOG_DIR/indexer_$(date +%s).log"
       local cmd_str="__mt_hub_index \"$cache_file\" \"$filter_type\" \"$filter_repo\" \"$force_index\""
       __mt_bg_run "mt-hub-indexer" "$log_out" "$cmd_str"
     else

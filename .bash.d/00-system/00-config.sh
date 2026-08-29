@@ -4,10 +4,34 @@
 # ------------------------------------------
 # ~/.bash.d/00-system/00-config.sh
 
-CONFIG_FILE="$HOME/.bash.d/config/config.yaml"
+#######################################
+# System: Resolve one XDG Base Directory the same way config_manager.py's
+# xdg_dir() does -- $<xdg_var> if it's set to an absolute path (a
+# relative value is invalid per spec and ignored), otherwise
+# ~/<fallback_rel>, with the framework's own directory appended either
+# way. Needed here, before config.yaml can even be parsed, to compute
+# ENV_CACHE's own bootstrap-time default (ENV_CACHE is itself the
+# parsed-config cache, so it can't depend on config.yaml content).
+# Arguments:
+#   $1 - XDG environment variable name (e.g. "XDG_CACHE_HOME")
+#   $2 - Fallback path relative to $HOME (e.g. ".cache")
+# Outputs:
+#   Prints the resolved, framework-scoped directory path to stdout
+#######################################
+__mt_xdg_dir() {
+  local xdg_var="$1" fallback_rel="$2"
+  local xdg_value="${!xdg_var}"
+  if [[ "$xdg_value" == /* ]]; then
+    echo "${xdg_value}/mt-devops-framework"
+  else
+    echo "$HOME/${fallback_rel}/mt-devops-framework"
+  fi
+}
+
+CONFIG_FILE="${CONFIG_FILE:-$HOME/.bash.d/config/config.yaml}"
 CONFIG_MANAGER="$HOME/.bash.d/lib/python/config_manager.py"
 SECRETS_MANAGER="$HOME/.bash.d/lib/python/secrets_manager.py"
-ENV_CACHE="$HOME/.bash.d/data/cache/.env.cache"
+ENV_CACHE="$(__mt_xdg_dir XDG_CACHE_HOME .cache)/.env.cache"
 YAML_TEMPLATE="$HOME/.bash.d/lib/templates/config.yaml.tpl"
 
 # Real secret values (API keys, tokens) never live in config.yaml or git --
@@ -839,14 +863,14 @@ mt-load-config() {
 
   echo -e "${CB_BLUE}🔄 Forcefully re-parsing config.yaml...${C_RESET}"
 
-  local env_cache="$HOME/.bash.d/data/cache/.env.cache"
-  rm -f "$env_cache" "$HOME/.bash.d/config/.env.cache" 2> /dev/null
+  rm -f "$ENV_CACHE" "$HOME/.bash.d/config/.env.cache" "$HOME/.bash.d/data/cache/.env.cache" 2> /dev/null
 
   if [ -f "$CONFIG_MANAGER" ]; then
-    python3 "$CONFIG_MANAGER" load-env > "$env_cache"
-    chmod 600 "$env_cache" 2> /dev/null
+    mkdir -p "$(dirname "$ENV_CACHE")"
+    python3 "$CONFIG_MANAGER" load-env > "$ENV_CACHE"
+    chmod 600 "$ENV_CACHE" 2> /dev/null
     # shellcheck disable=SC1090
-    source "$env_cache"
+    source "$ENV_CACHE"
     if [ -f "$SECRETS_FILE" ]; then
       # shellcheck disable=SC1091
       source "$SECRETS_FILE"
@@ -874,8 +898,12 @@ alias mt-reload-config='mt-load-config'
 # config.yaml quietly accumulates both the legacy and canonical key for
 # every rename it has lived through. Backs up config.yaml to
 # BACKUP_DIR/config-migrations/ before making any change, and is a safe
-# no-op if nothing legacy is found. Also runs automatically at the end
-# of every 'mt-get-update' install.
+# no-op if nothing legacy is found. Also moves any cache/log/version-file
+# data still sitting at the pre-XDG ~/.bash.d/data locations into their
+# new XDG Base Directory homes (see migrate_runtime_dirs() in
+# config_manager.py) -- likewise a safe no-op once nothing is left
+# there. Also runs automatically at the end of every 'mt-get-update'
+# install.
 # Globals:
 #   CONFIG_MANAGER
 #######################################
@@ -891,7 +919,27 @@ mt-migrate-config() {
   fi
 
   python3 "$CONFIG_MANAGER" migrate
+  __mt_report_runtime_dir_migration
   mt-load-config
+}
+
+#######################################
+# System: Run config_manager.py's runtime-dir migration (cache/logs/
+# version-file from the old ~/.bash.d/data locations to their new XDG
+# homes) and print a report only if it actually moved something -- a
+# silent no-op otherwise. Shared by mt-migrate-config and both
+# mt-get-update install paths (see 52-git-sync.sh) so the same one-time
+# move is offered wherever a config migration already happens.
+# Globals:
+#   CONFIG_MANAGER
+#######################################
+__mt_report_runtime_dir_migration() {
+  local moved
+  moved=$(python3 "$CONFIG_MANAGER" migrate-runtime-dirs)
+  if [ -n "$moved" ]; then
+    echo -e "${CB_BLUE}📦 Moved runtime data to its new XDG location:${C_RESET}"
+    echo "   - ${moved//$'\n'/$'\n   - '}"
+  fi
 }
 
 #######################################

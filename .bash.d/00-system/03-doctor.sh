@@ -41,9 +41,9 @@ __mt_doctor_check_version() {
   echo -e "${CB_BLUE}📦 Version${C_RESET}"
 
   local installed="Local"
-  [ -f "$HOME/.bash.d/data/.current_version" ] && installed=$(command cat "$HOME/.bash.d/data/.current_version")
+  [ -f "$VERSION_FILE" ] && installed=$(command cat "$VERSION_FILE")
 
-  local pending_file="$HOME/.bash.d/data/cache/.profile_update_pending"
+  local pending_file="$CACHE_DIR/.profile_update_pending"
   if [ -f "$pending_file" ]; then
     local latest
     latest=$(command cat "$pending_file")

@@ -50,7 +50,7 @@ __mt_http_server_wsl_bridge() {
 # nothing else would ever notice that happened otherwise.
 #######################################
 __mt_http_server_teardown_bridge_if_active() {
-  local bridge_state_file="$HOME/.bash.d/data/cache/.mt_http_server_bridge_port"
+  local bridge_state_file="$CACHE_DIR/.mt_http_server_bridge_port"
   [ -f "$bridge_state_file" ] || return 0
 
   local bridge_port
@@ -74,7 +74,7 @@ __mt_http_server_teardown_bridge_if_active() {
 #   Prints the PID to STDOUT if one is genuinely running; nothing otherwise
 #######################################
 __mt_http_server_running_job() {
-  local jobs_file="$HOME/.bash.d/data/cache/.mt_jobs.tsv"
+  local jobs_file="$CACHE_DIR/.mt_jobs.tsv"
   [ -f "$jobs_file" ] || return 0
 
   local pid
@@ -98,7 +98,7 @@ __mt_http_server_running_job() {
 #   Prints the PID to STDOUT if alive; nothing otherwise
 #######################################
 __mt_http_server_pid() {
-  local pid_file="$HOME/.bash.d/data/cache/.mt_http_server.pid"
+  local pid_file="$CACHE_DIR/.mt_http_server.pid"
   [ -f "$pid_file" ] || return 0
   local pid
   pid=$(command cat "$pid_file")
@@ -153,7 +153,7 @@ mt-http-server() {
   local require_auth="${HTTP_SERVER_ENABLE_AUTH:-false}"
   local idle_timeout="${HTTP_SERVER_IDLE_TIMEOUT_SEC:-1800}"
   local run_background=false do_stop=false do_status=false do_wizard=false
-  local bridge_state_file="$HOME/.bash.d/data/cache/.mt_http_server_bridge_port"
+  local bridge_state_file="$CACHE_DIR/.mt_http_server_bridge_port"
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -323,7 +323,7 @@ mt-http-server() {
     cleaned_up=true
     echo -e "\n${CB_YELLOW}🛑 Stopping server...${C_RESET}"
     __mt_http_server_teardown_bridge_if_active
-    rm -f "$HOME/.bash.d/data/cache/.mt_http_server.pid"
+    rm -f "$CACHE_DIR/.mt_http_server.pid"
   }
 
   echo -e "${CB_BLUE}🚀 Starting temporary HTTP server on port ${port}...${C_RESET}"
@@ -379,10 +379,10 @@ mt-http-server() {
   fi
 
   if [ "$run_background" = true ]; then
-    echo "$port" > "$HOME/.bash.d/data/cache/.mt_http_server_port"
+    echo "$port" > "$CACHE_DIR/.mt_http_server_port"
 
     local log_file
-    log_file="${LOG_DIR:-$HOME/.bash.d/data/logs}/http_server_$(date +%s).log"
+    log_file="$LOG_DIR/http_server_$(date +%s).log"
 
     # Deliberately NOT execed -- this wrapper subshell needs to stay alive
     # after the server process exits (whether via --stop or the server's
@@ -400,7 +400,7 @@ mt-http-server() {
     # raced past the single-instance check before either registered, the
     # loser reaches this tail too, and an unconditional rm here would
     # delete the winner's still-valid pidfile out from under it.
-    cmd_string="$cmd_string; __mt_http_server_teardown_bridge_if_active; rm -f '$HOME/.bash.d/data/cache/.mt_http_server_port'; [ -z \"\$(__mt_http_server_pid)\" ] && rm -f '$HOME/.bash.d/data/cache/.mt_http_server.pid'"
+    cmd_string="$cmd_string; __mt_http_server_teardown_bridge_if_active; rm -f '$CACHE_DIR/.mt_http_server_port'; [ -z \"\$(__mt_http_server_pid)\" ] && rm -f '$CACHE_DIR/.mt_http_server.pid'"
 
     __mt_bg_run "mt-http-server" "$log_file" "$cmd_string"
     echo -e "${C_DIM}Stop with: mt-http-server --stop${C_RESET}"
@@ -423,7 +423,7 @@ mt-http-server() {
 #######################################
 __mt_server_manager_active_port() {
   [ -n "$(__mt_http_server_running_job)" ] || return 0
-  local port_file="$HOME/.bash.d/data/cache/.mt_http_server_port"
+  local port_file="$CACHE_DIR/.mt_http_server_port"
   [ -f "$port_file" ] && command cat "$port_file"
 }
 
@@ -432,7 +432,7 @@ __mt_server_manager_active_port() {
 # instance, or nothing if none is running
 #######################################
 __mt_server_manager_log_path() {
-  local jobs_file="$HOME/.bash.d/data/cache/.mt_jobs.tsv"
+  local jobs_file="$CACHE_DIR/.mt_jobs.tsv"
   [ -f "$jobs_file" ] || return 0
   awk -F'|' '$3 == "mt-http-server" && $6 == "RUNNING" { print $7 }' "$jobs_file" | tail -n 1
 }
