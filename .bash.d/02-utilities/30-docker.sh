@@ -245,6 +245,10 @@ docker-reboot() {
     # Allow project name directly
     local container
     container=$(docker ps --format "{{.Names}}" | while read -r c; do
+      local p
+      # f is required by __docker_reboot_compose_metadata's 3-arg signature; only $p is checked here
+      # shellcheck disable=SC2034
+      local f
       __docker_reboot_compose_metadata "$c" p f || continue
       [[ "$p" == "$target" ]] && echo "$c" && break
     done)
