@@ -235,7 +235,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `docker-daemon` | Docker: Start, stop, restart, or check the status of the Docker daemon |
 | `docker-ls` | Docker: List all running containers in a clean table format |
 | `docker-nuke` | Docker: Aggressive cleanup of all unused containers, images, and volumes |
-| `docker-reboot-all` | Docker: Restart all currently running Docker containers |
+| `docker-reboot-all` | Docker: Recreate every running Docker Compose project on this host -- |
 | `docker-sandbox` | Docker: Spin up a temporary, throwaway container sandbox |
 | `docker-shell` | Docker: Interactive fuzzy-finder to exec into a running container |
 | `docker-tail` | Docker: Concurrently tail logs from multiple selected containers |

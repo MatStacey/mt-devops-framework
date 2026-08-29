@@ -123,7 +123,94 @@ docker-daemon() {
 }
 
 #######################################
-# Docker: Restart all currently running Docker containers
+# Docker: Report whether a container is ready to be considered "up" --
+# running, and either healthy or has no healthcheck configured at all.
+# Arguments:
+#   $1 - Container name or ID
+# Returns:
+#   0 if ready, 1 otherwise (including if the container doesn't exist)
+#######################################
+__docker_reboot_container_ready() {
+  local container="$1"
+  local state health
+  state=$(docker inspect --format '{{.State.Status}}' "$container" 2> /dev/null) || return 1
+  [ "$state" = "running" ] || return 1
+
+  health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2> /dev/null) || return 1
+  [ "$health" = "healthy" ] || [ "$health" = "none" ]
+}
+
+#######################################
+# Docker: Resolve the Compose project name and config file a running
+# container belongs to, from its own labels. Fails for a container that
+# wasn't started by Docker Compose (no such labels), or whose config
+# file no longer exists on disk.
+# Arguments:
+#   $1 - Container name or ID
+#   $2 - Name of the caller's variable to receive the project name
+#   $3 - Name of the caller's variable to receive the compose file path
+# Returns:
+#   0 on success, 1 if the container isn't Compose-managed
+#######################################
+__docker_reboot_compose_metadata() {
+  local container="$1" project_var="$2" compose_var="$3"
+  local compose_project compose_files compose_path
+
+  compose_project=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$container" 2> /dev/null) || return 1
+  compose_files=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}' "$container" 2> /dev/null) || return 1
+  [ -n "$compose_project" ] && [ -n "$compose_files" ] || return 1
+
+  compose_path="${compose_files%%,*}"
+  [ -f "$compose_path" ] || return 1
+
+  printf -v "$project_var" '%s' "$compose_project"
+  printf -v "$compose_var" '%s' "$compose_path"
+}
+
+#######################################
+# Docker: Poll a just-recreated Compose project until every one of its
+# containers reports ready (see __docker_reboot_container_ready), up to
+# a fixed timeout.
+# Arguments:
+#   $1 - Path to the project's compose file
+# Returns:
+#   0 once every container is ready, 1 on timeout
+#######################################
+__docker_reboot_wait_for_project() {
+  local compose_file="$1"
+  local timeout=120 interval=2
+
+  while ((timeout > 0)); do
+    local containers
+    containers=$(docker compose -f "$compose_file" ps -aq 2> /dev/null)
+
+    if [ -n "$containers" ]; then
+      local all_ready=true container
+      while read -r container; do
+        [ -z "$container" ] && continue
+        __docker_reboot_container_ready "$container" || {
+          all_ready=false
+          break
+        }
+      done <<< "$containers"
+      [ "$all_ready" = true ] && return 0
+    fi
+
+    sleep "$interval"
+    ((timeout -= interval))
+  done
+  return 1
+}
+
+#######################################
+# Docker: Recreate every running Docker Compose project on this host --
+# a full 'down' then 'up -d' per project rather than a naive per-
+# container 'docker restart', so shared networks/volumes and startup
+# ordering within a project are respected. A container excluded via -x
+# or DOCKER_BLOCKLIST takes its entire project out of the run, since a
+# Compose project can't be partially recreated. Containers not managed
+# by Compose are reported and skipped, since there's no project to
+# recreate them as part of.
 # Usage: docker-reboot-all [-x container1,container2]
 # Options:
 #   -x <names>  Comma-separated list of container names to exclude, in
@@ -151,32 +238,88 @@ docker-reboot-all() {
   done
   shift $((OPTIND - 1))
 
-  local full_excludes="${DOCKER_BLOCKLIST}"
+  local full_excludes="${DOCKER_BLOCKLIST:-}"
   [ -n "$manual_excludes" ] && full_excludes="${full_excludes:+${full_excludes},}${manual_excludes}"
 
-  local running_containers
-  if [ -n "$full_excludes" ]; then
-    # Docker's own negative-filter syntax is unreliable across versions;
-    # grab everything running and exclude via grep instead.
-    local exclude_pattern
-    exclude_pattern=$(echo "$full_excludes" | sed 's/,/|/g; s/ //g')
-    running_containers=$(docker ps --format "{{.Names}}" | grep -Ev "^(${exclude_pattern})$")
-  else
-    running_containers=$(docker ps --format "{{.Names}}")
-  fi
+  local exclude_pattern=""
+  # Docker's own negative-filter syntax is unreliable across versions;
+  # grab everything running and exclude via grep instead.
+  [ -n "$full_excludes" ] && exclude_pattern=$(echo "$full_excludes" | sed 's/,/|/g; s/ //g')
 
+  local running_containers
+  running_containers=$(docker ps --format "{{.Names}}")
   if [ -z "$running_containers" ]; then
-    mt-log WARN "No running Docker containers found matching the criteria."
+    mt-log WARN "No running Docker containers found."
     return 0
   fi
 
-  echo "🔄 Restarting containers..."
-  local container
-  for container in $running_containers; do
-    echo "   Stopping -> Starting: $container"
-    docker restart "$container" > /dev/null
+  local -A project_files=() project_seen=() project_excluded=()
+  local project_order=()
+  local container project compose_file
+
+  while read -r container; do
+    [ -z "$container" ] && continue
+
+    if ! __docker_reboot_compose_metadata "$container" project compose_file; then
+      echo -e "${CB_YELLOW}⚠️  Skipping non-Compose container: ${container}${C_RESET}"
+      continue
+    fi
+
+    if [ -n "$exclude_pattern" ] && [[ "$container" =~ ^(${exclude_pattern})$ ]]; then
+      project_excluded["$project"]=1
+      continue
+    fi
+
+    if [ -z "${project_seen[$project]:-}" ]; then
+      project_seen["$project"]=1
+      project_files["$project"]="$compose_file"
+      project_order+=("$project")
+    fi
+  done <<< "$running_containers"
+
+  if [ "${#project_order[@]}" -eq 0 ]; then
+    mt-log WARN "No Compose projects found among running containers."
+    return 0
+  fi
+
+  echo "🔄 Restarting Docker Compose projects..."
+  local failures=0 skipped=0
+
+  for project in "${project_order[@]}"; do
+    if [ -n "${project_excluded[$project]:-}" ]; then
+      echo -e "${CB_YELLOW}⚠️  Skipping project: ${project} (excluded)${C_RESET}"
+      ((skipped++))
+      continue
+    fi
+
+    compose_file="${project_files[$project]}"
+    echo -e "\n▶ Restarting project: ${project}"
+
+    if ! docker compose -f "$compose_file" down > /dev/null 2>&1; then
+      echo -e "${CB_RED}🚨 Failed stopping: ${project}${C_RESET}"
+      ((failures++))
+      continue
+    fi
+    if ! docker compose -f "$compose_file" up -d > /dev/null 2>&1; then
+      echo -e "${CB_RED}🚨 Failed starting: ${project}${C_RESET}"
+      ((failures++))
+      continue
+    fi
+
+    if __docker_reboot_wait_for_project "$compose_file"; then
+      echo -e "${CB_GREEN}✅ Project recreated: ${project}${C_RESET}"
+    else
+      echo -e "${CB_YELLOW}⚠️  Project did not become healthy in time: ${project} (continuing)${C_RESET}"
+      ((failures++))
+    fi
   done
-  echo -e "${CB_GREEN}✅ Restart complete.${C_RESET}"
+
+  [ "$skipped" -gt 0 ] && echo -e "${CB_YELLOW}⚠️  ${skipped} project(s) skipped due to exclusions.${C_RESET}"
+  if [ "$failures" -gt 0 ]; then
+    echo -e "${CB_YELLOW}⚠️  Docker restart complete with ${failures} warning(s) above.${C_RESET}"
+    return 0
+  fi
+  echo -e "${CB_GREEN}✅ Docker restart complete.${C_RESET}"
 }
 
 #######################################
