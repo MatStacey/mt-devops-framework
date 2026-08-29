@@ -60,6 +60,11 @@ server:
 cicd:
   default_provider: github
 
+minikube:
+  driver: docker
+  cpus: 2
+  memory_mb: 4000
+
 display:
   show_git: true
   show_gcp: true

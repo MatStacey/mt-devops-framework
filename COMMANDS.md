@@ -180,6 +180,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-wizard-docker` | Config: Interactive Docker Setup Menu |
 | `mt-wizard-exports` | Config: Interactive Exports Setup Menu |
 | `mt-wizard-git` | Config: Interactive Git Setup Menu |
+| `mt-wizard-minikube` | Config: Interactive Minikube Configuration Wizard -- sets the |
 | `mt-wizard-paths` | Config: Interactive Paths Setup Menu -- prompts for and persists the |
 | `mt-wizard-system` | Config: Interactive System Setup Menu |
 
@@ -269,6 +270,19 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `google-fmt` | Formats Python and Shell scripts according to Google Style Guides. |
 
+### Helm (Kubernetes Package Manager) Tools
+| Command | Description |
+|---|---|
+| `helm-install` | Helm: Install a chart as a new release in the current namespace |
+| `helm-list` | Helm: List releases in a clean table |
+| `helm-repo` | Helm: Manage chart repositories -- list/add/update, mirroring |
+| `helm-rollback` | Helm: Roll back a release to a previous revision, always confirmed via |
+| `helm-search` | Helm: Search configured repos for a chart |
+| `helm-status` | Helm: Dashboard summarizing helm's view of the active context -- CLI |
+| `helm-uninstall` | Helm: Uninstall a release, always confirmed via the destructive-op |
+| `helm-upgrade` | Helm: Upgrade an existing release to a new chart/version -- the |
+| `helm-values` | Helm: Show the user-supplied values for a release |
+
 ### Infrastructure as Code
 | Command | Description |
 |---|---|
@@ -280,6 +294,19 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-copy` | LLM: Copy a file or directory tree to clipboard with headers and extension filters |
 | `mt-export` | LLM: Export codebase to text/zip for LLM context window using dynamic schemas |
 | `mt-export-cleanup` | LLM: Safely remove stale mt-export output from EXPORT_DIR |
+
+### Minikube (Local Kubernetes Cluster) Tools
+| Command | Description |
+|---|---|
+| `mk-addons` | Minikube: fzf-pick an addon and toggle it on/off based on its current |
+| `mk-dashboard` | Minikube: Launch the Kubernetes dashboard web UI in the background via |
+| `mk-delete` | Minikube: Permanently delete a local cluster and its profile, always |
+| `mk-load-image` | Minikube: Load a locally-built Docker image into the cluster's |
+| `mk-ssh` | Minikube: Open an interactive shell on the cluster's node -- the |
+| `mk-start` | Minikube: Create (or resume) a local cluster using the configured |
+| `mk-status` | Minikube: Dashboard summarizing a local cluster's lifecycle state -- |
+| `mk-stop` | Minikube: Stop a local cluster without destroying it -- state is |
+| `mk-tunnel` | Minikube: Open a network tunnel so LoadBalancer-type services get a |
 
 ### MT Repo Hub - AI & Heuristic Metadata Dashboard
 | Command | Description |

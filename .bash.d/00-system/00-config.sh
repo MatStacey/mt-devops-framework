@@ -464,7 +464,8 @@ mt-setup() {
     "6. Git & Version Control"
     "7. CI/CD Default Provider"
     "8. Docker Preferences"
-    "9. Exit"
+    "9. Minikube Preferences"
+    "10. Exit"
   )
 
   local choice
@@ -479,6 +480,7 @@ mt-setup() {
     6*) mt-wizard-git ;;
     7*) mt-wizard-cicd ;;
     8*) mt-wizard-docker ;;
+    9*) mt-wizard-minikube ;;
     *)
       echo "⚠️ Setup cancelled."
       return 0
@@ -776,6 +778,26 @@ mt-wizard-docker() {
   read -r -p "Restart Blocklist (comma-separated) [${DOCKER_BLOCKLIST:-redis,postgres,local-db}]: " blk
   [ -n "$blk" ] && python3 "$CONFIG_MANAGER" update "docker" "restart_blocklist_csv" "$blk"
   echo -e "${CB_GREEN}✅ Docker config updated.${C_RESET}"
+}
+
+#######################################
+# Config: Interactive Minikube Configuration Wizard -- sets the
+# driver/CPU/memory defaults 'mk-start' uses to create a local cluster,
+# so those never need to be hardcoded at the call site.
+#######################################
+mt-wizard-minikube() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  echo -e "${CB_BLUE}--- Minikube Configuration ---${C_RESET}"
+  read -r -p "Driver (docker/virtualbox/hyperv/kvm2/podman) [${MK_DRIVER:-docker}]: " drv
+  [ -n "$drv" ] && python3 "$CONFIG_MANAGER" update "minikube" "driver" "$drv"
+  read -r -p "CPUs [${MK_CPUS:-2}]: " cpus
+  [ -n "$cpus" ] && python3 "$CONFIG_MANAGER" update "minikube" "cpus" "$cpus"
+  read -r -p "Memory in MB [${MK_MEMORY_MB:-4000}]: " mem
+  [ -n "$mem" ] && python3 "$CONFIG_MANAGER" update "minikube" "memory_mb" "$mem"
+  echo -e "${CB_GREEN}✅ Minikube config updated.${C_RESET}"
 }
 
 #######################################
