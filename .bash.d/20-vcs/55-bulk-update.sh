@@ -237,7 +237,7 @@ mt-bulk-update() {
 
   if [ "$run_bg" = true ]; then
     local log_out
-    log_out="${LOG_DIR:-$HOME/.bash.d/data/logs}/bulk_update_$(date +%s).log"
+    log_out="$LOG_DIR/bulk_update_$(date +%s).log"
     local cmd_str="__mt_bulk_update_run \"$scope\" \"$provider\" \"$workspace\" \"$project\""
     __mt_bg_run "mt-bulk-update" "$log_out" "$cmd_str"
   else

@@ -176,10 +176,9 @@ mk-dashboard() {
   __mk_ensure_installed || return 1
 
   local profile="${1:-minikube}"
-  local log_dir="${LOG_DIR:-$HOME/.bash.d/data/logs}"
   local timestamp
   timestamp=$(date +%Y%m%d-%H%M%S)
-  local log_file="${log_dir}/minikube-dashboard_${timestamp}.log"
+  local log_file="${LOG_DIR}/minikube-dashboard_${timestamp}.log"
 
   __mt_bg_run "minikube-dashboard: ${profile}" "$log_file" "minikube dashboard -p '${profile}'"
 }

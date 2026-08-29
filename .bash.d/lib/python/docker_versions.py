@@ -12,7 +12,12 @@ implementation this replaces, so existing build history keeps working.
 import os
 import sys
 
-VERSION_FILE = os.path.expanduser("~/.bash.d/data/cache/.docker_image_versions.tsv")
+import config_manager
+
+VERSION_FILE = os.path.join(
+    config_manager.xdg_dir("XDG_CACHE_HOME", (".cache",), os.environ.get("HOME", "")),
+    ".docker_image_versions.tsv",
+)
 
 
 def _read_versions(path):

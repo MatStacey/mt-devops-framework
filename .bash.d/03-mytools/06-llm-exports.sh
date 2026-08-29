@@ -705,7 +705,7 @@ __mt_export_cleanup_run() {
   local verbose_ok=true
   [ "$quiet" = true ] && [ "$background" = false ] && verbose_ok=false
 
-  local lock_dir="$HOME/.bash.d/data/cache/.mt_export_cleanup.lock"
+  local lock_dir="$CACHE_DIR/.mt_export_cleanup.lock"
   mkdir -p "$(dirname "$lock_dir")"
   if ! mkdir "$lock_dir" 2> /dev/null; then
     echo -e "${CB_YELLOW}⚠️ Another export cleanup is already running.${C_RESET}"
@@ -880,7 +880,7 @@ mt-export-cleanup() {
     force=true
     quiet=true
     local log_out
-    log_out="${LOG_DIR:-$HOME/.bash.d/data/logs}/export_cleanup_$(date +%s).log"
+    log_out="$LOG_DIR/export_cleanup_$(date +%s).log"
     local cmd_str
     printf -v cmd_str '__mt_export_cleanup_run %q %q %q %q %q %q' \
       "$export_dir" "$target" "$force" "$quiet" "$backup" "$background"

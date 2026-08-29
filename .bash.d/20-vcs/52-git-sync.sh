@@ -541,7 +541,7 @@ __mt_push_update_check_staleness() {
   command -v gh > /dev/null 2>&1 || return 0
 
   local installed="Local"
-  [ -f "$HOME/.bash.d/data/.current_version" ] && installed=$(command cat "$HOME/.bash.d/data/.current_version")
+  [ -f "$VERSION_FILE" ] && installed=$(command cat "$VERSION_FILE")
 
   local latest
   latest=$(gh release view --repo "$UPSTREAM_REPO_PATH" --json tagName -q .tagName 2> /dev/null)
@@ -701,8 +701,8 @@ __mt_get_update_resolve_release() {
 
   local current_version="Local"
   local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
-  if [ -f "$HOME/.bash.d/data/.current_version" ]; then
-    current_version=$(command cat "$HOME/.bash.d/data/.current_version" | tr -d '\r\n ')
+  if [ -f "$VERSION_FILE" ]; then
+    current_version=$(command cat "$VERSION_FILE" | tr -d '\r\n ')
   elif [ -n "$repo_dir" ] && [ -d "$repo_dir/.git" ] && command -v git > /dev/null 2>&1; then
     current_version=$(git -C "$repo_dir" describe --tags --abbrev=0 2> /dev/null || echo "Local")
     current_version=$(echo "$current_version" | tr -d '\r\n ')
@@ -822,12 +822,12 @@ __mt_get_update_check_divergence() {
   [ -d "${ext_root}/.bash.d" ] || return 0
 
   local diff_files
-  diff_files=$(diff -r -w -q "$HOME/.bash.d" "${ext_root}/.bash.d" 2> /dev/null | grep -v -E "Only in|data/cache|config/\.env\.cache|data/\.current_version" || true)
+  diff_files=$(diff -r -w -q "$HOME/.bash.d" "${ext_root}/.bash.d" 2> /dev/null | grep -v "Only in" || true)
   [ -z "$diff_files" ] && return 0
 
   mt-log WARN "Applying this update will overwrite local modifications in ~/.bash.d."
   echo -e "${CB_YELLOW}Modified files detected:${C_RESET}"
-  diff -r -w -q "$HOME/.bash.d" "${ext_root}/.bash.d" 2> /dev/null | grep -v -E "Only in|data/cache|config/\.env\.cache|data/\.current_version" | awk '{print "  • " $2 " " $4}'
+  diff -r -w -q "$HOME/.bash.d" "${ext_root}/.bash.d" 2> /dev/null | grep -v "Only in" | awk '{print "  • " $2 " " $4}'
   echo ""
 
   __mt_get_update_backup_diverging_files "$diff_files"
@@ -840,7 +840,7 @@ __mt_get_update_check_divergence() {
   read -r -p "🔍 View detailed diff line-by-line before proceeding? [y/N] " -n 1 -r < /dev/tty
   echo
   if [[ $REPLY =~ ^[Yy]$ ]]; then
-    diff -u -r --color=always "$HOME/.bash.d" "${ext_root}/.bash.d" 2> /dev/null | grep -v -E "data/cache|config/\.env\.cache|data/\.current_version" | less -R
+    diff -u -r --color=always "$HOME/.bash.d" "${ext_root}/.bash.d" 2> /dev/null | less -R
   fi
 
   read -r -p "🚀 Proceed with update and overwrite local changes? [y/N] " -n 1 -r < /dev/tty
@@ -878,11 +878,12 @@ __mt_get_update_install() {
     cd "$ext_root" || exit 1
     bash ./install.sh
   )
-  mkdir -p "$HOME/.bash.d/data/cache" "$HOME/.bash.d/data/logs" "$HOME/.bash.d/config"
-  echo "$tag_name" > "$HOME/.bash.d/data/.current_version"
+  mkdir -p "$CACHE_DIR" "$LOG_DIR" "$CONFIG_DIR"
+  echo "$tag_name" > "$VERSION_FILE"
 
   if [ -f "$CONFIG_MANAGER" ] && [ -f "$CONFIG_FILE" ]; then
     python3 "$CONFIG_MANAGER" migrate
+    __mt_report_runtime_dir_migration
   fi
 }
 
@@ -935,10 +936,11 @@ __mt_get_update_git_pull() {
     tag_name=$(gh release view --repo "$UPSTREAM_REPO_PATH" --json tagName -q .tagName 2> /dev/null)
   fi
   [ -z "$tag_name" ] && tag_name=$(git -C "$repo_dir" describe --tags --abbrev=0 2> /dev/null)
-  [ -n "$tag_name" ] && echo "$tag_name" > "$HOME/.bash.d/data/.current_version"
+  [ -n "$tag_name" ] && echo "$tag_name" > "$VERSION_FILE"
 
   if [ -f "$CONFIG_MANAGER" ] && [ -f "$CONFIG_FILE" ]; then
     python3 "$CONFIG_MANAGER" migrate
+    __mt_report_runtime_dir_migration
   fi
 
   echo -e "${CB_GREEN}✅ Updated to ${tag_name:-$(git -C "$repo_dir" rev-parse --short HEAD 2> /dev/null)}.${C_RESET}"

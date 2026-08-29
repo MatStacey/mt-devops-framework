@@ -10,8 +10,9 @@ secret type, paired with a real `mt-add-<x>-key`/`mt-add-<x>-secret`
 function (see .bash.d/00-system/01-secrets.sh) that writes the value via
 __mt_write_secret and then calls this script's `register` subcommand.
 
-Metadata is persisted to ~/.bash.d/config/secrets_metadata.yaml, keyed by
-secret name.
+Metadata is persisted to secrets_metadata.yaml alongside config.yaml
+(config_manager.get_config_path()'s directory -- an XDG config location
+by default), keyed by secret name.
 
 Usage:
     python secrets_manager.py list
@@ -25,9 +26,12 @@ import os
 import sys
 from datetime import datetime, timezone
 
+import config_manager
 import yaml
 
-METADATA_FILE = os.path.expanduser("~/.bash.d/config/secrets_metadata.yaml")
+METADATA_FILE = os.path.join(
+    os.path.dirname(config_manager.get_config_path()), "secrets_metadata.yaml"
+)
 SECRETS_FILE = os.path.expanduser("~/secrets/secrets.sh")
 EXPIRY_WARNING_DAYS = 30
 

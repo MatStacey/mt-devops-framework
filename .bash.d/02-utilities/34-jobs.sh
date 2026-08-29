@@ -11,7 +11,7 @@ __mt_bg_run() {
   local job_name="$1" log_file="$2" cmd_string="$3"
   local job_id
   job_id="job_$(date +%s)_${RANDOM}"
-  local jobs_file="$HOME/.bash.d/data/cache/.mt_jobs.tsv"
+  local jobs_file="$CACHE_DIR/.mt_jobs.tsv"
 
   # Ensure log directory and job tracking directories exist BEFORE subshell redirects
   mkdir -p "$(dirname "$log_file")" "$(dirname "$jobs_file")"
@@ -262,7 +262,7 @@ ${CB_BLUE}▶ Selected Job: ${j_name} (${j_id})${C_RESET}"
         mt-http-server -b
       else
         local new_log
-        new_log="${LOG_DIR:-$HOME/.bash.d/data/logs}/indexer_$(date +%s).log"
+        new_log="$LOG_DIR/indexer_$(date +%s).log"
         __mt_bg_run "${j_name}" "$new_log" "$j_cmd"
       fi
       ;;
@@ -290,7 +290,7 @@ mt-jobs() {
     return 0
   fi
 
-  local jobs_file="$HOME/.bash.d/data/cache/.mt_jobs.tsv"
+  local jobs_file="$CACHE_DIR/.mt_jobs.tsv"
   local interactive=false do_purge=false do_clean=false watch=false
 
   while [[ "$#" -gt 0 ]]; do

@@ -8,10 +8,37 @@ import os
 import shlex
 import sys
 
+APP_NAME = "mt-devops-framework"
+
+
+def xdg_dir(xdg_var, fallback_segments, home):
+    """Resolves one XDG Base Directory: $<xdg_var> if set (and absolute,
+    per spec -- a relative value is invalid and ignored), otherwise
+    ~/<fallback_segments>, with this framework's own directory appended
+    either way so multiple tools sharing an XDG root never collide.
+
+    Arguments:
+        xdg_var: The XDG environment variable to check (e.g. "XDG_CACHE_HOME").
+        fallback_segments: Path segments under $HOME to join when the XDG
+            var isn't set (e.g. (".local", "state")).
+        home: The user's home directory.
+
+    Returns:
+        The resolved, framework-scoped directory path.
+    """
+    xdg_value = os.environ.get(xdg_var, "")
+    base = (
+        xdg_value
+        if os.path.isabs(xdg_value)
+        else os.path.join(home, *fallback_segments)
+    )
+    return os.path.join(base, APP_NAME)
+
 
 def get_config_path():
-    return os.path.expanduser(
-        os.environ.get("CONFIG_FILE", "~/.bash.d/config/config.yaml"))
+    home = os.environ.get("HOME", "")
+    default_path = os.path.join(home, ".bash.d", "config", "config.yaml")
+    return os.path.expanduser(os.environ.get("CONFIG_FILE", default_path))
 
 
 def _export(var_name, value, home_dir, to_lower=False, resolve_home=False):
@@ -224,7 +251,25 @@ def load_env():
         paths_cfg.get("docker_root_dir", paths_cfg.get("docker_root", "~/.docker")),
         resolve_home=True,
     )
-    export("THEMES_DIR", f"{home}/.bash.d/config/themes")
+    # Runtime directories -- XDG Base Directory locations by default
+    # (config/cache/state are different lifecycles: user-edited,
+    # disposable, and machine-generated-but-meaningful, respectively).
+    # CONFIG_DIR can't be read FROM config.yaml (the file lives inside
+    # it), so its location is fixed by get_config_path()/the CONFIG_FILE
+    # env var instead. CACHE_DIR/LOG_DIR are config.yaml-overridable like
+    # every other path here. VERSION_FILE is always derived from
+    # state_dir -- there's no standalone reason to relocate just the
+    # version marker independently of the rest of state.
+    config_dir = os.path.dirname(get_config_path())
+    state_dir = xdg_dir("XDG_STATE_HOME", (".local", "state"), home)
+    export("CONFIG_DIR", config_dir)
+    export(
+        "CACHE_DIR",
+        paths_cfg.get("cache_dir", xdg_dir("XDG_CACHE_HOME", (".cache",), home)),
+    )
+    export("LOG_DIR", paths_cfg.get("log_dir", os.path.join(state_dir, "logs")))
+    export("VERSION_FILE", os.path.join(state_dir, ".current_version"))
+    export("THEMES_DIR", os.path.join(config_dir, "themes"))
 
     # Docker
     export(
@@ -545,7 +590,9 @@ def migrate_config():
         yaml.safe_dump(d, f, sort_keys=False, default_flow_style=False)
     os.chmod(path, 0o600)
 
-    cache_file = os.path.expanduser("~/.bash.d/data/cache/.env.cache")
+    cache_file = os.path.join(
+        xdg_dir("XDG_CACHE_HOME", (".cache",), home), ".env.cache"
+    )
     if os.path.exists(cache_file):
         os.remove(cache_file)
 
@@ -554,6 +601,68 @@ def migrate_config():
     for line in report:
         print(f"   - {line}")
     print(f"📦 Backup saved to {backup_path}")
+
+
+def migrate_runtime_dirs():
+    """One-time move of cache/log/version-file data from the old fixed
+    ~/.bash.d/data/{cache,logs,.current_version} locations to the new
+    XDG Base Directory ones, for installs that predate this framework
+    version. A pure filesystem relocation, unrelated to config.yaml's
+    own key-rename migration above -- kept as a separate function but
+    triggered by the same two call sites (`mt-migrate-config` and the
+    end of mt-get-update's install step) since it's the same class of
+    problem: an old install silently left behind on a superseded layout.
+
+    Safe to call repeatedly: each item is moved individually and only
+    if the new location doesn't already have something there, so a
+    partial prior run, a fresh XDG directory another tool already
+    populated, or a plain re-run all do the right thing rather than
+    overwriting anything. The old directories are left in place (not
+    rmdir'd) even once emptied, to avoid racing a background job that
+    might still be writing into them.
+
+    Returns:
+        A list of human-readable "moved X -> Y" report lines, empty if
+        there was nothing at the old locations to move.
+    """
+    import shutil
+
+    home = os.environ.get("HOME", "")
+    legacy_data_dir = os.path.join(home, ".bash.d", "data")
+    report = []
+
+    old_version_file = os.path.join(legacy_data_dir, ".current_version")
+    new_version_file = os.path.join(
+        xdg_dir("XDG_STATE_HOME", (".local", "state"), home), ".current_version"
+    )
+    if os.path.exists(old_version_file) and not os.path.exists(new_version_file):
+        os.makedirs(os.path.dirname(new_version_file), exist_ok=True)
+        shutil.move(old_version_file, new_version_file)
+        report.append(f"moved {old_version_file} -> {new_version_file}")
+
+    dir_moves = (
+        (
+            os.path.join(legacy_data_dir, "cache"),
+            xdg_dir("XDG_CACHE_HOME", (".cache",), home),
+        ),
+        (
+            os.path.join(legacy_data_dir, "logs"),
+            os.path.join(xdg_dir("XDG_STATE_HOME", (".local", "state"), home), "logs"),
+        ),
+    )
+    for old_dir, new_dir in dir_moves:
+        if not os.path.isdir(old_dir):
+            continue
+        os.makedirs(new_dir, exist_ok=True)
+        for entry in os.listdir(old_dir):
+            old_path = os.path.join(old_dir, entry)
+            new_path = os.path.join(new_dir, entry)
+            if os.path.exists(new_path):
+                continue
+            shutil.move(old_path, new_path)
+            report.append(f"moved {old_path} -> {new_path}")
+
+    return report
 
 
 def update_yaml(cat_path, key, val):
@@ -580,7 +689,10 @@ def update_yaml(cat_path, key, val):
 
     os.chmod(path, 0o600)
 
-    cache_file = os.path.expanduser("~/.bash.d/data/cache/.env.cache")
+    cache_file = os.path.join(
+        xdg_dir("XDG_CACHE_HOME", (".cache",), os.environ.get("HOME", "")),
+        ".env.cache",
+    )
     if os.path.exists(cache_file):
         os.remove(cache_file)
 
@@ -595,3 +707,7 @@ if __name__ == "__main__" and len(sys.argv) > 1:
         migrate_config()
     elif cmd == "check-config":
         check_config()
+    elif cmd == "migrate-runtime-dirs":
+        moved = migrate_runtime_dirs()
+        for line in moved:
+            print(line)

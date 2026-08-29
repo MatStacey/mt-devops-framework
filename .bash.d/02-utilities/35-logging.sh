@@ -13,8 +13,7 @@
 mt-log() {
   local level="$1"
   local msg="$2"
-  local log_dir="${LOG_DIR:-$HOME/.bash.d/data/logs}"
-  local log_file="$log_dir/framework.log"
+  local log_file="$LOG_DIR/framework.log"
 
   # Console Output
   case "$level" in
@@ -26,7 +25,7 @@ mt-log() {
   esac
 
   # File Logging (with 1MB basic rotation)
-  mkdir -p "$log_dir" 2> /dev/null
+  mkdir -p "$LOG_DIR" 2> /dev/null
   if [ -f "$log_file" ]; then
     local size
     size=$(wc -c < "$log_file" 2> /dev/null || echo 0)
@@ -91,7 +90,7 @@ mt-logs() {
     return 0
   fi
 
-  local log_file="${LOG_DIR:-$HOME/.bash.d/data/logs}/framework.log"
+  local log_file="$LOG_DIR/framework.log"
   local lines=50
   local level_filter=""
   local search_term=""

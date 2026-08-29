@@ -10,11 +10,11 @@
 __check_updates() {
   if [[ $- != *i* ]]; then return; fi
 
-  local pending_file="$HOME/.bash.d/data/cache/.update_pending"
-  local cache_file="$HOME/.bash.d/data/cache/.update_check_cache"
+  local pending_file="$CACHE_DIR/.update_pending"
+  local cache_file="$CACHE_DIR/.update_check_cache"
   local current_time
   current_time=$(date +%s)
-  mkdir -p "$HOME/.bash.d/data/cache" 2> /dev/null
+  mkdir -p "$CACHE_DIR" 2> /dev/null
 
   if [ -f "$pending_file" ]; then
     local updates_count
@@ -61,19 +61,19 @@ __check_updates
 __check_profile_updates() {
   if [[ $- != *i* ]]; then return; fi
 
-  local pending_file="$HOME/.bash.d/data/cache/.profile_update_pending"
-  local cache_file="$HOME/.bash.d/data/cache/.profile_update_cache"
+  local pending_file="$CACHE_DIR/.profile_update_pending"
+  local cache_file="$CACHE_DIR/.profile_update_cache"
   local current_time
   current_time=$(date +%s)
-  mkdir -p "$HOME/.bash.d/data/cache" 2> /dev/null
+  mkdir -p "$CACHE_DIR" 2> /dev/null
 
   if [ -f "$pending_file" ]; then
     local new_version
     new_version=$(command cat "$pending_file")
     local current_version="Local"
     local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
-    if [ -f "$HOME/.bash.d/data/.current_version" ]; then
-      current_version=$(command cat "$HOME/.bash.d/data/.current_version")
+    if [ -f "$VERSION_FILE" ]; then
+      current_version=$(command cat "$VERSION_FILE")
     elif [ -n "$repo_dir" ] && [ -d "$repo_dir/.git" ] && command -v git > /dev/null 2>&1; then
       current_version=$(git -C "$repo_dir" describe --tags --abbrev=0 2> /dev/null || echo "Local")
     fi
@@ -102,8 +102,8 @@ __check_profile_updates() {
 
       local current_version=""
       local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
-      if [ -f "$HOME/.bash.d/data/.current_version" ]; then
-        current_version=$(command cat "$HOME/.bash.d/data/.current_version")
+      if [ -f "$VERSION_FILE" ]; then
+        current_version=$(command cat "$VERSION_FILE")
       elif [ -n "$repo_dir" ] && [ -d "$repo_dir/.git" ] && command -v git > /dev/null 2>&1; then
         current_version=$(git -C "$repo_dir" describe --tags --abbrev=0 2> /dev/null || echo "")
       fi

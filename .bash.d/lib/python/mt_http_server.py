@@ -13,12 +13,12 @@ credentials never show up in `ps` output for other local users to see:
 
 Serves the current working directory, matching `python3 -m http.server`'s
 own default. Once the port is successfully bound, writes its own PID to
-~/.bash.d/data/cache/.mt_http_server.pid so `mt-http-server --stop` can
-target the real server process directly rather than whatever wrapper
-launched it -- writing the PID only after a successful bind (rather than
-before) means a second instance that loses a port-conflict race exits
-before ever touching the pidfile, instead of clobbering the winner's PID
-with its own before crashing.
+$CACHE_DIR/.mt_http_server.pid so `mt-http-server --stop` can target the
+real server process directly rather than whatever wrapper launched it --
+writing the PID only after a successful bind (rather than before) means
+a second instance that loses a port-conflict race exits before ever
+touching the pidfile, instead of clobbering the winner's PID with its
+own before crashing.
 
 Basic Auth sends credentials base64-encoded, not encrypted -- this keeps
 casual LAN users out, it is not a substitute for TLS if the server is
@@ -33,7 +33,12 @@ import sys
 import threading
 import time
 
-PID_FILE = os.path.expanduser("~/.bash.d/data/cache/.mt_http_server.pid")
+import config_manager
+
+PID_FILE = os.path.join(
+    config_manager.xdg_dir("XDG_CACHE_HOME", (".cache",), os.environ.get("HOME", "")),
+    ".mt_http_server.pid",
+)
 IDLE_CHECK_INTERVAL_SEC = 10
 
 _last_activity = time.monotonic()

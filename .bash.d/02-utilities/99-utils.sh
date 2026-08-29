@@ -90,7 +90,7 @@ mt-alias() {
     esac
   done
   if [ "$interactive" = true ]; then
-    update_name=$(awk -F'\t' '$1 == "alias" { printf "%-24s │ %-20s │ %s\n", $3, $2, $4 }' "$HOME/.bash.d/data/cache/.mt_data.tsv" | fzf --ansi --prompt="Select Alias to Update > " | awk '{print $1}')
+    update_name=$(awk -F'\t' '$1 == "alias" { printf "%-24s │ %-20s │ %s\n", $3, $2, $4 }' "$CACHE_DIR/.mt_data.tsv" | fzf --ansi --prompt="Select Alias to Update > " | awk '{print $1}')
     [ -z "$update_name" ] && return 0
   fi
   local alias_name="$update_name" default_cmd="" default_cat="User Custom" default_desc=""
@@ -111,7 +111,7 @@ mt-alias() {
     echo -e "${CB_CYAN} 🛠️  Update Existing Alias: ${alias_name}${C_RESET}"
     default_cmd=$(grep -E "^[ \t]*alias ${alias_name}=" "$aliases_file" | sed -E "s/^[ \t]*alias ${alias_name}=['\"]?//;s/['\"]?$//")
     local tsv_line
-    tsv_line=$(awk -F'\t' -v n="$alias_name" '$1=="alias" && $3==n {print $2 "|" $4}' "$HOME/.bash.d/data/cache/.mt_data.tsv" | head -n 1)
+    tsv_line=$(awk -F'\t' -v n="$alias_name" '$1=="alias" && $3==n {print $2 "|" $4}' "$CACHE_DIR/.mt_data.tsv" | head -n 1)
     if [ -n "$tsv_line" ]; then
       default_cat=$(echo "$tsv_line" | cut -d'|' -f1)
       default_desc=$(echo "$tsv_line" | cut -d'|' -f2)
@@ -189,7 +189,7 @@ mt-cmd-history() {
     shift
   done
 
-  local tsv_file="$HOME/.bash.d/data/cache/.mt_data.tsv"
+  local tsv_file="$CACHE_DIR/.mt_data.tsv"
   if [ ! -f "$tsv_file" ]; then
     mt-refresh-caches > /dev/null 2>&1
   fi

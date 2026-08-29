@@ -473,11 +473,11 @@ bootstrap() {
 __check_missing_deps() {
   if [[ $- != *i* ]]; then return; fi
 
-  local pending_file="$HOME/.bash.d/data/cache/.deps_pending"
-  local cache_file="$HOME/.bash.d/data/cache/.deps_check_cache"
+  local pending_file="$CACHE_DIR/.deps_pending"
+  local cache_file="$CACHE_DIR/.deps_check_cache"
   local current_time
   current_time=$(date +%s)
-  mkdir -p "$HOME/.bash.d/data/cache" 2> /dev/null
+  mkdir -p "$CACHE_DIR" 2> /dev/null
 
   if [ -f "$pending_file" ]; then
     echo -e "\n${C_YELLOW}⚠️  Missing required dependencies detected in your environment:${C_RESET}"
@@ -556,7 +556,7 @@ sys-install() {
     return 0
   fi
   sys-update
-  rm -f "$HOME/.bash.d/data/cache/.update_pending"
+  rm -f "$CACHE_DIR/.update_pending"
 }
 
 __check_missing_deps

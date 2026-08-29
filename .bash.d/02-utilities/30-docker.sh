@@ -388,7 +388,6 @@ docker-reboot-all() {
   echo -e "${CB_BLUE}🚀 Queueing Docker Compose projects for parallel restart...${C_RESET}"
 
   local queued=0 skipped=0
-  local log_dir="${LOG_DIR:-$HOME/.bash.d/data/logs}"
   local timestamp
   timestamp=$(date +%Y%m%d-%H%M%S)
 
@@ -403,7 +402,7 @@ docker-reboot-all() {
     local verbose_arg=""
     [ "$verbose" = true ] && verbose_arg=" --verbose"
 
-    local log_file="${log_dir}/docker-reboot_${project}_${timestamp}.log"
+    local log_file="${LOG_DIR}/docker-reboot_${project}_${timestamp}.log"
     local cmd_string="docker-reboot '${project}'${verbose_arg}"
 
     __mt_bg_run "docker-reboot: ${project}" "$log_file" "$cmd_string"
