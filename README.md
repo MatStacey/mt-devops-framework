@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Refactored git synchronization logic by extracting message trimming, PR title derivation, and branch slug generation into modular helper functions.
+- Added a new Bats unit test suite (`test_git_sync.bats`) providing automated coverage for message parsing and branch naming routines.
 - Added an MIT License (`LICENSE`) to formalize open-source licensing terms.
 - Introduced a security policy (`SECURITY.md`) defining private vulnerability reporting procedures and version support guidelines.
 - Added `bats` dependency configuration for APT and Homebrew alongside automated execution in the CI release workflow.
 - Introduced a Bats test suite (`test_path_resolution.bats`) to validate XDG Base Directory path resolution and legacy config migration.
 - Migrated framework configuration files (`config.yaml`, `.syncignore`, and `secrets_metadata.yaml`) to adhere to the XDG Base Directory Specification (`$XDG_CONFIG_HOME`).
 - Added automated, one-time migration logic on shell initialization to safely move existing configuration files to the new location before scaffolding defaults.
-- Updated system scripts, including the config manager, git sync, and uninstaller, to dynamically reference the new XDG configuration paths.
-- Refactored core system scripts to adopt standard XDG Base Directory specifications for runtime cache, logs, and version tracking.
 
 ---
 

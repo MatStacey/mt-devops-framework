@@ -396,6 +396,70 @@ __mt_push_update_cleanup_merged_branches() {
 }
 
 #######################################
+# System: Trim leading/trailing whitespace from a message, preserving
+# embedded newlines. A plain `echo "$msg" | xargs` would also work for
+# ASCII whitespace, but treats every whitespace character -- including
+# newlines -- as a token separator and joins the result back with
+# single spaces, silently flattening any multi-paragraph message (the
+# normal git convention: subject, blank line, body) into one run-on
+# line before it ever reaches a commit or a PR title derived from it.
+# Arguments:
+#   $1 - Message to trim (may be empty, may be multi-line)
+# Outputs:
+#   Prints the trimmed message to stdout
+#######################################
+__mt_push_update_trim_message() {
+  local msg="$1"
+  msg="${msg#"${msg%%[![:space:]]*}"}"
+  msg="${msg%"${msg##*[![:space:]]}"}"
+  printf '%s' "$msg"
+}
+
+#######################################
+# System: Extract the first line of a (possibly multi-paragraph) commit
+# message as a PR title. GitHub silently joins embedded newlines into
+# one run-on line instead of rejecting a multi-line PR title, so this
+# matches standard git convention (subject line only) instead of
+# leaving that flattening to happen wherever the title is later used.
+# Arguments:
+#   $1 - Commit message (may be empty, may be multi-line)
+# Outputs:
+#   Prints the first line to stdout (empty if the input is empty)
+#######################################
+__mt_push_update_derive_pr_title() {
+  local user_msg="$1"
+  printf '%s' "${user_msg%%$'\n'*}"
+}
+
+#######################################
+# System: Derive a conventional-commit-style branch name prefix
+# ("type/slug") from a PR title. Pulls the leading alphabetic word as
+# the type (falls back to "chore" if the title doesn't start with
+# one), and slugifies the remainder (lowercased, non-alphanumeric runs
+# collapsed to a single hyphen, trimmed, capped at 40 chars).
+# Arguments:
+#   $1 - PR title (a single line -- pass the *first* line only; the
+#        grep/sed here anchor ^/$ to every LINE, not the whole string,
+#        so a multi-line input would silently produce a garbled,
+#        multi-line result instead of one clean "type/slug" value)
+# Outputs:
+#   Prints "type/slug" to stdout, or nothing if $1 is empty (the
+#   caller decides the empty-input fallback, since that one is
+#   timestamp-based and not a pure function of the input)
+#######################################
+__mt_push_update_derive_branch_slug() {
+  local pr_title="$1"
+  [ -z "$pr_title" ] && return 0
+
+  local type
+  type=$(echo "$pr_title" | grep -oE '^[a-zA-Z]+' || echo "chore")
+  local slug
+  slug=$(echo "$pr_title" | sed -E 's/^[a-zA-Z]+(\([^)]+\))?:[[:space:]]*//' | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g' | sed -E 's/^-|-$//g' | cut -c1-40)
+  [ -z "$slug" ] && slug="update-$(date +%s)"
+  printf '%s/%s' "$type" "$slug"
+}
+
+#######################################
 # System: Format, commit, and raise a PR for the synced dotfiles repo
 # Runs inside the caller's `( cd "$repo_dir"; ... )` subshell, so `cd`/`exit`
 # here never affect the interactive shell.
@@ -435,26 +499,12 @@ __mt_push_update_commit_and_raise_pr() {
   default_branch="${default_branch:-main}"
 
   local branch_name="$current_branch"
-  # PR titles can't contain newlines -- GitHub just joins them into one
-  # run-on line instead of rejecting the request, silently mangling any
-  # multi-paragraph commit message (subject + blank line + body, the
-  # normal git convention) into unreadable text. Match standard git
-  # convention: use only the first line as the title.
-  local pr_title="${user_msg%%$'\n'*}"
+  local pr_title
+  pr_title=$(__mt_push_update_derive_pr_title "$user_msg")
 
   if [ "$current_branch" = "$default_branch" ]; then
     if [ -n "$user_msg" ]; then
-      # Derive from pr_title (the first line only), not the full,
-      # possibly multi-paragraph $user_msg -- grep/sed anchor ^/$ to
-      # every LINE, not the whole string, so feeding them a multi-line
-      # message produces one match per line and a garbled, multi-line
-      # $type/$slug instead of a single value.
-      local type
-      type=$(echo "$pr_title" | grep -oE '^[a-zA-Z]+' || echo "chore")
-      local slug
-      slug=$(echo "$pr_title" | sed -E 's/^[a-zA-Z]+(\([^)]+\))?:[[:space:]]*//' | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g' | sed -E 's/^-|-$//g' | cut -c1-40)
-      [ -z "$slug" ] && slug="update-$(date +%s)"
-      branch_name="${type}/${slug}"
+      branch_name=$(__mt_push_update_derive_branch_slug "$pr_title")
     else
       branch_name="chore/automated-sync-$(date +%Y%m%d-%H%M%S)"
       pr_title="chore: automated profile synchronization"
@@ -649,14 +699,7 @@ mt-push-update() {
     esac
   done
 
-  # Trim leading/trailing whitespace only -- xargs would do this too, but
-  # treats every whitespace character (including embedded newlines) as a
-  # token separator and joins the result back with single spaces,
-  # silently flattening any multi-paragraph message (the normal git
-  # convention: subject, blank line, body) into one run-on line before
-  # it ever reaches the commit or the PR title derived from it.
-  user_msg="${user_msg#"${user_msg%%[![:space:]]*}"}"
-  user_msg="${user_msg%"${user_msg##*[![:space:]]}"}"
+  user_msg=$(__mt_push_update_trim_message "$user_msg")
 
   if [ "$run_shellcheck" = true ]; then
     __mt_push_update_run_shellcheck || return 1
