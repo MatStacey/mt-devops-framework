@@ -37,7 +37,9 @@ def xdg_dir(xdg_var, fallback_segments, home):
 
 def get_config_path():
     home = os.environ.get("HOME", "")
-    default_path = os.path.join(home, ".bash.d", "config", "config.yaml")
+    default_path = os.path.join(
+        xdg_dir("XDG_CONFIG_HOME", (".config",), home), "config.yaml"
+    )
     return os.path.expanduser(os.environ.get("CONFIG_FILE", default_path))
 
 
@@ -603,6 +605,64 @@ def migrate_config():
     print(f"📦 Backup saved to {backup_path}")
 
 
+def _move_if_new_missing(old_path, new_path, report):
+    """Moves a single file from old_path to new_path if the old one
+    exists and the new one doesn't yet, creating new_path's parent
+    directory as needed. No-op otherwise, so repeated calls -- an
+    already-migrated install, a fresh install with nothing at the old
+    location, or a partial prior run -- all do the right thing rather
+    than overwriting anything.
+
+    Arguments:
+        old_path: Pre-XDG file location.
+        new_path: New XDG Base Directory location.
+        report: List to append a human-readable "moved X -> Y" line to,
+            mutated in place so callers can share one report across
+            several calls.
+    """
+    import shutil
+
+    if not os.path.exists(old_path) or os.path.exists(new_path):
+        return
+    os.makedirs(os.path.dirname(new_path), exist_ok=True)
+    shutil.move(old_path, new_path)
+    report.append(f"moved {old_path} -> {new_path}")
+
+
+def migrate_config_files():
+    """One-time move of config.yaml/.syncignore/secrets_metadata.yaml
+    from the old fixed ~/.bash.d/config/ location to the new XDG Base
+    Directory config home, for installs that predate this framework
+    version. Companion to migrate_runtime_dirs() below -- same "old
+    install, superseded layout" problem -- but kept separate since it
+    moves individual files rather than directory contents, and runs
+    from a different call site: install.sh's own scaffold-if-missing
+    step needs this to run first (otherwise it would see nothing at
+    the new CONFIG_FILE path and create a fresh default there,
+    stranding the user's real settings unread at the old path), in
+    addition to the usual mt-migrate-config/mt-get-update triggers.
+
+    Only ever touches paths, never config.yaml's own keys, so it's
+    safe to call before get_config_path() can be trusted to point at
+    real data.
+
+    Returns:
+        A list of human-readable "moved X -> Y" report lines, empty if
+        there was nothing at the old location to move.
+    """
+    home = os.environ.get("HOME", "")
+    old_config_dir = os.path.join(home, ".bash.d", "config")
+    new_config_dir = xdg_dir("XDG_CONFIG_HOME", (".config",), home)
+    report = []
+    for name in ("config.yaml", ".syncignore", "secrets_metadata.yaml"):
+        _move_if_new_missing(
+            os.path.join(old_config_dir, name),
+            os.path.join(new_config_dir, name),
+            report,
+        )
+    return report
+
+
 def migrate_runtime_dirs():
     """One-time move of cache/log/version-file data from the old fixed
     ~/.bash.d/data/{cache,logs,.current_version} locations to the new
@@ -635,10 +695,7 @@ def migrate_runtime_dirs():
     new_version_file = os.path.join(
         xdg_dir("XDG_STATE_HOME", (".local", "state"), home), ".current_version"
     )
-    if os.path.exists(old_version_file) and not os.path.exists(new_version_file):
-        os.makedirs(os.path.dirname(new_version_file), exist_ok=True)
-        shutil.move(old_version_file, new_version_file)
-        report.append(f"moved {old_version_file} -> {new_version_file}")
+    _move_if_new_missing(old_version_file, new_version_file, report)
 
     dir_moves = (
         (
@@ -711,3 +768,9 @@ if __name__ == "__main__" and len(sys.argv) > 1:
         moved = migrate_runtime_dirs()
         for line in moved:
             print(line)
+    elif cmd == "migrate-config-files":
+        moved = migrate_config_files()
+        for line in moved:
+            print(line)
+    elif cmd == "get-config-path":
+        print(get_config_path())

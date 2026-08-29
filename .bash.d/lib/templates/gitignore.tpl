@@ -2,22 +2,16 @@
 # Mandatory Profile Ignores
 # ==========================================
 
-# Secrets & Configuration
-.bash.d/config/config.yaml
-.bash.d/config/secrets_metadata.yaml
-.bash.d/data/cache/.env.cache
+# Secrets & Configuration: config.yaml, .syncignore, and
+# secrets_metadata.yaml live outside .bash.d entirely (in
+# ${XDG_CONFIG_HOME:-~/.config}/mt-devops-framework/), so there's
+# nothing under this repo's own tree left to ignore for them.
 
-# Framework Caches & State Variables
-.bash.d/.mt_cache*
-.bash.d/.mt_data.tsv
-.bash.d/.update_check_cache
-.bash.d/.profile_update_cache
-.bash.d/.*_pending
-.bash.d/data/.current_version
-
-# Dynamic Caches (Includes .vcs_hub.json)
-.bash.d/data/cache/
-data/cache/
+# Framework Caches & State Variables -- these, along with cache/logs/
+# the version file, also live outside .bash.d entirely now (in
+# ${XDG_CACHE_HOME:-~/.cache} / ${XDG_STATE_HOME:-~/.local/state}), so
+# there's nothing under this repo's own tree left to ignore for them
+# either.
 
 # Python & Linters
 __pycache__/

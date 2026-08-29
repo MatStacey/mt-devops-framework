@@ -1,27 +1,17 @@
 
 
-# Auto-generated Framework Caches & Local Logs
-.bash.d/data/cache/
-.bash.d/data/logs/
-.bash.d/data/.current_version
-.bash.d/config/config.yaml
-.bash.d/config/.env.cache
-.bash.d/config/.syncignore
-.bash.d/config/github_token.sh
-.bash.d/config/*_token.sh
+# Secrets & Configuration: config.yaml, .syncignore, and
+# secrets_metadata.yaml live outside .bash.d entirely (in
+# ${XDG_CONFIG_HOME:-~/.config}/mt-devops-framework/), so there's
+# nothing under this repo's own tree left to ignore for them.
+
+# Framework Caches & State Variables -- these, along with cache/logs/
+# the version file, also live outside .bash.d entirely now (in
+# ${XDG_CACHE_HOME:-~/.cache} / ${XDG_STATE_HOME:-~/.local/state}), so
+# there's nothing under this repo's own tree left to ignore for them
+# either.
+
 .bash.d/log.txt
-data/cache/
-data/logs/
-data/.current_version
-config/config.yaml
-config/.env.cache
-config/.syncignore
-.bash.d/data/cache/.env.cache
-.bash.d/.mt_cache*
-.bash.d/.mt_data.tsv
-.bash.d/.update_check_cache
-.bash.d/.profile_update_cache
-.bash.d/.*_pending
 __pycache__/
 .ruff_cache/
 .vscode/
@@ -29,6 +19,7 @@ __pycache__/
 *.zip
 .dev
 CLAUDE.md
-.bash.d/config/secrets_metadata.yaml
+.bash.d/config/github_token.sh
+.bash.d/config/*_token.sh
 .bash.d/40-private/
 .bash.d/lib/private/

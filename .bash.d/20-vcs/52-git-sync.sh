@@ -118,7 +118,7 @@ __git_sync_copy_files() {
   if __mt_bashd_is_symlinked_into_repo "$repo_dir"; then
     echo -e "${C_DIM}↪️  ~/.bash.d is already a symlink into ${repo_dir}/.bash.d -- skipping the copy, they're the same directory.${C_RESET}"
   else
-    local syncignore="$HOME/.bash.d/config/.syncignore"
+    local syncignore="$CONFIG_DIR/.syncignore"
     local syncignore_tpl="$HOME/.bash.d/lib/templates/syncignore.tpl"
     __mt_reconcile_ignore_patterns "$syncignore_tpl" "$syncignore"
 
