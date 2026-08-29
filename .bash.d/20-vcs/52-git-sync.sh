@@ -435,7 +435,12 @@ __mt_push_update_commit_and_raise_pr() {
   default_branch="${default_branch:-main}"
 
   local branch_name="$current_branch"
-  local pr_title="$user_msg"
+  # PR titles can't contain newlines -- GitHub just joins them into one
+  # run-on line instead of rejecting the request, silently mangling any
+  # multi-paragraph commit message (subject + blank line + body, the
+  # normal git convention) into unreadable text. Match standard git
+  # convention: use only the first line as the title.
+  local pr_title="${user_msg%%$'\n'*}"
 
   if [ "$current_branch" = "$default_branch" ]; then
     if [ -n "$user_msg" ]; then
