@@ -10,14 +10,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-- Updated the Secrets & Collaboration menu to clarify that credential management options support both adding and updating keys.
-- Added a new option to delete secrets directly from the Secrets submenu.
-- Expanded the Secrets & Collaboration menu with interactive setup options for Bitbucket API tokens and Docker Hub credentials.
+- Added `docker-update` command to check Docker Compose projects for available image updates by comparing local container digests against remote registries.
+- Introduced internal helper functions for parsing Docker image tags/repos and fetching local and remote manifest digests via Buildx and `jq`.
 - Added maintenance guidance to the configuration template explaining AI model selection and recommending periodic audits of default provider models.
 - Added GitHub issue (`bug_report.md`, `feature_request.md`) and PR templates with pre-submission checklists.
 - Added `CONTRIBUTING.md` detailing contribution workflows, module load hierarchy, coding standards, and local testing instructions.
 - Added comprehensive unit test coverage for `__mt_write_secret` and `__mt_delete_secret` shell functions (`test_secrets.bats`).
 - Enforced minimum Bats version requirement (1.5.0) across test suites.
+- Updated inverted command assertions in existing test files to use standard `run !` syntax.
 
 ---
 
@@ -26,8 +26,8 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 Before installing this terminal environment, ensure your local workstation meets the following baseline requirements:
 
 * **Operating System:** Officially supports WSL2 (Debian/Ubuntu), macOS (via Homebrew), and native Linux.
-* **IDE (Optional):** Both **Visual Studio Code** and **JetBrains IntelliJ** are natively supported for launcher integration (`ide`, `git-clone-ide`, configurable via `mt-set-default-ide`). If using VS Code on Windows, ensure the **WSL Extension** is installed.
-* **VSCode Extension Pack:** If your `DEFAULT_IDE` is VS Code, it is highly recommended to install the standardized extension pack to ensure all linting, formatting, and infrastructure integrations (like Terraform and Checkov) function perfectly alongside this terminal environment. You can install it from the dedicated repository here: [MatStacey/mt-devops-vscode-extension-pack](https://github.com/MatStacey/mt-devops-vscode-extension-pack).
+* **Visual Studio Code:** Required for seamless IDE integration. Ensure the **WSL Extension** is installed if running on Windows.
+* **VSCode Extension Pack:** It is highly recommended to install the standardized extension pack to ensure all linting, formatting, and infrastructure integrations (like Terraform and Checkov) function perfectly alongside this terminal environment. You can install it from the dedicated repository here: [MatStacey/mt-devops-vscode-extension-pack](https://github.com/MatStacey/mt-devops-vscode-extension-pack).
 * **Git:** Required to clone the initial repository and handle ongoing AI-assisted profile synchronization.
 
 ---
@@ -38,17 +38,11 @@ Before installing this terminal environment, ensure your local workstation meets
 * **Zero-Lag Dynamic Prompt:** Real-time, color-coded Git status, Kubernetes context, and GCP project/account tracking optimized for minimal latency by prioritizing native file reads over subshells where possible. Includes OSC 8 clickable hyperlinking for Git branches and GCP consoles.
 * **Asynchronous Update Checks:** Silently checks for system package updates, as well as upstream terminal profile updates, in the background on a configurable TTL timer without blocking terminal initialization.
 * **Decoupled Python Configuration:** A dedicated standalone Python manager (`lib/python/config_manager.py`) reads `~/.bash.d/config/config.yaml` to dynamically inject customizable directory paths, model/provider settings, and remote repository URLs directly into the shell environment.
-* **Secrets Manager with Lifecycle Tracking:** API keys and tokens are never stored in `config.yaml`. They live in `~/secrets/secrets.sh` — a plain `export VAR="value"` file outside the dotfiles repo entirely, sourced automatically on shell startup. The interactive `mt-secrets` menu manages Gemini, Claude, Bitbucket, and Docker Hub credentials, tracking created/expiry/last-used dates per secret with color-coded expired/expiring/active status.
+* **Externalized Secrets:** API keys are never stored in `config.yaml`. They live in `~/secrets/secrets.sh` — a plain `export VAR="value"` file outside the dotfiles repo entirely, sourced automatically on shell startup. Run `mt-setup` or edit it directly (`vim ~/secrets/secrets.sh`) to add your `GEMINI_API_KEY` or `CLAUDE_API_KEY`.
 * **Modular Theme Engine:** Color themes are fully externalized into standalone files under `~/.bash.d/config/themes/`, allowing custom aesthetic definitions and instant switching (`mt-set-theme`).
-* **Automated Bootstrapping:** Built-in `bootstrap` function automatically resolves and installs required APT/Homebrew packages, Python linters (`ruff`, `checkov`), formatters (`yapf`, `shfmt`), modern CLI binaries (`yq`, `eza`, `batcat`, `zoxide`), and heavier infrastructure tooling on demand -- Terraform, the Google Cloud CLI, `kubectl`, GitHub CLI, Ookla Speedtest, and Claude Code.
+* **Automated Bootstrapping:** Built-in `bootstrap` function automatically resolves and installs required APT/Homebrew packages, Python linters (`ruff`, `checkov`), formatters (`yapf`, `shfmt`), and modern CLI binaries (`yq`, `eza`, `batcat`, `zoxide`).
 * **Multi-Provider AI Architecture:** Consult universal AI via the `ai` command with support for **Gemini**, **Claude**, and **Local LLMs** (via Ollama or any OpenAI-compatible endpoint). Background workflows like `git-ai-push-all` dynamically respect your active `DEFAULT_AI` setting.
-* **Multi-Threaded Validation:** The `tf-val-all` command leverages `xargs -P` with configurable thread limits to concurrently validate and run Checkov security scans across all Terraform modules. `tf-ai-iam` complements it with AI-driven analysis (and optional script generation) of the IAM permissions a Terraform codebase actually requires.
-* **Interactive Command Center:** `mt-menu` is an fzf-driven master menu fronting nearly the entire framework -- fifteen categories deep, from secrets and Git to Kubernetes and AI -- for anyone who'd rather browse than memorize commands.
-* **Bulk Repository Management:** `mt-clone` bulk-clones an entire Bitbucket workspace/project with type/language/date/age filters, disk-space checks, and an fzf exclusion picker; `mt-bulk-update` then keeps every local repo under `VCS_ROOT` fast-forward-updated in one pull-only, never-force pass.
-* **AI-Powered VCS Insight:** `mt-hub` builds an AI- and heuristic-driven dashboard of every repo under `VCS_ROOT` -- auto-detecting CI/CD provider, build tool, test framework, and stack, plus an AI-generated one-line description -- browsable via a live fzf preview pane.
-* **Self-Healing Lifecycle Tooling:** `mt-doctor` gives a report-only health check (version drift, sync config, Git state); `mt-migrate-symlink` performs a one-time cutover to a single symlinked copy of the framework so `~/.bash.d` and the repo checkout can never drift apart; `mt-uninstall` offers a full, backup-first removal wizard.
-* **Ad Hoc Utilities:** `mt-http-server` serves a directory over HTTP with optional Basic Auth and a WSL LAN bridge (Windows portproxy + firewall rule); `mt-backup`/`mt-restore` handle zip/rar/tar archives; `mt-speedtest` wraps the Ookla CLI; and `mt-jobs` tracks every framework command that's been backgrounded.
-* **Repo Scaffolding:** `mt-blueprint` bootstraps a new repository from templates, injecting a CI/CD pipeline that matches your configured `CICD_PROVIDER`.
+* **Multi-Threaded Validation:** The `tf-val-all` command leverages `xargs -P` with configurable thread limits to concurrently validate and run Checkov security scans across all Terraform modules.
 
 ---
 
@@ -106,7 +100,7 @@ mt-get-update
 
 This command securely fetches your upstream commits and safely synchronizes them into your local `~/.bash.d/` workspace.
 
-Run `mt-doctor` any time to check the health of your setup -- see [Troubleshooting & Debugging](#-troubleshooting--debugging) below.
+Run `mt-doctor` any time to check the health of your setup -- installed version vs. the latest release, sync configuration, and the sync repo's Git state (stuck branches, open PRs, an in-progress merge, uncommitted changes). It's report-only and never changes anything, so it's always safe to run.
 
 ### 6. Contributing / Becoming a Collaborator
 
@@ -154,12 +148,12 @@ When launched, the Dev Container automatically builds the base image, installs a
 
 | Module | Description |
 | --- | --- |
-| `00-system/` | OS detection, path definitions, package management, the `mt-setup` wizard, the `mt-secrets` credential manager (expiry/last-used tracking), async update checks, `mt-doctor` health diagnostics, and the `mt-uninstall` removal wizard. |
+| `00-system/` | OS detection, path definitions, package management, and the `mt-setup` wizard. |
 | `01-ui/` | Color variables and the dynamic terminal prompt. |
-| `02-utilities/` | General purpose aliases, Docker handlers (including auto-versioned image build/tag/push to Google Artifact Registry and Docker Hub), path launchers, centralized `mt-log`, an ad hoc `mt-http-server` (with WSL LAN bridging and Basic Auth), `mt-backup`/`mt-restore` archive tooling, `mt-speedtest`, and the `mt-jobs` background job manager. |
-| `03-mytools/` | The core documentation engine, your LLM context extractors, the `mt-menu` interactive command center, and `mt-blueprint` repo scaffolding. |
-| `10-infra/` | GCP authentication/project switchers, concurrent Terraform validation plus AI-driven IAM analysis (`tf-ai-iam`), interactive Kubernetes tooling (context/GKE cluster switching, log tailing, guarded destructive ops), Helm release management, local Minikube cluster lifecycle tooling, and a Docker-to-Helm deploy bridge (`docker-deploy`) that runs freshly built images on whichever cluster -- GKE or minikube -- is currently active. |
-| `20-vcs/` | Git wrappers, AI-assisted feature-grouped commit automation (`git-ai-push-all`), profile syncing (including the one-time `mt-migrate-symlink` cutover), the AI/heuristic `mt-hub` insight dashboard, bulk repo cloning (`mt-clone`) and updating (`mt-bulk-update`), and web launching. |
+| `02-utilities/` | General purpose aliases, Docker handlers (including auto-versioned image build/tag/push to Google Artifact Registry and Docker Hub), path launchers, and centralized `mt-log`. |
+| `03-mytools/` | The core documentation engine and your LLM context extractors. |
+| `10-infra/` | GCP authentication/project switchers, concurrent Terraform validation, interactive Kubernetes tooling (context/GKE cluster switching, log tailing, guarded destructive ops), Helm release management, local Minikube cluster lifecycle tooling, and a Docker-to-Helm deploy bridge (`docker-deploy`) that runs freshly built images on whichever cluster -- GKE or minikube -- is currently active. |
+| `20-vcs/` | Git wrappers, AI-assisted feature-grouped commit automation (`git-ai-push-all`), profile syncing, and web launching. |
 | `30-ai/` | API integrations for Google Gemini, Anthropic Claude, local OpenAI-compatible endpoints, and debugging tools (`mt-ai-debug`). |
 | `40-private/` | *(User-created, optional)* Local-only scripts, functions, and aliases -- sourced automatically like any other module, but excluded from `mt-push-update` sync and never overwritten by `mt-get-update`. |
 | `config/` | Core YAML files, AI configurations (`config/ai/`), secure `.env` caching, `.syncignore`, and themes (`config/themes/`). |
@@ -167,15 +161,12 @@ When launched, the Dev Container automatically builds the base image, installs a
 
 **Looking for a specific command?** [`COMMANDS.md`](COMMANDS.md) is a lean, auto-regenerated index of every alias and function (kept current by `mt-push-update`). [`.bash.d/docs/TECHNICAL_REFERENCE.md`](.bash.d/docs/TECHNICAL_REFERENCE.md) is the full generated reference with descriptions for everything, produced on demand by `mt-dump`.
 
-**Rolling this out across a team?** [`TEAM_INTEGRATION.md`](TEAM_INTEGRATION.md) has a copy-paste `CLAUDE.md` instruction block for making this framework the default terminal tooling on every implementation project, plus the `mt-suggest` backlog loop for capturing workflow gaps as they're found instead of quietly working around them.
-
 ---
 
 ## 🐛 Troubleshooting & Debugging
 
 If you encounter missing commands, broken aliases, or stale environment variables, use the following built-in tools to resolve issues quickly:
 
-* **`mt-doctor`:** Start here for anything that feels off. A report-only health check covering installed version vs. the latest release, sync configuration, and the sync repo's Git state (stuck branches, open PRs, an in-progress merge, uncommitted changes). Never changes anything, so it's always safe to run first.
 * **`reload`:** Instantly re-sources your `~/.bashrc` without needing to restart your terminal session. Perfect for testing quick alias changes.
 * **`mt-refresh-caches`:** Forcefully clears and rebuilds all background caches, including `.env.cache`, `mytools` indexes, and system update markers. Use this if your `mt` menu is missing newly added tools or configuration variables aren't persisting.
 * **`bootstrap`:** Re-scans your host machine for missing dependencies (like `jq`, `fzf`, or Python linters) and installs them via `apt` or `brew`.
@@ -190,7 +181,7 @@ If you encounter missing commands, broken aliases, or stale environment variable
 **A:** The environment uses a high-performance cache to ensure zero-lag loading. If you manually edited `config.yaml` outside of the `mt-` configuration functions, run `mt-refresh-caches` to regenerate the environment cache.
 
 **Q: How do I backup my custom profile modifications?**
-**A:** First, ensure you have linked a remote repository using `mt-add-sync-url` or the `mt-setup` wizard. Then, run `mt-push-update`. This uses AI (if enabled) to group your changes into systematic commits and pushes them to your remote repository. For a quick local archive of any directory (not just this framework), use `mt-backup`/`mt-restore` instead -- unrelated to Git and useful for anything you want a fast zip/tar snapshot of.
+**A:** First, ensure you have linked a remote repository using `mt-add-sync-url` or the `mt-setup` wizard. Then, run `mt-push-update`. This uses AI (if enabled) to group your changes into systematic commits and pushes them to your remote repository.
 
 **Q: I am getting an "Argument list too long" error when using the AI tools.**
 **A:** This issue was resolved by utilizing temporary payload files. If you are experiencing this on an older version, run `mt-get-update` to automatically pull down the latest codebase fixes.
