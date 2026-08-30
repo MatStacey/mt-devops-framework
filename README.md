@@ -6,14 +6,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added GitHub issue (`bug_report.md`, `feature_request.md`) and PR templates with pre-submission checklists.
+- Added `CONTRIBUTING.md` detailing contribution workflows, module load hierarchy, coding standards, and local testing instructions.
 - Added comprehensive unit test coverage for `__mt_write_secret` and `__mt_delete_secret` shell functions (`test_secrets.bats`).
 - Enforced minimum Bats version requirement (1.5.0) across test suites.
 - Updated inverted command assertions in existing test files to use standard `run !` syntax.
 - Added automated Bats unit tests for `install.sh` to cover fresh installs, update-in-place paths, `.bashrc.bak` guards, and config preservation.
 - Enhanced the release workflow CI smoke tests to simulate update runs and ensure local state and private files are preserved across installs.
 - Refactored git synchronization logic by extracting message trimming, PR title derivation, and branch slug generation into modular helper functions.
-- Added a new Bats unit test suite (`test_git_sync.bats`) providing automated coverage for message parsing and branch naming routines.
-- Added an MIT License (`LICENSE`) to formalize open-source licensing terms.
 
 ---
 
@@ -154,6 +154,8 @@ When launched, the Dev Container automatically builds the base image, installs a
 | `40-private/` | *(User-created, optional)* Local-only scripts, functions, and aliases -- sourced automatically like any other module, but excluded from `mt-push-update` sync and never overwritten by `mt-get-update`. |
 | `config/` | Core YAML files, AI configurations (`config/ai/`), secure `.env` caching, `.syncignore`, and themes (`config/themes/`). |
 | `lib/` | Categorized subdirectories for `awk/`, `python/`, and `windows/` helper scripts, alongside `templates/`. `lib/private/` *(user-created, optional)* mirrors `40-private/` for non-bash supporting assets. |
+
+**Looking for a specific command?** [`COMMANDS.md`](COMMANDS.md) is a lean, auto-regenerated index of every alias and function (kept current by `mt-push-update`). [`.bash.d/docs/TECHNICAL_REFERENCE.md`](.bash.d/docs/TECHNICAL_REFERENCE.md) is the full generated reference with descriptions for everything, produced on demand by `mt-dump`.
 
 ---
 
