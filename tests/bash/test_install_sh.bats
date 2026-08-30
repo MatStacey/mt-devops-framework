@@ -17,6 +17,12 @@
 # "run bootstrap now? [Y/n]" dependency prompt is skipped entirely --
 # these tests are about file sync, not system package installation
 # (matches the intent of install-wizard.sh's own reuse of this script).
+#
+# Every run_install() call also isolates the same XDG/framework-path
+# env vars as test_path_resolution.bats's ISOLATE_ENV baseline. Without
+# it, a runner that exports its own XDG_CONFIG_HOME makes install.sh's
+# config-scaffolding step resolve CONFIG_FILE under *that* ambient path
+# instead of $fake_home -- passes locally, fails only on CI.
 
 setup() {
   repo_root="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
@@ -25,7 +31,10 @@ setup() {
 }
 
 run_install() {
-  HOME="$fake_home" MT_INSTALL_WIZARD=1 bash "$repo_root/install.sh"
+  env -u XDG_CONFIG_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME \
+    -u CONFIG_FILE -u ENV_CACHE -u VERSION_FILE \
+    -u CACHE_DIR -u LOG_DIR -u CONFIG_DIR \
+    HOME="$fake_home" MT_INSTALL_WIZARD=1 bash "$repo_root/install.sh"
 }
 
 @test "fresh install backs up a real pre-existing .bashrc to .bashrc.bak" {
