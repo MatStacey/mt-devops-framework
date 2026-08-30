@@ -203,6 +203,89 @@ __docker_reboot_wait_for_project() {
 }
 
 #######################################
+# Docker: Extract the repository portion from an image reference.
+#
+# Examples:
+#   redis:7                    -> redis
+#   ghcr.io/example/app:latest -> ghcr.io/example/app
+#   registry:5000/app:stable   -> registry:5000/app
+#   image@sha256:...            -> image
+#######################################
+__docker_update_image_repo() {
+  local image="$1"
+  local ref="${image%@*}"
+  local last_component="${ref##*/}"
+
+  if [[ "$last_component" == *:* ]]; then
+    printf '%s\n' "${ref%:*}"
+  else
+    printf '%s\n' "$ref"
+  fi
+}
+
+#######################################
+# Docker: Extract the tag from an image reference.
+# Returns empty output for digest-pinned images.
+#######################################
+__docker_update_image_tag() {
+  local image="$1"
+
+  [[ "$image" == *@* ]] && return 0
+
+  local last_component="${image##*/}"
+
+  if [[ "$last_component" == *:* ]]; then
+    printf '%s\n' "${last_component##*:}"
+  else
+    printf '%s\n' "latest"
+  fi
+}
+
+#######################################
+# Docker: Return the registry digest for an image reference without
+# pulling the image.
+#
+# Uses Docker Buildx's registry manifest inspection and jq to extract
+# the manifest digest.
+#
+# Arguments:
+#   $1 - Image reference
+# Returns:
+#   0 and digest on success, 1 if the registry cannot be queried
+#######################################
+__docker_update_remote_digest() {
+  local image="$1"
+  local manifest
+
+  manifest=$(docker buildx imagetools inspect "$image" --format '{{json .Manifest}}' 2> /dev/null) || return 1
+  [ -n "$manifest" ] || return 1
+
+  jq -r '.digest // empty' <<< "$manifest"
+}
+
+#######################################
+# Docker: Return the registry digest associated with the image currently
+# used by a container.
+#
+# Arguments:
+#   $1 - Container name or ID
+# Returns:
+#   0 and digest on success, 1 if no RepoDigest is available
+#######################################
+__docker_update_local_digest() {
+  local container="$1"
+  local image_id digest_ref
+
+  image_id=$(docker inspect --format '{{.Image}}' "$container" 2> /dev/null) || return 1
+  digest_ref=$(docker image inspect "$image_id" --format '{{json .RepoDigests}}' 2> /dev/null | jq -r '.[0] // empty') || return 1
+
+  [ -n "$digest_ref" ] || return 1
+  [[ "$digest_ref" == *@* ]] || return 1
+
+  printf '%s\n' "${digest_ref##*@}"
+}
+
+#######################################
 # Docker: Recreate a single Compose project
 #
 # Usage:
@@ -287,6 +370,336 @@ docker-reboot() {
   fi
 
   echo -e "${CB_YELLOW}⚠️  Project did not become healthy: ${project}${C_RESET}"
+  return 1
+}
+
+#######################################
+# Docker: Check a Compose project for image updates and optionally
+# update it interactively.
+#
+# Usage:
+#   docker-update <container|project>
+#
+# Behaviour:
+#   1. Resolve the Compose project and canonical Compose configuration.
+#   2. Inspect each service image used by the running project.
+#   3. Compare the locally running image digest with the current registry
+#      digest without pulling the image.
+#   4. Report services with updates available.
+#   5. Ask whether the project should be updated.
+#   6. If approved, ask which release channel should be used for this
+#      update: current, latest, stable, or release.
+#   7. For latest/stable/release, a temporary Compose override is used;
+#      the user's original Compose file is never modified.
+#   8. Pull the selected images, recreate the project with Compose, and
+#      wait for the project to become ready.
+#
+# Notes:
+#   - Services using pinned/version-specific tags remain on their current
+#     tag when an alternate release channel is selected.
+#   - Digest-pinned images are not considered updateable.
+#   - Services without a running container are skipped during the check.
+#######################################
+docker-update() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  __docker_ensure_running || return 1
+
+  if ! command -v jq > /dev/null 2>&1; then
+    echo -e "${CB_RED}❌ jq is required by docker-update but was not found.${C_RESET}"
+    echo -e "${C_DIM}Run 'bootstrap' to install missing dependencies.${C_RESET}"
+    return 1
+  fi
+
+  if ! docker buildx version > /dev/null 2>&1; then
+    echo -e "${CB_RED}❌ Docker Buildx is required by docker-update but was not found.${C_RESET}"
+    return 1
+  fi
+
+  local target="$1"
+
+  if [[ -z "$target" ]]; then
+    echo "Usage: docker-update <container|project>"
+    return 1
+  fi
+
+  local project=""
+  local compose_file=""
+
+  # Resolve container name to compose metadata.
+  if docker inspect "$target" > /dev/null 2>&1; then
+    if ! __docker_reboot_compose_metadata "$target" project compose_file; then
+      echo -e "${CB_RED}❌ Unable to resolve Compose project for: $target${C_RESET}"
+      return 1
+    fi
+  else
+    # Allow project name directly.
+    local container
+    container=$(docker ps --format "{{.Names}}" | while read -r c; do
+      local p
+      # f is required by __docker_reboot_compose_metadata's 3-arg signature; only $p is checked here.
+      # shellcheck disable=SC2034
+      local f
+      __docker_reboot_compose_metadata "$c" p f || continue
+      [[ "$p" == "$target" ]] && echo "$c" && break
+    done)
+
+    if [[ -z "$container" ]]; then
+      echo -e "${CB_RED}❌ Compose project not found: $target${C_RESET}"
+      return 1
+    fi
+
+    __docker_reboot_compose_metadata "$container" project compose_file
+  fi
+
+  echo -e "${CB_BLUE}🐳 Checking Docker Compose project: ${project}${C_RESET}"
+  echo -e "${C_DIM}📁 Compose: ${compose_file}${C_RESET}"
+  echo
+
+  local compose_config
+  compose_config=$(docker compose -f "$compose_file" config --format json 2> /dev/null)
+
+  if [[ -z "$compose_config" ]]; then
+    echo -e "${CB_RED}❌ Unable to resolve Compose configuration for: ${project}${C_RESET}"
+    return 1
+  fi
+
+  local update_services=()
+  local update_images=()
+  local update_tags=()
+
+  local service image container current_tag local_digest remote_digest
+
+  echo -e "${CB_BLUE}🔍 Checking registry for image updates...${C_RESET}"
+  echo
+
+  printf "%-28s %-38s %s\n" "Service" "Current image" "Status"
+  printf "%-28s %-38s %s\n" "----------------------------" "--------------------------------------" "----------------"
+
+  while IFS=$'\t' read -r service image; do
+    [ -z "$service" ] && continue
+    [ -z "$image" ] && continue
+
+    # Digest-pinned images cannot be updated through a tag/channel change.
+    if [[ "$image" == *@* ]]; then
+      printf "%-28s %-38s %s\n" "$service" "$image" "Pinned digest"
+      continue
+    fi
+
+    container=$(docker compose -f "$compose_file" ps -q "$service" 2> /dev/null | head -n 1)
+
+    if [[ -z "$container" ]]; then
+      printf "%-28s %-38s %s\n" "$service" "$image" "Not running"
+      continue
+    fi
+
+    current_tag=$(__docker_update_image_tag "$image")
+
+    local_digest=$(__docker_update_local_digest "$container")
+
+    if [[ -z "$local_digest" ]]; then
+      printf "%-28s %-38s %s\n" "$service" "$image" "Unable to verify"
+      continue
+    fi
+
+    remote_digest=$(__docker_update_remote_digest "$image")
+
+    if [[ -z "$remote_digest" ]]; then
+      printf "%-28s %-38s %s\n" "$service" "$image" "Registry unavailable"
+      continue
+    fi
+
+    if [[ "$local_digest" != "$remote_digest" ]]; then
+      printf "%-28s %-38s %s\n" "$service" "$image" "${CB_YELLOW}Update available${C_RESET}"
+      update_services+=("$service")
+      update_images+=("$image")
+      update_tags+=("$current_tag")
+    else
+      printf "%-28s %-38s %s\n" "$service" "$image" "${CB_GREEN}Up to date${C_RESET}"
+    fi
+  done < <(
+    jq -r '
+      .services
+      | to_entries[]
+      | select(.value.image != null)
+      | [.key, .value.image]
+      | @tsv
+    ' <<< "$compose_config"
+  )
+
+  echo
+
+  if [[ "${#update_services[@]}" -eq 0 ]]; then
+    echo -e "${CB_GREEN}✅ No image updates are currently available for: ${project}${C_RESET}"
+    return 0
+  fi
+
+  echo -e "${CB_YELLOW}⚠️  Updates are available for ${#update_services[@]} service(s).${C_RESET}"
+  echo
+
+  local reply
+  read -r -p "Update project '${project}'? [y/N] " -n 1 reply < /dev/tty || reply="n"
+  echo
+
+  if [[ ! "$reply" =~ ^[Yy]$ ]]; then
+    echo -e "${CB_YELLOW}🛑 Update cancelled.${C_RESET}"
+    return 0
+  fi
+
+  echo
+  echo "Which release channel would you like to use for this update?"
+  echo
+  echo "  1) Keep current"
+  echo "  2) latest"
+  echo "  3) stable"
+  echo "  4) release"
+  echo
+
+  local channel_choice channel="current"
+  read -r -p "Select [1-4]: " channel_choice < /dev/tty || channel_choice=""
+
+  case "$channel_choice" in
+    1 | "")
+      channel="current"
+      ;;
+    2)
+      channel="latest"
+      ;;
+    3)
+      channel="stable"
+      ;;
+    4)
+      channel="release"
+      ;;
+    *)
+      echo -e "${CB_YELLOW}🛑 Invalid selection. Update cancelled.${C_RESET}"
+      return 1
+      ;;
+  esac
+
+  echo
+
+  local override_file=""
+  local pull_compose_args=()
+  local up_compose_args=()
+
+  if [[ "$channel" == "current" ]]; then
+    echo -e "${CB_BLUE}⬇️  Updating services using their current Compose image tags...${C_RESET}"
+
+    for service in "${update_services[@]}"; do
+      echo -e "  ${CB_BLUE}→${C_RESET} ${service}"
+    done
+
+    pull_compose_args=(-f "$compose_file")
+    up_compose_args=(-f "$compose_file")
+  else
+    echo -e "${CB_BLUE}🔍 Checking '${channel}' channel availability...${C_RESET}"
+
+    override_file=$(mktemp "${TMPDIR:-/tmp}/docker-update-${project}.XXXXXX.json") || {
+      echo -e "${CB_RED}❌ Unable to create temporary Compose override.${C_RESET}"
+      return 1
+    }
+
+    jq -n '{services:{}}' > "$override_file"
+
+    local changed_services=0
+    local index new_image candidate_digest repo current_channel
+
+    for index in "${!update_services[@]}"; do
+      service="${update_services[$index]}"
+      image="${update_images[$index]}"
+      current_channel="${update_tags[$index]}"
+
+      # Only switch release channels for services already using a
+      # recognised channel tag. Version-pinned services remain pinned.
+      case "$current_channel" in
+        latest | stable | release) ;;
+        *)
+          echo -e "  ${CB_YELLOW}⚠️${C_RESET} ${service}: keeping pinned tag '${current_channel}'"
+          continue
+          ;;
+      esac
+
+      repo=$(__docker_update_image_repo "$image")
+      new_image="${repo}:${channel}"
+
+      candidate_digest=$(__docker_update_remote_digest "$new_image")
+
+      if [[ -z "$candidate_digest" ]]; then
+        echo -e "  ${CB_YELLOW}⚠️${C_RESET} ${service}: ${new_image} is unavailable"
+        continue
+      fi
+
+      container=$(docker compose -f "$compose_file" ps -q "$service" 2> /dev/null | head -n 1)
+      local_digest=$(__docker_update_local_digest "$container")
+
+      if [[ -z "$local_digest" ]]; then
+        echo -e "  ${CB_YELLOW}⚠️${C_RESET} ${service}: unable to verify local digest"
+        continue
+      fi
+
+      if [[ "$local_digest" == "$candidate_digest" ]]; then
+        echo -e "  ${CB_GREEN}✓${C_RESET} ${service}: already running the '${channel}' image"
+        continue
+      fi
+
+      jq \
+        --arg service "$service" \
+        --arg image "$new_image" \
+        '.services[$service] = {"image": $image}' \
+        "$override_file" > "${override_file}.tmp" && mv "${override_file}.tmp" "$override_file"
+
+      echo -e "  ${CB_GREEN}→${C_RESET} ${service}: ${image} → ${new_image}"
+      ((changed_services++))
+    done
+
+    if [[ "$changed_services" -eq 0 ]]; then
+      rm -f "$override_file"
+      echo
+      echo -e "${CB_YELLOW}⚠️  No services can be updated to the '${channel}' channel.${C_RESET}"
+      return 0
+    fi
+
+    pull_compose_args=(-f "$compose_file" -f "$override_file")
+    up_compose_args=(-f "$compose_file" -f "$override_file")
+  fi
+
+  echo
+
+  if ! docker compose "${pull_compose_args[@]}" pull; then
+    [ -n "$override_file" ] && rm -f "$override_file"
+    echo -e "${CB_RED}❌ Failed to pull updated images for: ${project}${C_RESET}"
+    return 1
+  fi
+
+  echo
+  echo -e "${CB_BLUE}🔄 Recreating updated project...${C_RESET}"
+
+  if ! docker compose "${up_compose_args[@]}" up -d; then
+    [ -n "$override_file" ] && rm -f "$override_file"
+    echo -e "${CB_RED}❌ Failed to recreate Docker Compose project: ${project}${C_RESET}"
+    return 1
+  fi
+
+  [ -n "$override_file" ] && rm -f "$override_file"
+
+  echo
+  echo "⏳ Waiting for recovery..."
+
+  if __docker_reboot_wait_for_project "$compose_file"; then
+    if [[ "$channel" == "current" ]]; then
+      echo -e "${CB_GREEN}✅ Project updated: ${project}${C_RESET}"
+    else
+      echo -e "${CB_GREEN}✅ Project updated using '${channel}' channel: ${project}${C_RESET}"
+      echo -e "${C_DIM}The original Compose file was not modified.${C_RESET}"
+    fi
+    return 0
+  fi
+
+  echo -e "${CB_YELLOW}⚠️  Project did not become healthy after update: ${project}${C_RESET}"
   return 1
 }
 
