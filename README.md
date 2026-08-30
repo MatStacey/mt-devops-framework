@@ -1,11 +1,16 @@
 # MT DevOps Framework
 
-A high-performance, fully modular Bash environment engineered specifically for Senior Cloud, Platform, and DevOps Engineers. Originally built for Windows Subsystem for Linux (WSL2), it now natively supports macOS (Darwin) and standard Linux distributions.
+[![Release](https://github.com/MatStacey/mt-devops-framework/actions/workflows/release.yml/badge.svg)](https://github.com/MatStacey/mt-devops-framework/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/MatStacey/mt-devops-framework)](https://github.com/MatStacey/mt-devops-framework/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/MatStacey/mt-devops-framework)](LICENSE)
+
+A high-performance, fully modular Bash environment engineered specifically for Senior GCP, Platform, and DevOps Engineers. Originally built for Windows Subsystem for Linux (WSL2), it now natively supports macOS (Darwin) and standard Linux distributions.
 
 This configuration adheres to DRY principles, relies on native Bash and standalone Python script execution for zero-latency loading, and aggregates modern CLI tools for Google Cloud Platform, Kubernetes, Terraform, and Python development.
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added maintenance guidance to the configuration template explaining AI model selection and recommending periodic audits of default provider models.
 - Added GitHub issue (`bug_report.md`, `feature_request.md`) and PR templates with pre-submission checklists.
 - Added `CONTRIBUTING.md` detailing contribution workflows, module load hierarchy, coding standards, and local testing instructions.
 - Added comprehensive unit test coverage for `__mt_write_secret` and `__mt_delete_secret` shell functions (`test_secrets.bats`).
@@ -13,7 +18,6 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 - Updated inverted command assertions in existing test files to use standard `run !` syntax.
 - Added automated Bats unit tests for `install.sh` to cover fresh installs, update-in-place paths, `.bashrc.bak` guards, and config preservation.
 - Enhanced the release workflow CI smoke tests to simulate update runs and ensure local state and private files are preserved across installs.
-- Refactored git synchronization logic by extracting message trimming, PR title derivation, and branch slug generation into modular helper functions.
 
 ---
 

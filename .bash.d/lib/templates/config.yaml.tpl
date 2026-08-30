@@ -26,6 +26,11 @@ ai:
   max_context_bytes: 150000
   max_retries: 3
   max_context_files: 1000
+  # The model names below are point-in-time picks, not permanent defaults --
+  # providers rev their model lineups on their own schedule, so revisit
+  # these periodically (see CONTRIBUTING.md's recurring self-audit note)
+  # and bump them here rather than leaving new installs pinned to a model
+  # that's since been superseded or deprecated.
   providers:
     gemini:
       model: gemini-3.6-flash
