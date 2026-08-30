@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+bats_require_minimum_version 1.5.0
 # ------------------------------------------
 # Bats: install.sh -- the fresh-install AND update-in-place code path
 # ------------------------------------------
@@ -56,7 +57,7 @@ run_install() {
   run_install
 
   grep -qF 'my own original bashrc' "$fake_home/.bashrc.bak"
-  ! grep -qF 'my own original bashrc' "$fake_home/.bashrc"
+  run ! grep -qF 'my own original bashrc' "$fake_home/.bashrc"
 }
 
 @test "backup is skipped entirely when ~/.bashrc is already a symlink" {
@@ -95,7 +96,7 @@ run_install() {
   [ -f "$config_file" ]
   grep -qF "dotfiles_dir: $repo_root" "$config_file"
   grep -qF "sync_repo_dir: $repo_root" "$config_file"
-  ! grep -qF '~/vcs/personal/mt-devops-framework' "$config_file"
+  run ! grep -qF '~/vcs/personal/mt-devops-framework' "$config_file"
 }
 
 @test "second install run does not re-scaffold or overwrite an already-configured config.yaml" {

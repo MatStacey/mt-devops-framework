@@ -1,4 +1,5 @@
 #!/usr/bin/env bats
+bats_require_minimum_version 1.5.0
 # ------------------------------------------
 # Bats: the pure/near-pure helper functions in .bash.d/20-vcs/52-git-sync.sh
 # ------------------------------------------
@@ -137,7 +138,7 @@ Closes the one genuinely blocking gap from the readiness review.")
 
   __mt_reconcile_ignore_patterns "$template" "$target"
 
-  ! grep -qF '# a comment' "$target"
+  run ! grep -qF '# a comment' "$target"
   [ "$(cat "$target")" = "foo" ]
 }
 
