@@ -108,6 +108,11 @@ jobs:
           TEST_HOME=$(mktemp -d)
           unzip -q "$ZIP_NAME" -d "$EXTRACT_DIR"
 
+          # Seed a pre-existing .bashrc so the .bashrc.bak guard exercised
+          # in the update-simulation pass below has something real to back
+          # up -- a fresh empty $TEST_HOME never triggers it.
+          printf '# pre-framework bashrc\n' > "$TEST_HOME/.bashrc"
+
           # Decline the interactive bootstrap prompt -- this test verifies the
           # file sync, not system package installation.
           echo n | HOME="$TEST_HOME" bash "$EXTRACT_DIR/install.sh"
@@ -122,6 +127,34 @@ jobs:
           fi
 
           echo "✅ Smoke-test passed: packaged release installs and matches source."
+
+          echo "🧪 Simulating mt-get-update: re-running install.sh over the already-installed tree..."
+          # A second pass over the same $TEST_HOME is what mt-get-update
+          # does on every real update. This is the only place that catches
+          # regressions a fresh-install-only smoke test can't: the
+          # .bashrc.bak guard double-writing, or rsync --delete silently
+          # wiping local-only files (config.yaml, *_token.sh, 40-private/,
+          # lib/private/) that only exist once a tree is already installed.
+          printf 'export MY_API_TOKEN=abc123\n' > "$TEST_HOME/.bash.d/config/ci_test_token.sh"
+          mkdir -p "$TEST_HOME/.bash.d/40-private" "$TEST_HOME/.bash.d/lib/private"
+          printf 'echo "private"\n' > "$TEST_HOME/.bash.d/40-private/custom.sh"
+          printf 'echo "private"\n' > "$TEST_HOME/.bash.d/lib/private/helper.sh"
+          bashrc_bak_before=$(md5sum "$TEST_HOME/.bashrc.bak" | cut -d' ' -f1)
+
+          echo n | HOME="$TEST_HOME" bash "$EXTRACT_DIR/install.sh"
+
+          if [ "$(md5sum "$TEST_HOME/.bashrc.bak" | cut -d' ' -f1)" != "$bashrc_bak_before" ]; then
+            echo "::error::.bashrc.bak changed on a second install.sh run -- it should only ever be written once."
+            exit 1
+          fi
+          for f in config/ci_test_token.sh 40-private/custom.sh lib/private/helper.sh; do
+            if [ ! -f "$TEST_HOME/.bash.d/$f" ]; then
+              echo "::error::install.sh's second pass deleted local-only file $f -- rsync --delete regression."
+              exit 1
+            fi
+          done
+
+          echo "✅ Update-simulation smoke-test passed: second install.sh pass preserves local state."
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2

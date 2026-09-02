@@ -1,19 +1,23 @@
 # MT DevOps Framework
 
-A high-performance, fully modular Bash environment engineered specifically for Senior Cloud, Platform, and DevOps Engineers. Originally built for Windows Subsystem for Linux (WSL2), it now natively supports macOS (Darwin) and standard Linux distributions.
+[![Release](https://github.com/MatStacey/mt-devops-framework/actions/workflows/release.yml/badge.svg)](https://github.com/MatStacey/mt-devops-framework/actions/workflows/release.yml)
+[![Latest Release](https://img.shields.io/github/v/release/MatStacey/mt-devops-framework)](https://github.com/MatStacey/mt-devops-framework/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/MatStacey/mt-devops-framework)](LICENSE)
+
+A high-performance, fully modular Bash environment engineered specifically for Senior GCP, Platform, and DevOps Engineers. Originally built for Windows Subsystem for Linux (WSL2), it now natively supports macOS (Darwin) and standard Linux distributions.
 
 This configuration adheres to DRY principles, relies on native Bash and standalone Python script execution for zero-latency loading, and aggregates modern CLI tools for Google Cloud Platform, Kubernetes, Terraform, and Python development.
 
 ## 🚀 Recent Updates & Enhancements
 
-- Added `bats` dependency configuration for APT and Homebrew alongside automated execution in the CI release workflow.
-- Introduced a Bats test suite (`test_path_resolution.bats`) to validate XDG Base Directory path resolution and legacy config migration.
-- Migrated framework configuration files (`config.yaml`, `.syncignore`, and `secrets_metadata.yaml`) to adhere to the XDG Base Directory Specification (`$XDG_CONFIG_HOME`).
-- Added automated, one-time migration logic on shell initialization to safely move existing configuration files to the new location before scaffolding defaults.
-- Updated system scripts, including the config manager, git sync, and uninstaller, to dynamically reference the new XDG configuration paths.
-- Refactored core system scripts to adopt standard XDG Base Directory specifications for runtime cache, logs, and version tracking.
-- Added automatic migration utilities to seamlessly transition legacy `~/.bash.d/data` directories to their modern XDG paths during configuration updates.
-- Granted execution permissions (`0755`) to `.bash.d/lib/python/docker_versions.py`.
+- Added maintenance guidance to the configuration template explaining AI model selection and recommending periodic audits of default provider models.
+- Added GitHub issue (`bug_report.md`, `feature_request.md`) and PR templates with pre-submission checklists.
+- Added `CONTRIBUTING.md` detailing contribution workflows, module load hierarchy, coding standards, and local testing instructions.
+- Added comprehensive unit test coverage for `__mt_write_secret` and `__mt_delete_secret` shell functions (`test_secrets.bats`).
+- Enforced minimum Bats version requirement (1.5.0) across test suites.
+- Updated inverted command assertions in existing test files to use standard `run !` syntax.
+- Added automated Bats unit tests for `install.sh` to cover fresh installs, update-in-place paths, `.bashrc.bak` guards, and config preservation.
+- Enhanced the release workflow CI smoke tests to simulate update runs and ensure local state and private files are preserved across installs.
 
 ---
 
@@ -154,6 +158,10 @@ When launched, the Dev Container automatically builds the base image, installs a
 | `40-private/` | *(User-created, optional)* Local-only scripts, functions, and aliases -- sourced automatically like any other module, but excluded from `mt-push-update` sync and never overwritten by `mt-get-update`. |
 | `config/` | Core YAML files, AI configurations (`config/ai/`), secure `.env` caching, `.syncignore`, and themes (`config/themes/`). |
 | `lib/` | Categorized subdirectories for `awk/`, `python/`, and `windows/` helper scripts, alongside `templates/`. `lib/private/` *(user-created, optional)* mirrors `40-private/` for non-bash supporting assets. |
+
+**Looking for a specific command?** [`COMMANDS.md`](COMMANDS.md) is a lean, auto-regenerated index of every alias and function (kept current by `mt-push-update`). [`.bash.d/docs/TECHNICAL_REFERENCE.md`](.bash.d/docs/TECHNICAL_REFERENCE.md) is the full generated reference with descriptions for everything, produced on demand by `mt-dump`.
+
+**Rolling this out across a team?** [`TEAM_INTEGRATION.md`](TEAM_INTEGRATION.md) has a copy-paste `CLAUDE.md` instruction block for making this framework the default terminal tooling on every implementation project, plus the `mt-suggest` backlog loop for capturing workflow gaps as they're found instead of quietly working around them.
 
 ---
 
