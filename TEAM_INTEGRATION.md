@@ -53,25 +53,33 @@ actions in a terminal on this project, not just a tool that's available:
 
 ## Where this needs to live
 
-- **Every implementation project's own `CLAUDE.md`, committed to the repo.**
-  This is the reliable mechanism -- it's what Claude Code actually loads
-  every session, for the primary agent and (per the project's own
-  subagent definitions) any specialist subagents that read project
-  context. Global (`~/.claude/CLAUDE.md`) instructions apply only on the
-  machine they're set on, so they don't propagate to teammates unless
-  each of them sets it up too -- the committed, per-repo route is what
-  makes this a *team* convention rather than a personal habit.
-- **If a project defines its own specialist subagents** (`.claude/agents/*.md`
-  files -- e.g. a project-specific architect/platform/release-engineer
-  split), it's worth explicitly checking whether they inherit the
-  project's `CLAUDE.md` or need the instruction block repeated in their
-  own definitions. Don't assume silently -- verify once per project setup,
-  since getting it wrong means a subagent quietly falls back to raw shell
-  commands without anyone noticing.
-- If you want this active as your own personal default across projects
-  that haven't adopted it yet, `~/.claude/CLAUDE.md` (global, this machine
-  only) is the fallback -- just don't rely on it as the team-wide
-  mechanism.
+Two mechanisms, and which one fits depends on whether this is a single
+person's multi-project machine or a convention shared across teammates'
+own separate machines:
+
+- **`~/.claude/CLAUDE.md` (global, this machine only).** Applies to every
+  Claude Code session on this machine automatically, regardless of which
+  project directory it's running in -- including projects that don't have
+  a `.claude/` directory yet. This is the right default for a solo
+  workspace with many personal/implementation projects under one root
+  (e.g. `~/vcs/*`): it front-loads the behavior for repos not yet picked
+  up, with zero per-repo setup. It does **not** propagate to anyone else's
+  machine, so it's not sufficient on its own once real teammates are
+  involved.
+- **Every implementation project's own `CLAUDE.md`, committed to the
+  repo.** This is what makes the convention travel with the repo itself
+  -- anyone who clones it (any teammate, any machine) gets the same
+  instruction without needing their own global config set up first. Use
+  this once a project is actually shared with other people, on top of (not
+  instead of) the global file.
+
+Either way, **if a project defines its own specialist subagents**
+(`.claude/agents/*.md` files -- e.g. a project-specific
+architect/platform/release-engineer split), it's worth explicitly checking
+whether they inherit the enclosing CLAUDE.md (global or project) or need
+the instruction block repeated in their own definitions. Don't assume
+silently -- verify once per project setup, since getting it wrong means a
+subagent quietly falls back to raw shell commands without anyone noticing.
 
 ## The backlog loop
 
