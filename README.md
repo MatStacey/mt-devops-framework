@@ -161,6 +161,8 @@ When launched, the Dev Container automatically builds the base image, installs a
 
 **Looking for a specific command?** [`COMMANDS.md`](COMMANDS.md) is a lean, auto-regenerated index of every alias and function (kept current by `mt-push-update`). [`.bash.d/docs/TECHNICAL_REFERENCE.md`](.bash.d/docs/TECHNICAL_REFERENCE.md) is the full generated reference with descriptions for everything, produced on demand by `mt-dump`.
 
+**Rolling this out across a team?** [`TEAM_INTEGRATION.md`](TEAM_INTEGRATION.md) has a copy-paste `CLAUDE.md` instruction block for making this framework the default terminal tooling on every implementation project, plus the `mt-suggest` backlog loop for capturing workflow gaps as they're found instead of quietly working around them.
+
 ---
 
 ## 🐛 Troubleshooting & Debugging

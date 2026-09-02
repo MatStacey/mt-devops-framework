@@ -403,7 +403,8 @@ __mt_menu_docs() {
     "List Functions (mt-list --func)" __mt_menu_list_func \
     "List Aliases (mt-list --alias)" __mt_menu_list_alias \
     "Browse Categories (mt-cats)" mt-cats \
-    "Refresh Docs & Caches (mt-refresh-caches)" mt-refresh-caches
+    "Refresh Docs & Caches (mt-refresh-caches)" mt-refresh-caches \
+    "💡 Suggest a Backlog Idea/Gap (mt-suggest)" mt-suggest
 }
 
 #######################################
