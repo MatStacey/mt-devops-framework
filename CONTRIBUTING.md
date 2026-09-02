@@ -75,8 +75,39 @@ manager doesn't ship a recent enough `bats`, vendor it locally instead of
 skipping the check: `git clone https://github.com/bats-core/bats-core.git
 && bats-core/install.sh /some/local/dir`.
 
+## Backlog: capturing workflow gaps
+
+The goal is for this framework to be the default way anyone on the team runs
+commands and performs actions in a terminal -- not just a grab-bag of
+scripts, but something continuously enriched by whoever's actually using it
+on real implementation work. That only happens if friction gets captured
+the moment it's noticed, not silently worked around and forgotten.
+
+When you (or an agent working on your behalf) reach for a raw shell command
+because there's no `mt-` equivalent yet, or notice an existing one could be
+smoother, run:
+
+```bash
+mt-suggest "short description of the gap or idea"
+```
+
+from wherever you actually are -- it doesn't need to be run from inside this
+repo. It files a lightweight issue against this repo, labeled
+`workflow-gap`, capturing what you were doing and your framework version
+along with it. Omit the description and it'll prompt for one; see
+`mt-suggest -h` for the `--bug`/`--context` options.
+
+This is meant to be near-zero-friction: don't stop to write a full feature
+request in the moment (that's what the issue templates are for later, during
+triage) -- just capture that the gap exists before you lose the thought and
+keep working.
+
 ## Recurring self-audit
 
 This project's found its highest-value bugs by periodically auditing its own
 codebase rather than waiting for issues to arrive -- worth repeating roughly
-quarterly rather than treating it as a one-off.
+quarterly rather than treating it as a one-off. Use the same pass to triage
+the `workflow-gap` label (`gh issue list --label workflow-gap` or the
+[issue list itself](https://github.com/MatStacey/mt-devops-framework/issues?q=is%3Aopen+label%3Aworkflow-gap)):
+close anything already solved, promote real ones into properly scoped
+feature/bug issues, and fold the rest into whatever comes out of the audit.

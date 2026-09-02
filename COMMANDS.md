@@ -480,3 +480,8 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-get-update` | System: Download and install profile updates from GitHub releases -- |
 | `mt-migrate-symlink` | Git: One-time, idempotent cutover that replaces ~/.bash.d as a |
 | `mt-push-update` | System: Sync local bash configs to terminal dotfiles repo and create a Pull Request |
+
+### Workflow Gap / Backlog Capture
+| Command | Description |
+|---|---|
+| `mt-suggest` | System: Quickly file a lightweight "workflow gap" issue against the |
