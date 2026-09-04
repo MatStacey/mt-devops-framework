@@ -449,19 +449,17 @@ mt-open-config() {
   done
 
   local config_dir="$HOME/.bash.d"
-  local config_file="$config_dir/config/config.yaml"
-  local yaml_tpl="$config_dir/lib/templates/config.yaml.tpl"
 
-  if [ ! -s "$config_file" ]; then
-    mkdir -p "$(dirname "$config_file")"
-    [ -f "$yaml_tpl" ] && cp "$yaml_tpl" "$config_file"
+  if [ ! -s "$CONFIG_FILE" ]; then
+    mkdir -p "$(dirname "$CONFIG_FILE")"
+    [ -f "$YAML_TEMPLATE" ] && cp "$YAML_TEMPLATE" "$CONFIG_FILE"
   fi
 
   echo "🚀 Opening bash config in $selected_ide..."
   if [ "$selected_ide" = "intellij" ]; then
-    __launch_intellij "$config_dir" "$config_file" || echo "⚠️ Could not launch IntelliJ. Ensure 'idea' is on PATH (JetBrains Toolbox), or install IntelliJ IDEA via Homebrew on macOS."
+    __launch_intellij "$config_dir" "$CONFIG_FILE" || echo "⚠️ Could not launch IntelliJ. Ensure 'idea' is on PATH (JetBrains Toolbox), or install IntelliJ IDEA via Homebrew on macOS."
   else
-    code "$config_dir" "$config_file"
+    code "$config_dir" "$CONFIG_FILE"
   fi
 }
 
