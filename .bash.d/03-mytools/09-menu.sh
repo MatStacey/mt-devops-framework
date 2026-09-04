@@ -325,6 +325,8 @@ __mt_menu_setup_secrets() {
   __mt_menu_submenu "🔐 Secrets & Collaboration" \
     "Add Gemini API Key (mt-add-gemini-key)" mt-add-gemini-key \
     "Add Claude API Key (mt-add-claude-key)" mt-add-claude-key \
+    "Add Bitbucket API Token (mt-add-bitbucket-secret)" mt-add-bitbucket-secret \
+    "Add Docker Hub Credentials (mt-add-dockerhub-secret)" mt-add-dockerhub-secret \
     "Become a Collaborator / Fork Setup (mt-become-collaborator)" mt-become-collaborator
 }
 
