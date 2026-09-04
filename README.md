@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Expanded the Secrets & Collaboration menu with interactive setup options for Bitbucket API tokens and Docker Hub credentials.
 - Added maintenance guidance to the configuration template explaining AI model selection and recommending periodic audits of default provider models.
 - Added GitHub issue (`bug_report.md`, `feature_request.md`) and PR templates with pre-submission checklists.
 - Added `CONTRIBUTING.md` detailing contribution workflows, module load hierarchy, coding standards, and local testing instructions.
@@ -17,7 +18,6 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 - Enforced minimum Bats version requirement (1.5.0) across test suites.
 - Updated inverted command assertions in existing test files to use standard `run !` syntax.
 - Added automated Bats unit tests for `install.sh` to cover fresh installs, update-in-place paths, `.bashrc.bak` guards, and config preservation.
-- Enhanced the release workflow CI smoke tests to simulate update runs and ensure local state and private files are preserved across installs.
 
 ---
 
