@@ -80,16 +80,10 @@ Shortcuts for common commands and CLI replacements.
 | `reload` | System: Reload Bash profile and caches |
 | `sys-update-install` | System: Update, Upgrade, Boostrap, and Reload |
 
-### Terraform & Kubernetes Wrappers
-| Command | Description |
-|---|---|
-| `tf-scan` | Terraform: Scan local terraform directory (./terraform) with Checkov |
-
 ### Terraform Aliases
 | Command | Description |
 |---|---|
 | `tf` | Terraform: Core Execution |
-| `tf-refresh` | Terraform: Refresh state without applying changes (Modern) |
 | `tfa` | Terraform: Apply changes |
 | `tfap` | Terraform: Apply the saved plan file |
 | `tfay` | Terraform: Apply changes (Auto-Approve) |
@@ -103,6 +97,7 @@ Shortcuts for common commands and CLI replacements.
 | `tfp` | Terraform: Generate execution plan |
 | `tfpd` | Terraform: Generate destruction plan |
 | `tfpo` | Terraform: Generate a saved plan file (tfplan) |
+| `tf-refresh` | Terraform: Refresh state without applying changes (Modern) |
 | `tfs` | Terraform: State management commands |
 | `tfsh` | Terraform: Show current state or plan |
 | `tfsls` | Terraform: List resources in state |
@@ -117,6 +112,11 @@ Shortcuts for common commands and CLI replacements.
 | `tfwst` | Terraform: Select an existing workspace |
 | `tfwsw` | Terraform: Show the current workspace name |
 | `tfy` | Terraform: Shortcut alias for tf-yaml |
+
+### Terraform & Kubernetes Wrappers
+| Command | Description |
+|---|---|
+| `tf-scan` | Terraform: Scan local terraform directory (./terraform) with Checkov |
 
 ### Version Control (Git) - Core Helpers
 | Command | Description |
@@ -203,11 +203,6 @@ Complex bash functions, framework utilities, and automated workflows.
 | `k8s-status` | Kubernetes: Dashboard summarizing the active context -- cluster, |
 | `k8s-tail` | Kubernetes: Concurrently tail logs from multiple selected pods |
 
-### Docker -> Kubernetes/Helm/Minikube Bridge
-| Command | Description |
-|---|---|
-| `docker-deploy` | Docker->Helm bridge: Run a locally-built image on whichever cluster is |
-
 ### Docker: Container Management Utilities
 | Command | Description |
 |---|---|
@@ -219,7 +214,6 @@ Complex bash functions, framework utilities, and automated workflows.
 | `docker-sandbox` | Docker: Spin up a temporary, throwaway container sandbox |
 | `docker-shell` | Docker: Interactive fuzzy-finder to exec into a running container |
 | `docker-tail` | Docker: Concurrently tail logs from multiple selected containers |
-| `docker-update` | Docker: Check a Compose project for image updates and optionally |
 
 ### Docker: Image Build, Versioning & Registry Push
 | Command | Description |
@@ -228,6 +222,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `docker-push` | Docker: Tag (via docker-tag) and push a locally-built image to a |
 | `docker-release` | Docker: Build and push in one step -- the convenience wrapper around |
 | `docker-tag` | Docker: Tag a locally-built image with a registry's fully-qualified |
+
+### Docker -> Kubernetes/Helm/Minikube Bridge
+| Command | Description |
+|---|---|
+| `docker-deploy` | Docker->Helm bridge: Run a locally-built image on whichever cluster is |
 
 ### Framework: Repository Scaffolding from Blueprints
 | Command | Description |
@@ -309,11 +308,6 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-export` | LLM: Export codebase to text/zip for LLM context window using dynamic schemas |
 | `mt-export-cleanup` | LLM: Safely remove stale mt-export output from EXPORT_DIR |
 
-### MT Repo Hub - AI & Heuristic Metadata Dashboard
-| Command | Description |
-|---|---|
-| `mt-hub` | System: Interactive AI-powered Repository Dashboard |
-
 ### Minikube (Local Kubernetes Cluster) Tools
 | Command | Description |
 |---|---|
@@ -326,6 +320,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mk-status` | Minikube: Dashboard summarizing a local cluster's lifecycle state -- |
 | `mk-stop` | Minikube: Stop a local cluster without destroying it -- state is |
 | `mk-tunnel` | Minikube: Open a network tunnel so LoadBalancer-type services get a |
+
+### MT Repo Hub - AI & Heuristic Metadata Dashboard
+| Command | Description |
+|---|---|
+| `mt-hub` | System: Interactive AI-powered Repository Dashboard |
 
 ### MyTools Documentation & Runner
 | Command | Description |
@@ -379,12 +378,22 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-add-gemini-key` | AI: Interactively add or update your Gemini API key |
 | `mt-secrets` | System: Interactive menu for managing the framework's supported |
 
+### System Diagnostics ("mt-doctor")
+| Command | Description |
+|---|---|
+| `mt-doctor` | System: Diagnostic health-check for the framework's environment -- |
+
 ### System & Environment Bootstrap
 | Command | Description |
 |---|---|
 | `bootstrap` | System: Bootstrap missing dependencies (Debian/WSL via APT, macOS via Homebrew) |
 | `sys-install` | System: Updates system packages and clears pending-update marker |
 | `sys-update` | System: Updates system packages (APT on Debian/WSL, Homebrew on macOS) |
+
+### System: Interactive Master Menu
+| Command | Description |
+|---|---|
+| `mt-menu` | System: Launch the interactive master router for the entire framework. |
 
 ### System & Navigation Aliases
 | Command | Description |
@@ -394,20 +403,10 @@ Complex bash functions, framework utilities, and automated workflows.
 | `win-export` | System: Open ~/vcs/personal/exports in the platform's native file manager (shortcut for `win export`) |
 | `win-vcs` | System: Open ~/vcs in the platform's native file manager (shortcut for `win vcs`) |
 
-### System Diagnostics ("mt-doctor")
-| Command | Description |
-|---|---|
-| `mt-doctor` | System: Diagnostic health-check for the framework's environment -- |
-
 ### System Uninstaller ("mt-uninstall")
 | Command | Description |
 |---|---|
 | `mt-uninstall` | System: Completely remove the MT DevOps Framework from this machine -- |
-
-### System: Interactive Master Menu
-| Command | Description |
-|---|---|
-| `mt-menu` | System: Launch the interactive master router for the entire framework. |
 
 ### Terraform & AI Integrations
 | Command | Description |
@@ -415,17 +414,17 @@ Complex bash functions, framework utilities, and automated workflows.
 | `tf-ai-iam` | AI: Analyze Terraform codebase for IAM requirements and optionally generate script |
 | `tf-iam` | AI: Analyze Terraform codebase for IAM requirements and optionally generate script (Alias for tf-ai-iam) |
 
-### Terraform & Kubernetes Wrappers
-| Command | Description |
-|---|---|
-| `terraform` | Terraform: Core wrapper (preserves args) |
-
 ### Terraform Aliases
 | Command | Description |
 |---|---|
 | `tf-clean` | Terraform: Aggressively clean local caching (.terraform, locks, plans) |
 | `tf-replace` | Terraform: Replace a specific resource (Modern alternative to taint) |
 | `tf-yaml` | Terraform: Execute Terraform using a YAML config file for variables |
+
+### Terraform & Kubernetes Wrappers
+| Command | Description |
+|---|---|
+| `terraform` | Terraform: Core wrapper (preserves args) |
 
 ### Utilities: Background Job Registry
 | Command | Description |
