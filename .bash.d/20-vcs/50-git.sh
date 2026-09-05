@@ -46,20 +46,63 @@ __git_create_repo_find_large_files() {
 }
 
 #######################################
+# Git: Generate a .gitignore and README.md for the current directory --
+# via mt-ai-gitignore/mt-ai-readme if the directory has other files for
+# the AI to analyze, or a blank placeholder file if it's empty (nothing
+# for the AI to work from) or the AI call fails (e.g. quota exhausted).
+# Never touches either file if it already exists: mt-ai-gitignore/
+# mt-ai-readme have their own overwrite-confirmation prompt, but its
+# result isn't distinguishable from success via exit code alone, so a
+# pre-existing file is left untouched rather than risking a blank file
+# silently clobbering real content.
+#######################################
+__git_create_repo_generate_docs() {
+  local has_files=false
+  if find . -mindepth 1 -type f -not -path './.git/*' -not -name '.gitignore' -not -name 'README.md' 2> /dev/null | grep -q .; then
+    has_files=true
+  fi
+
+  if [ ! -f .gitignore ]; then
+    if [ "$has_files" = true ]; then
+      echo -e "${CB_BLUE}🤖 Generating .gitignore...${C_RESET}"
+      mt-ai-gitignore
+    fi
+    if [ ! -f .gitignore ]; then
+      echo -e "${CB_YELLOW}⚠️  Falling back to a blank .gitignore.${C_RESET}"
+      touch .gitignore
+    fi
+  fi
+
+  if [ ! -f README.md ]; then
+    if [ "$has_files" = true ]; then
+      echo -e "${CB_BLUE}🤖 Generating README.md...${C_RESET}"
+      mt-ai-readme
+    fi
+    if [ ! -f README.md ]; then
+      echo -e "${CB_YELLOW}⚠️  Falling back to a blank README.md.${C_RESET}"
+      touch README.md
+    fi
+  fi
+}
+
+#######################################
 # Git: Create a new GitHub repository for the current directory and wire
 # it up as the 'origin' remote -- for a directory that isn't a Git repo
 # yet, or is one but has no remote configured. Initializes Git if needed,
-# creates an initial commit if there's no history yet (gh needs something
-# to push), then creates the GitHub repo via 'gh repo create --source=.
-# --remote=origin --push'. Refuses to run if 'origin' is already
-# configured -- this is a one-time bootstrap, not something meant to
-# reconfigure an existing remote.
-# Usage: git-create-repo [-n|--name <name>] [-d|--description <text>] [--private|--public]
+# optionally generates a .gitignore/README.md, creates an initial commit
+# if there's no history yet (gh needs something to push), then creates
+# the GitHub repo via 'gh repo create --source=. --remote=origin
+# --push'. Refuses to run if 'origin' is already configured -- this is
+# a one-time bootstrap, not something meant to reconfigure an existing
+# remote.
+# Usage: git-create-repo [-n|--name <name>] [-d|--description <text>] [--private|--public] [--docs]
 # Options:
 #   -n, --name <name>          Repository name (default: current directory's name)
 #   -d, --description <text>   Repository description
 #   --private                  Create as a private repository
 #   --public                   Create as a public repository
+#   --docs                     Generate a .gitignore and README.md first (AI-generated if
+#                              the directory has files, blank placeholders if not)
 #   -h, --help                 Show this help
 #######################################
 git-create-repo() {
@@ -68,7 +111,7 @@ git-create-repo() {
     return 0
   fi
 
-  local repo_name="" description="" visibility=""
+  local repo_name="" description="" visibility="" generate_docs=false
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -82,8 +125,9 @@ git-create-repo() {
         ;;
       --private) visibility="--private" ;;
       --public) visibility="--public" ;;
+      --docs) generate_docs=true ;;
       *)
-        echo "Usage: git-create-repo [-n|--name <name>] [-d|--description <text>] [--private|--public]" >&2
+        echo "Usage: git-create-repo [-n|--name <name>] [-d|--description <text>] [--private|--public] [--docs]" >&2
         return 1
         ;;
     esac
@@ -112,8 +156,15 @@ git-create-repo() {
     git init -q
   fi
 
+  local repo_had_commits=true
+  git rev-parse HEAD > /dev/null 2>&1 || repo_had_commits=false
+
+  if [ "$generate_docs" = true ]; then
+    __git_create_repo_generate_docs
+  fi
+
   local created_initial_commit=false
-  if ! git rev-parse HEAD > /dev/null 2>&1; then
+  if [ "$repo_had_commits" = false ]; then
     echo -e "${CB_YELLOW}⚠️  No commits yet -- an initial commit is needed before pushing to GitHub.${C_RESET}"
     git status --short
     local reply
@@ -126,6 +177,9 @@ git-create-repo() {
     git add -A
     git commit -q -m "Initial commit"
     created_initial_commit=true
+  elif [ "$generate_docs" = true ] && git status --porcelain -- .gitignore README.md 2> /dev/null | grep -q .; then
+    git add -- .gitignore README.md
+    git commit -q -m "chore: add generated .gitignore and README.md"
   fi
 
   local large_files
