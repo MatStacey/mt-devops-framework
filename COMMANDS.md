@@ -206,6 +206,7 @@ Complex bash functions, framework utilities, and automated workflows.
 ### Docker: Container Management Utilities
 | Command | Description |
 |---|---|
+| `docker-containers` | Docker: Interactive container management console -- fzf-pick any |
 | `docker-daemon` | Docker: Start, stop, restart, or check the status of the Docker daemon |
 | `docker-ls` | Docker: List all running containers in a clean table format |
 | `docker-nuke` | Docker: Aggressive cleanup of all unused containers, images, and volumes |
@@ -214,6 +215,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `docker-sandbox` | Docker: Spin up a temporary, throwaway container sandbox |
 | `docker-shell` | Docker: Interactive fuzzy-finder to exec into a running container |
 | `docker-tail` | Docker: Concurrently tail logs from multiple selected containers |
+| `docker-update` | Docker: Check a Compose project for image updates and optionally |
 
 ### Docker: Image Build, Versioning & Registry Push
 | Command | Description |
@@ -464,6 +466,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `git` | Git: Intercept 'clone' to automatically route repositories into ~/vcs/ |
 | `git-clean-merged` | Git: Delete local and remote branches merged into the default branch |
 | `git-clone-ide` | Git: Clone repository into ~/vcs/, navigate into it, and open in default IDE |
+| `git-create-repo` | Git: Create a new GitHub repository for the current directory and wire |
 | `git-default-rebase` | Git: Fetch upstream origin and rebase current branch onto default branch |
 | `git-new-feature` | Git: Create and checkout a new feature branch |
 | `git-nuke` | Git: Hard reset local branch to upstream state and wipe untracked files |
