@@ -871,6 +871,191 @@ docker-shell() {
 }
 
 #######################################
+# Docker: Stop a running container
+# Arguments:
+#   $1 - Container name or ID
+#######################################
+__docker_container_stop() {
+  local target="$1"
+  echo -e "${CB_YELLOW}🛑 Stopping ${target}...${C_RESET}"
+  if docker stop "$target" > /dev/null; then
+    echo -e "${CB_GREEN}✅ Stopped: ${target}${C_RESET}"
+  else
+    echo -e "${CB_RED}❌ Failed to stop: ${target}${C_RESET}"
+  fi
+}
+
+#######################################
+# Docker: Start a stopped container
+# Arguments:
+#   $1 - Container name or ID
+#######################################
+__docker_container_start() {
+  local target="$1"
+  echo -e "${CB_BLUE}🚀 Starting ${target}...${C_RESET}"
+  if docker start "$target" > /dev/null; then
+    echo -e "${CB_GREEN}✅ Started: ${target}${C_RESET}"
+  else
+    echo -e "${CB_RED}❌ Failed to start: ${target}${C_RESET}"
+  fi
+}
+
+#######################################
+# Docker: Restart a single container in place via 'docker restart' --
+# a lightweight, container-level bounce, distinct from docker-reboot's
+# Compose-level down/up of an entire project.
+# Arguments:
+#   $1 - Container name or ID
+#######################################
+__docker_container_restart() {
+  local target="$1"
+  echo -e "${CB_BLUE}🔄 Restarting ${target}...${C_RESET}"
+  if docker restart "$target" > /dev/null; then
+    echo -e "${CB_GREEN}✅ Restarted: ${target}${C_RESET}"
+  else
+    echo -e "${CB_RED}❌ Failed to restart: ${target}${C_RESET}"
+  fi
+}
+
+#######################################
+# Docker: Exec an interactive shell into a container, falling back to
+# sh if bash isn't installed
+# Arguments:
+#   $1 - Container name or ID
+#######################################
+__docker_container_shell() {
+  local target="$1"
+  echo -e "${CB_GREEN}🚀 Entering shell for: ${target}...${C_RESET}"
+  docker exec -it "$target" /bin/bash || docker exec -it "$target" /bin/sh
+}
+
+#######################################
+# Docker: Follow a single container's logs until interrupted
+# Arguments:
+#   $1 - Container name or ID
+#######################################
+__docker_container_logs() {
+  local target="$1"
+  echo -e "${C_DIM}(Press Ctrl+C to stop)${C_RESET}\n"
+  docker logs -f --tail 100 "$target"
+}
+
+#######################################
+# Docker: Show a live, single-sample resource usage snapshot for a
+# container -- CPU, memory, network and block I/O
+# Arguments:
+#   $1 - Container name or ID
+#######################################
+__docker_container_stats() {
+  local target="$1"
+  docker stats --no-stream "$target"
+}
+
+#######################################
+# Docker: Page through the full 'docker inspect' output for a container
+# Arguments:
+#   $1 - Container name or ID
+#######################################
+__docker_container_inspect() {
+  local target="$1"
+  docker inspect "$target" | less
+}
+
+#######################################
+# Docker: Permanently remove a container after confirmation
+# (force-removes if it's still running)
+# Arguments:
+#   $1 - Container name or ID
+#######################################
+__docker_container_remove() {
+  local target="$1"
+  echo -e "${CB_RED}⚠️  This will permanently remove container: ${target}${C_RESET}"
+  local reply
+  read -r -p "Proceed? [y/N] " -n 1 reply < /dev/tty
+  echo
+  if [[ ! "$reply" =~ ^[Yy]$ ]]; then
+    echo -e "${CB_YELLOW}🛑 Aborted.${C_RESET}"
+    return 0
+  fi
+  if docker rm -f "$target" > /dev/null; then
+    echo -e "${CB_GREEN}✅ Removed: ${target}${C_RESET}"
+  else
+    echo -e "${CB_RED}❌ Failed to remove: ${target}${C_RESET}"
+  fi
+}
+
+#######################################
+# Docker: Interactive container management console -- fzf-pick any
+# container (running or stopped), then choose an action to run against
+# it (logs, shell, stop/start/restart, stats, inspect, remove). The
+# action list adapts to the container's current state (e.g. Start only
+# appears for a stopped container), and the console loops back to the
+# container list after each action until backed out.
+# Usage: docker-containers
+#######################################
+docker-containers() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  __docker_ensure_running || return 1
+
+  while true; do
+    local picked
+    picked=$(docker ps -a --format "{{.Names}}\t{{.Image}}\t{{.Status}}" |
+      fzf --delimiter=$'\t' --with-nth=1,2,3 --prompt="🐳 Select Container > " --height=~15 --layout=reverse --border)
+
+    [ -z "$picked" ] && return 0
+
+    local target status running
+    target=$(cut -f1 <<< "$picked")
+    status=$(cut -f3 <<< "$picked")
+    running=false
+    [[ "$status" == Up* ]] && running=true
+
+    local -a labels=() commands=()
+    labels+=("Show Logs (follow)")
+    commands+=("__docker_container_logs")
+
+    if $running; then
+      labels+=("Shell Into Container")
+      commands+=("__docker_container_shell")
+      labels+=("Show Live Stats")
+      commands+=("__docker_container_stats")
+      labels+=("Restart")
+      commands+=("__docker_container_restart")
+      labels+=("Stop")
+      commands+=("__docker_container_stop")
+    else
+      labels+=("Start")
+      commands+=("__docker_container_start")
+    fi
+
+    labels+=("Inspect (full details)")
+    commands+=("__docker_container_inspect")
+    labels+=("⚠️  Remove Container")
+    commands+=("__docker_container_remove")
+
+    local -a options=("${labels[@]}" "⬅  Back to Container List")
+    local choice
+    choice=$(printf '%s\n' "${options[@]}" | fzf --prompt="🐳 ${target} (${status}) > " --height=~15 --layout=reverse --border)
+
+    [ -z "$choice" ] && continue
+    [ "$choice" = "⬅  Back to Container List" ] && continue
+
+    local i
+    for i in "${!labels[@]}"; do
+      if [ "${labels[$i]}" = "$choice" ]; then
+        "${commands[$i]}" "$target"
+        echo -e "\n${C_DIM}Press Enter to continue...${C_RESET}"
+        read -r < /dev/tty
+        break
+      fi
+    done
+  done
+}
+
+#######################################
 # Docker: Aggressive cleanup of all unused containers, images, and volumes
 # Usage: docker-nuke [--dry-run]
 # Options:
