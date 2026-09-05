@@ -10,14 +10,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added pre-push file size validation to `git-create-repo` to catch files exceeding GitHub's 100MB limit before remote repository creation.
+- Improved error recovery to automatically roll back initial commits and clean up orphaned local `origin` remotes upon failed pushes.
 - Added `git-create-repo` tool to initialize local Git repositories and automatically create and push matching GitHub repositories.
 - Refactored GitHub CLI authentication checking into a reusable helper function (`__mt_ensure_gh_auth`) across VCS workflows.
 - Integrated the new `git-create-repo` command into the interactive repository submenu.
 - Reorganized `mt-menu`: consolidated the duplicate secrets flow into a single pointer at `mt-secrets`, split GCP and Git Workflows into per-service/per-workflow submenus, and added section headers to Docker Tools.
 - Added menu entries for every previously-missing shipped command (docker-reboot, docker-update, mt-hub, mt-push-update/mt-get-update, GCP list shortcuts, dev-tool aliases, and more).
 - Added a new dynamic "Private Commands" menu that surfaces whatever's under `40-private/`/`lib/private/` on the current machine without hardcoding anything personal into the shipped file.
-- Introduced `docker-containers`, an interactive `fzf`-powered console for managing container lifecycles (start, stop, restart, shell, logs, stats, inspect, and remove).
-- Added underlying container action helper functions (`__docker_container_*`) to support modular container management.
 
 ---
 
