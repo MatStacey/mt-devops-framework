@@ -421,7 +421,7 @@ __mt_menu_docker() {
   __mt_menu_submenu "🐳 Docker Tools" \
     "🟢 Start Docker Daemon (docker-daemon start)" __mt_menu_docker_start \
     "🔴 Stop Docker Daemon (docker-daemon stop)" __mt_menu_docker_stop \
-    "List Containers (docker-ls)" docker-ls \
+    "List / Manage Containers (docker-containers)" docker-containers \
     "Shell into Container (docker-shell)" docker-shell \
     "Launch Throwaway Sandbox (docker-sandbox)" docker-sandbox \
     "Tail Container Logs (docker-tail)" docker-tail \
