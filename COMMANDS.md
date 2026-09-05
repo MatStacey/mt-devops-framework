@@ -466,6 +466,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `git` | Git: Intercept 'clone' to automatically route repositories into ~/vcs/ |
 | `git-clean-merged` | Git: Delete local and remote branches merged into the default branch |
 | `git-clone-ide` | Git: Clone repository into ~/vcs/, navigate into it, and open in default IDE |
+| `git-create-repo` | Git: Create a new GitHub repository for the current directory and wire |
 | `git-default-rebase` | Git: Fetch upstream origin and rebase current branch onto default branch |
 | `git-new-feature` | Git: Create and checkout a new feature branch |
 | `git-nuke` | Git: Hard reset local branch to upstream state and wipe untracked files |

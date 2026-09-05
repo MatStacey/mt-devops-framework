@@ -26,6 +26,112 @@ git-new-feature() {
 }
 
 #######################################
+# Git: Create a new GitHub repository for the current directory and wire
+# it up as the 'origin' remote -- for a directory that isn't a Git repo
+# yet, or is one but has no remote configured. Initializes Git if needed,
+# creates an initial commit if there's no history yet (gh needs something
+# to push), then creates the GitHub repo via 'gh repo create --source=.
+# --remote=origin --push'. Refuses to run if 'origin' is already
+# configured -- this is a one-time bootstrap, not something meant to
+# reconfigure an existing remote.
+# Usage: git-create-repo [-n|--name <name>] [-d|--description <text>] [--private|--public]
+# Options:
+#   -n, --name <name>          Repository name (default: current directory's name)
+#   -d, --description <text>   Repository description
+#   --private                  Create as a private repository
+#   --public                   Create as a public repository
+#   -h, --help                 Show this help
+#######################################
+git-create-repo() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local repo_name="" description="" visibility=""
+
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -n | --name)
+        repo_name="$2"
+        shift
+        ;;
+      -d | --description)
+        description="$2"
+        shift
+        ;;
+      --private) visibility="--private" ;;
+      --public) visibility="--public" ;;
+      *)
+        echo "Usage: git-create-repo [-n|--name <name>] [-d|--description <text>] [--private|--public]" >&2
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  if ! command -v gh > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 GitHub CLI ('gh') is required but not installed.${C_RESET}"
+    echo -e "Install it from ${CB_CYAN}https://cli.github.com${C_RESET} and re-run this command."
+    return 1
+  fi
+
+  __mt_ensure_gh_auth || return 1
+
+  local existing_remote
+  existing_remote=$(git config --get remote.origin.url 2> /dev/null)
+  if [ -n "$existing_remote" ]; then
+    echo -e "${CB_YELLOW}⚠️  This directory already has an 'origin' remote configured:${C_RESET}"
+    echo -e "${C_DIM}${existing_remote}${C_RESET}"
+    echo -e "${CB_YELLOW}Nothing to do -- git-create-repo only bootstraps a fresh repo/remote.${C_RESET}"
+    return 1
+  fi
+
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo -e "${CB_BLUE}📦 Initializing Git repository...${C_RESET}"
+    git init -q
+  fi
+
+  if ! git rev-parse HEAD > /dev/null 2>&1; then
+    echo -e "${CB_YELLOW}⚠️  No commits yet -- an initial commit is needed before pushing to GitHub.${C_RESET}"
+    git status --short
+    local reply
+    read -r -p "Stage everything and create an initial commit now? [Y/n] " -n 1 reply < /dev/tty || reply="y"
+    echo
+    if [[ -n "$reply" && ! "$reply" =~ ^[Yy]$ ]]; then
+      echo -e "${CB_RED}🚨 Aborted -- commit your work first, then re-run git-create-repo.${C_RESET}"
+      return 1
+    fi
+    git add -A
+    git commit -q -m "Initial commit"
+  fi
+
+  repo_name="${repo_name:-$(basename "$PWD")}"
+
+  if [ -z "$visibility" ]; then
+    local vis_choice
+    vis_choice=$(printf '%s\n' private public | fzf --prompt="📦 Repository Visibility > " --height=~10 --layout=reverse --border)
+    if [ -z "$vis_choice" ]; then
+      echo -e "${CB_YELLOW}⚠️  Cancelled.${C_RESET}"
+      return 0
+    fi
+    visibility="--${vis_choice}"
+  fi
+
+  local -a gh_args=(repo create "$repo_name" "$visibility" --source=. --remote=origin --push)
+  [ -n "$description" ] && gh_args+=(--description "$description")
+
+  echo -e "${CB_BLUE}🚀 Creating GitHub repository '${repo_name}' (${visibility#--})...${C_RESET}"
+  if gh "${gh_args[@]}"; then
+    echo -e "${CB_GREEN}✅ Repository created and pushed.${C_RESET}"
+    git config --get remote.origin.url
+  else
+    echo -e "${CB_RED}🚨 Failed to create the GitHub repository.${C_RESET}"
+    return 1
+  fi
+}
+
+#######################################
 # Git: Intercept 'clone' to automatically route repositories into ~/vcs/
 # Globals:
 #   VCS_ROOT
