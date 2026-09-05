@@ -26,6 +26,26 @@ git-new-feature() {
 }
 
 #######################################
+# Git: List any currently tracked file (at HEAD/the index) at or above
+# GitHub's 100MB hard push limit -- checked before git-create-repo ever
+# calls 'gh repo create --push', since a push rejected for oversized
+# blobs (GH001) still leaves the just-created GitHub repo sitting there
+# empty. Only scans the current tree, not full history -- good enough to
+# catch the common case (an IDE/build cache accidentally swept up by
+# 'git add -A'), not a substitute for a real history audit.
+# Outputs:
+#   One "path (NNNMB)" line per oversized file, nothing if none found
+#######################################
+__git_create_repo_find_large_files() {
+  local file size_bytes
+  git ls-files -z | while IFS= read -r -d '' file; do
+    [ -f "$file" ] || continue
+    size_bytes=$(stat -c%s "$file" 2> /dev/null || stat -f%z "$file" 2> /dev/null)
+    [ -n "$size_bytes" ] && [ "$size_bytes" -ge 104857600 ] && echo "$file ($((size_bytes / 1048576))MB)"
+  done
+}
+
+#######################################
 # Git: Create a new GitHub repository for the current directory and wire
 # it up as the 'origin' remote -- for a directory that isn't a Git repo
 # yet, or is one but has no remote configured. Initializes Git if needed,
@@ -92,6 +112,7 @@ git-create-repo() {
     git init -q
   fi
 
+  local created_initial_commit=false
   if ! git rev-parse HEAD > /dev/null 2>&1; then
     echo -e "${CB_YELLOW}⚠️  No commits yet -- an initial commit is needed before pushing to GitHub.${C_RESET}"
     git status --short
@@ -104,6 +125,22 @@ git-create-repo() {
     fi
     git add -A
     git commit -q -m "Initial commit"
+    created_initial_commit=true
+  fi
+
+  local large_files
+  large_files=$(__git_create_repo_find_large_files)
+  if [ -n "$large_files" ]; then
+    echo -e "${CB_RED}🚨 Found file(s) at or above GitHub's 100MB push limit -- this would be rejected mid-push:${C_RESET}"
+    echo "  ${large_files//$'\n'/$'\n  '}"
+    if [ "$created_initial_commit" = true ]; then
+      git update-ref -d HEAD
+      echo -e "${CB_YELLOW}Undid the initial commit so nothing oversized got committed.${C_RESET}"
+    else
+      echo -e "${CB_YELLOW}These are already committed in this repo's history -- untrack them (git rm --cached) and add a .gitignore entry, or use Git LFS, before retrying.${C_RESET}"
+    fi
+    echo -e "${CB_YELLOW}Tip: run 'mt-ai-gitignore' to generate a .gitignore for this project, then re-run git-create-repo.${C_RESET}"
+    return 1
   fi
 
   repo_name="${repo_name:-$(basename "$PWD")}"
@@ -125,10 +162,16 @@ git-create-repo() {
   if gh "${gh_args[@]}"; then
     echo -e "${CB_GREEN}✅ Repository created and pushed.${C_RESET}"
     git config --get remote.origin.url
-  else
-    echo -e "${CB_RED}🚨 Failed to create the GitHub repository.${C_RESET}"
-    return 1
+    return 0
   fi
+
+  echo -e "${CB_RED}🚨 Failed to create the GitHub repository.${C_RESET}"
+  if git config --get remote.origin.url > /dev/null 2>&1; then
+    echo -e "${CB_YELLOW}'gh' had already created the GitHub repo and added 'origin' before the failure -- it may now exist but be empty.${C_RESET}"
+    echo -e "${CB_YELLOW}Removing the local 'origin' remote so a retry isn't blocked; delete the empty GitHub repo yourself if 'gh' didn't already roll it back.${C_RESET}"
+    git remote remove origin
+  fi
+  return 1
 }
 
 #######################################
