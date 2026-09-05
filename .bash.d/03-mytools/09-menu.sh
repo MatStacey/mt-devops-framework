@@ -18,11 +18,14 @@
 # Arguments:
 #   $1   - Submenu title, shown as the fzf prompt
 #   $@   - Remaining args: alternating "label" "command" pairs. Each
-#          command is a single already-defined command/function name
-#          (no inline arguments) -- anything needing flags or prompted
-#          input should be wrapped in its own tiny __mt_menu_* function
-#          first, matching the pattern used elsewhere in this file. Pass
-#          "" as the command for a section-header label.
+#          command is a single already-defined FUNCTION name (no inline
+#          arguments, and never a bare alias -- bash can't invoke an
+#          alias through a variable, only a literal typed command, so
+#          anything backed by an alias needs a tiny wrapper function
+#          around it first). Anything needing flags or prompted input
+#          should also be wrapped in its own tiny __mt_menu_* function,
+#          matching the pattern used elsewhere in this file. Pass "" as
+#          the command for a section-header label.
 #######################################
 __mt_menu_submenu() {
   local title="$1"
@@ -98,10 +101,11 @@ __mt_menu_category() {
 # System: Prompt for a single value and pass it as one argument to a
 # target command -- the shared building block for any menu item wrapping
 # a command whose one required argument is a whole string (a message, a
-# URL, a path) rather than multiple separate tokens
+# URL, a path) rather than multiple separate tokens. Target must be a
+# real function, never a bare alias (see __mt_menu_submenu's docstring).
 # Arguments:
 #   $1 - Prompt label
-#   $2 - Target command/function name
+#   $2 - Target function name
 #######################################
 __mt_menu_prompt_arg() {
   local prompt_label="$1" target_func="$2"
@@ -231,6 +235,28 @@ __mt_menu_gcl_as_json() {
   gcl-as-json "${args[@]}"
 }
 
+#######################################
+# System: Prompt for an instance name (plus any optional flags, e.g.
+# --zone=...) and run gce-ssh -- wrapped both because it's an alias
+# (can't be invoked through a variable) and because it needs a prompted,
+# possibly multi-token argument
+#######################################
+__mt_menu_gce_ssh() {
+  local args_str
+  read -r -p "Instance name (+ optional flags, e.g. myvm --zone=us-central1-a): " args_str < /dev/tty
+  if [ -z "$args_str" ]; then
+    echo -e "${CB_YELLOW}⚠️  Cancelled.${C_RESET}"
+    return 0
+  fi
+  local -a args
+  read -ra args <<< "$args_str"
+  gce-ssh "${args[@]}"
+}
+
+# Thin no-arg wrappers around plain listing ALIASES -- required because
+# bash cannot invoke an alias indirectly through a variable (only a
+# literal typed command expands one), so __mt_menu_submenu's
+# "${commands[$i]}" dispatch needs a real function to call instead.
 __mt_menu_export_interactive() { mt-export -i; }
 __mt_menu_export_cleanup_interactive() { mt-export-cleanup -i; }
 __mt_menu_search_interactive() { mt-search -i; }
@@ -238,6 +264,31 @@ __mt_menu_list_func() { mt-list --func; }
 __mt_menu_list_alias() { mt-list --alias; }
 __mt_menu_docker_start() { docker-daemon start; }
 __mt_menu_docker_stop() { docker-daemon stop; }
+__mt_menu_gce_ls() { gce-ls; }
+__mt_menu_gcs_ls() { gcs-ls; }
+__mt_menu_bq_ls() { bq-ls; }
+__mt_menu_gcl_gar_ls() { gcl-gar-ls; }
+__mt_menu_gcl_iam_ls() { gcl-iam-ls; }
+__mt_menu_gcl_ps_subs() { gcl-ps-subs; }
+__mt_menu_gcl_ps_topics() { gcl-ps-topics; }
+__mt_menu_gcp_crf_ls() { gcp-crf-ls; }
+__mt_menu_tf_scan() { tf-scan; }
+__mt_menu_cd_bashd() { cd-bashd; }
+__mt_menu_cd_git_home() { cd-git-home; }
+__mt_menu_cd_git_personal() { cd-git-personal; }
+__mt_menu_sys_update_install() { sys-update-install; }
+__mt_menu_hard_reload() { mt-hard-reload; }
+__mt_menu_mtupd() { mtupd; }
+__mt_menu_mtupd_fast() { mtupd-fast; }
+__mt_menu_mtindp() { mtindp; }
+__mt_menu_venv_make() { venv-make; }
+__mt_menu_venv_up() { venv-up; }
+__mt_menu_pip_load() { pip-load; }
+__mt_menu_pip_save() { pip-save; }
+__mt_menu_mci() { mci; }
+__mt_menu_boot_run() { boot-run; }
+__mt_menu_ruff_fmt() { ruff-fmt; }
+__mt_menu_sh_fmt_all() { sh-fmt-all; }
 
 __mt_menu_ai_query() { __mt_menu_prompt_arg "Prompt for AI" ai; }
 __mt_menu_ai_explain() { __mt_menu_prompt_arg "Command to explain" ai-explain; }
@@ -255,6 +306,9 @@ __mt_menu_gcp_ps_pull() { __mt_menu_prompt_arg "Pub/Sub subscription name" gcp-p
 
 __mt_menu_tf_replace() { __mt_menu_prompt_arg "Terraform resource address" tf-replace; }
 __mt_menu_tf_yaml() { __mt_menu_prompt_arg "YAML var file path" tf-yaml; }
+
+__mt_menu_docker_reboot() { __mt_menu_prompt_arg "Container or Compose project name" docker-reboot; }
+__mt_menu_docker_update() { __mt_menu_prompt_arg "Container or Compose project name" docker-update; }
 
 __mt_menu_git_new_feature() { __mt_menu_prompt_arg "Ticket/branch suffix" git-new-feature; }
 __mt_menu_git_push_all() { __mt_menu_prompt_arg "Commit message" git-push-all; }
@@ -287,11 +341,58 @@ __mt_menu_helm_repo_add() {
 }
 
 #######################################
+# System: Interactive picker for local-only commands defined under
+# 40-private/ or lib/private/ -- these are per-machine additions never
+# shipped with or synced to the framework repo (see .syncignore), so
+# they're never hardcoded into this file. Instead this reads them
+# straight out of the same doc cache mt-help/mt-search already use,
+# filtered to just those two source paths, and shows a friendly
+# empty-state if nothing is configured on this machine.
+# Usage: mt-menu (via the "🔒 Private Commands" category)
+# Globals:
+#   CACHE_DIR
+#######################################
+__mt_menu_private() {
+  local tsv_file="$CACHE_DIR/.mt_data.tsv"
+  [ -f "$tsv_file" ] || mt-refresh-caches > /dev/null 2>&1
+  [ -f "$tsv_file" ] || return 0
+
+  local -a rows
+  mapfile -t rows < <(awk -F'\t' '$5 ~ /\/(40-private|lib\/private)\// {print $3"\t"$4}' "$tsv_file" | sort -u)
+
+  if [ "${#rows[@]}" -eq 0 ]; then
+    echo -e "${CB_YELLOW}⚠️  No private commands found -- nothing under 40-private/ or lib/private/ on this machine.${C_RESET}"
+    return 0
+  fi
+
+  while true; do
+    local -a options=()
+    local row
+    for row in "${rows[@]}"; do
+      options+=("$(cut -f1 <<< "$row")  --  $(cut -f2 <<< "$row")")
+    done
+    options+=("⬅  Back")
+
+    local choice
+    choice=$(printf '%s\n' "${options[@]}" | fzf --prompt="🔒 Private Commands > " --height=~20 --layout=reverse --border)
+    [ -z "$choice" ] && return 0
+    [ "$choice" = "⬅  Back" ] && return 0
+
+    local target="${choice%%  --  *}"
+    "$target"
+    echo -e "\n${C_DIM}Press Enter to continue...${C_RESET}"
+    read -r < /dev/tty
+  done
+}
+
+#######################################
 # System: "Setup & Config" -> "Guided Wizards" submenu -- full
-# multi-question configuration flows
+# multi-question configuration flows, starting with the first-time
+# onboarding wizard (mt-setup) that walks through them in sequence
 #######################################
 __mt_menu_setup_wizards() {
   __mt_menu_submenu "🧙 Guided Wizards" \
+    "First-Time Setup Wizard (mt-setup)" mt-setup \
     "System Configuration (mt-wizard-system)" mt-wizard-system \
     "AI Provider Configuration (mt-wizard-ai)" mt-wizard-ai \
     "Git Configuration (mt-wizard-git)" mt-wizard-git \
@@ -319,15 +420,14 @@ __mt_menu_setup_quick() {
 }
 
 #######################################
-# System: "Setup & Config" -> "Secrets & Collaboration" submenu
+# System: "Setup & Config" -> "Secrets & Collaboration" submenu -- a
+# thin pointer into the top-level Secrets Manager (mt-secrets already
+# covers add/update/delete/info for every secret type) plus collaborator
+# setup, rather than duplicating secret-management entries in two places
 #######################################
 __mt_menu_setup_secrets() {
   __mt_menu_submenu "🔐 Secrets & Collaboration" \
-    "Add / Update Gemini API Key (mt-add-gemini-key)" mt-add-gemini-key \
-    "Add / Update Claude API Key (mt-add-claude-key)" mt-add-claude-key \
-    "Add / Update Bitbucket API Token (mt-add-bitbucket-secret)" mt-add-bitbucket-secret \
-    "Add / Update Docker Hub Credentials (mt-add-dockerhub-secret)" mt-add-dockerhub-secret \
-    "Delete a Secret (mt-secrets)" __mt_secrets_delete \
+    "Manage Secrets (mt-secrets)" mt-secrets \
     "Become a Collaborator / Fork Setup (mt-become-collaborator)" mt-become-collaborator
 }
 
@@ -339,7 +439,7 @@ __mt_menu_setup_terminal() {
     "Change Theme (mt-set-theme)" __mt_menu_pick_theme \
     "Gemini Status (mt-get-gemini-status)" mt-get-gemini-status \
     "View Prompt Display Settings (mt-toggle-display)" mt-toggle-display \
-    "Toggle a Prompt Element -- Git/GCP/AI/K8s (mt-toggle-display)" __mt_menu_toggle_display_element \
+    "Toggle a Prompt Element (mt-toggle-display)" __mt_menu_toggle_display_element \
     "Set GCP Display Mode (mt-toggle-display)" __mt_menu_pick_gcp_display_mode \
     "Toggle AI Model/Version Detail (mt-toggle-display)" __mt_menu_toggle_ai_model \
     "Toggle Compact Icon Labels (mt-toggle-display)" __mt_menu_toggle_compact_labels \
@@ -352,7 +452,7 @@ __mt_menu_setup_terminal() {
 __mt_menu_setup_maintenance() {
   __mt_menu_submenu "🔧 Maintenance & View" \
     "Run Diagnostics (mt-doctor)" mt-doctor \
-    "Symlink ~/.bash.d Into Sync Repo (mt-migrate-symlink)" mt-migrate-symlink \
+    "Reload Config + Refresh Caches (mt-hard-reload)" __mt_menu_hard_reload \
     "Reload Config from Disk (mt-load-config)" mt-load-config \
     "Clean Up Legacy config.yaml Keys (mt-migrate-config)" mt-migrate-config \
     "Open config.yaml in IDE (mt-open-config)" mt-open-config \
@@ -412,25 +512,33 @@ __mt_menu_docs() {
 
 #######################################
 # System: "Docker Tools" submenu -- daemon controls come first since
-# everything below them needs the daemon running, followed by everyday
-# usage, then broad-impact actions (restart-all, nuke) flagged with a
-# ⚠️ label prefix so the warning is visible before the item is even
-# selected, not just after.
+# everything below them needs the daemon running, then section headers
+# (non-actionable rows, see __mt_menu_submenu) break the remaining items
+# into Containers / Compose Projects / Images & Registry / Cleanup so a
+# 15-item list stays scannable, with broad-impact actions (restart-all,
+# nuke) flagged with a ⚠️ label prefix so the warning is visible before
+# the item is even selected, not just after.
 #######################################
 __mt_menu_docker() {
   __mt_menu_submenu "🐳 Docker Tools" \
     "🟢 Start Docker Daemon (docker-daemon start)" __mt_menu_docker_start \
     "🔴 Stop Docker Daemon (docker-daemon stop)" __mt_menu_docker_stop \
+    "── Containers ──" "" \
     "List / Manage Containers (docker-containers)" docker-containers \
     "Shell into Container (docker-shell)" docker-shell \
     "Launch Throwaway Sandbox (docker-sandbox)" docker-sandbox \
     "Tail Container Logs (docker-tail)" docker-tail \
+    "── Compose Projects ──" "" \
+    "Restart a Project (docker-reboot)" __mt_menu_docker_reboot \
+    "Check for Image Updates (docker-update)" __mt_menu_docker_update \
+    "⚠️  Restart All Projects (docker-reboot-all)" docker-reboot-all \
+    "── Images & Registry ──" "" \
     "Build Image (docker-build)" docker-build \
     "Tag Image for Registry (docker-tag)" docker-tag \
     "Push Image (docker-push)" docker-push \
     "Build + Push Release (docker-release)" docker-release \
     "Deploy via Helm (docker-deploy)" docker-deploy \
-    "⚠️  Restart All Running Containers (docker-reboot-all)" docker-reboot-all \
+    "── Cleanup ──" "" \
     "⚠️  Nuke Unused Resources (docker-nuke)" docker-nuke
 }
 
@@ -496,38 +604,108 @@ __mt_menu_minikube() {
 }
 
 #######################################
-# System: "GCP" submenu -- the individual "show active
-# project/region/zone/user" one-liners were removed since 'gcl-config'
-# (gcloud config list) already prints all of them together in one view;
-# 'gcl-get-project-number' is kept since it makes its own distinct API
-# call for data 'config list' doesn't have. Kubernetes now has its own
-# "Kubernetes Tools" submenu (see __mt_menu_k8s).
+# System: "GCP" -> "Project & Auth" submenu
 #######################################
-__mt_menu_gcp() {
-  __mt_menu_submenu "☁️  GCP" \
+__mt_menu_gcp_project() {
+  __mt_menu_submenu "🔑 Project & Auth" \
     "Switch GCP Project (gcp-set-project)" gcp-set-project \
     "List gcloud Config (gcl-config)" gcl-config \
     "Export Project Vars (gcl-export-vars)" gcl-export-vars \
     "Show Project Number (gcl-get-project-number)" gcl-get-project-number \
-    "List Org Policies (gcl-org-policies)" gcl-org-policies \
-    "Update gcloud CLI (gcl-update)" gcl-update \
     "gcloud Auth Login (gcp-login)" gcp-login \
     "gcloud ADC Login (gcp-login-adc)" gcp-login-adc \
-    "Show IAM Bindings (gcp-iam-show)" gcp-iam-show \
-    "Run BigQuery SQL (bq-query)" __mt_menu_bq_query \
-    "Run gcloud as JSON (gcl-as-json)" __mt_menu_gcl_as_json \
-    "Tail Cloud Run Function Logs (gcp-crf-logs)" __mt_menu_gcp_crf_logs \
-    "Configure Artifact Registry Auth (gcp-gar-docker)" __mt_menu_gcp_gar_docker \
-    "Read Secret Manager Secret (gcp-get-secret)" __mt_menu_gcp_get_secret \
-    "Pull Pub/Sub Message (gcp-ps-pull)" __mt_menu_gcp_ps_pull
+    "Update gcloud CLI (gcl-update)" gcl-update
 }
 
 #######################################
-# System: "Terraform" submenu
+# System: "GCP" -> "IAM & Org Policies" submenu
+#######################################
+__mt_menu_gcp_iam() {
+  __mt_menu_submenu "🛡️  IAM & Org Policies" \
+    "Show IAM Bindings (gcp-iam-show)" gcp-iam-show \
+    "List Org Policies (gcl-org-policies)" gcl-org-policies \
+    "List Service Accounts (gcl-iam-ls)" __mt_menu_gcl_iam_ls
+}
+
+#######################################
+# System: "GCP" -> "Compute Engine" submenu
+#######################################
+__mt_menu_gcp_compute() {
+  __mt_menu_submenu "🖥️  Compute Engine" \
+    "List VM Instances (gce-ls)" __mt_menu_gce_ls \
+    "SSH into Instance (gce-ssh)" __mt_menu_gce_ssh
+}
+
+#######################################
+# System: "GCP" -> "Storage & Registry" submenu
+#######################################
+__mt_menu_gcp_storage() {
+  __mt_menu_submenu "📦 Storage & Registry" \
+    "List Storage Buckets/Contents (gcs-ls)" __mt_menu_gcs_ls \
+    "List Artifact Registry Repos (gcl-gar-ls)" __mt_menu_gcl_gar_ls \
+    "Configure Artifact Registry Auth (gcp-gar-docker)" __mt_menu_gcp_gar_docker
+}
+
+#######################################
+# System: "GCP" -> "BigQuery & Pub/Sub" submenu
+#######################################
+__mt_menu_gcp_data() {
+  __mt_menu_submenu "📊 BigQuery & Pub/Sub" \
+    "Run BigQuery SQL (bq-query)" __mt_menu_bq_query \
+    "List BigQuery Datasets (bq-ls)" __mt_menu_bq_ls \
+    "List Pub/Sub Topics (gcl-ps-topics)" __mt_menu_gcl_ps_topics \
+    "List Pub/Sub Subscriptions (gcl-ps-subs)" __mt_menu_gcl_ps_subs \
+    "Pull a Pub/Sub Message (gcp-ps-pull)" __mt_menu_gcp_ps_pull
+}
+
+#######################################
+# System: "GCP" -> "Cloud Run Functions" submenu
+#######################################
+__mt_menu_gcp_functions() {
+  __mt_menu_submenu "⚡ Cloud Run Functions" \
+    "List Functions (gcp-crf-ls)" __mt_menu_gcp_crf_ls \
+    "Tail Function Logs (gcp-crf-logs)" __mt_menu_gcp_crf_logs
+}
+
+#######################################
+# System: "GCP" -> "Secrets & Raw gcloud" submenu
+#######################################
+__mt_menu_gcp_raw() {
+  __mt_menu_submenu "🔧 Secrets & Raw gcloud" \
+    "Read Secret Manager Secret (gcp-get-secret)" __mt_menu_gcp_get_secret \
+    "Run gcloud as JSON (gcl-as-json)" __mt_menu_gcl_as_json
+}
+
+#######################################
+# System: "GCP" category picker -- split into per-service submenus since
+# the flat list grew past 20 items once every "-ls" shortcut alias was
+# added; Kubernetes has its own top-level "Kubernetes Tools" submenu
+# (see __mt_menu_k8s) rather than living under here.
+#######################################
+__mt_menu_gcp() {
+  __mt_menu_category "☁️  GCP" \
+    "🔑 Project & Auth" __mt_menu_gcp_project \
+    "🛡️  IAM & Org Policies" __mt_menu_gcp_iam \
+    "🖥️  Compute Engine" __mt_menu_gcp_compute \
+    "📦 Storage & Registry" __mt_menu_gcp_storage \
+    "📊 BigQuery & Pub/Sub" __mt_menu_gcp_data \
+    "⚡ Cloud Run Functions" __mt_menu_gcp_functions \
+    "🔧 Secrets & Raw gcloud" __mt_menu_gcp_raw
+}
+
+#######################################
+# System: "Terraform" submenu -- only the framework's own value-add
+# commands are listed here (validation, AI IAM analysis, Checkov
+# scanning, resource/var-file helpers); the ~30 short terraform aliases
+# (tfa, tfp, tfd, tfw*, etc.) are deliberately excluded since they're
+# meant as direct-typed 1:1 CLI shortcuts, not discrete browsable
+# features -- listing them here would just be 'terraform <subcommand>'
+# with extra steps.
 #######################################
 __mt_menu_terraform() {
   __mt_menu_submenu "🏔️  Terraform" \
     "Validate All Terraform (tf-val-all)" tf-val-all \
+    "Scan with Checkov (tf-scan)" __mt_menu_tf_scan \
     "Clean Terraform Caches (tf-clean)" tf-clean \
     "Generate IAM Bindings (tf-ai-iam)" tf-ai-iam \
     "Plan Resource Replacement (tf-replace)" __mt_menu_tf_replace \
@@ -535,29 +713,80 @@ __mt_menu_terraform() {
 }
 
 #######################################
-# System: "Git Workflows" submenu -- ordered to match how a workflow
-# actually unfolds (start a branch/bring repos in -> do the work ->
-# finish with a PR -> maintenance -> read-only utilities), with the
-# destructive hard-reset flagged and pushed to the very end.
+# System: "Git Workflows" -> "Branches & Repos" submenu
 #######################################
-__mt_menu_git() {
-  __mt_menu_submenu "🌿 Git Workflows" \
+__mt_menu_git_repos() {
+  __mt_menu_submenu "🌱 Branches & Repos" \
     "New Feature Branch (git-new-feature)" __mt_menu_git_new_feature \
     "List Local Repos (mt-repos)" mt-repos \
+    "Repo Dashboard (mt-hub)" mt-hub \
     "Clone & Open in IDE (git-clone-ide)" __mt_menu_git_clone_ide \
     "Bulk-Clone a Project (mt-clone -i)" __mt_menu_clone_wizard \
-    "Bulk-Update All Repos (mt-bulk-update)" __mt_menu_bulk_update \
-    "Bulk-Update All Repos in Background (mt-bulk-update -b)" __mt_menu_bulk_update_bg \
-    "AI-Generate .gitignore (mt-ai-gitignore)" mt-ai-gitignore \
+    "Bulk-Update Repos (mt-bulk-update)" __mt_menu_bulk_update \
+    "Bulk-Update Repos, Background (mt-bulk-update -b)" __mt_menu_bulk_update_bg
+}
+
+#######################################
+# System: "Git Workflows" -> "Commit, Push & PRs" submenu
+#######################################
+__mt_menu_git_commit() {
+  __mt_menu_submenu "📤 Commit, Push & PRs" \
     "Stage, Commit & Push All (git-push-all)" __mt_menu_git_push_all \
     "AI-Grouped Push (git-ai-push-all)" git-ai-push-all \
-    "Raise a Pull Request (git-raise-pr)" git-raise-pr \
-    "AI-Generate README (mt-ai-readme)" mt-ai-readme \
+    "Raise a Pull Request (git-raise-pr)" git-raise-pr
+}
+
+#######################################
+# System: "Git Workflows" -> "AI Tools" submenu
+#######################################
+__mt_menu_git_ai() {
+  __mt_menu_submenu "🤖 AI Tools" \
+    "AI-Generate .gitignore (mt-ai-gitignore)" mt-ai-gitignore \
+    "AI-Generate README (mt-ai-readme)" mt-ai-readme
+}
+
+#######################################
+# System: "Git Workflows" -> "Maintenance & Cleanup" submenu -- the
+# destructive hard-reset is flagged and pushed to the very end.
+#######################################
+__mt_menu_git_maintenance() {
+  __mt_menu_submenu "🧹 Maintenance & Cleanup" \
     "Rebase onto Default Branch (git-default-rebase)" git-default-rebase \
     "Clean Merged Branches (git-clean-merged)" git-clean-merged \
     "Show Pretty Log Graph (git-pretty-log)" git-pretty-log \
     "Open Remote URL (git-view-remote)" git-view-remote \
     "⚠️  Hard-Reset to Upstream (git-nuke)" git-nuke
+}
+
+#######################################
+# System: "Git Workflows" -> "Profile Sync" submenu -- every command
+# that syncs THIS framework's own dotfiles repo/checkout, grouped here
+# rather than scattered across Setup & Config and System & Bootstrap
+# since they're all fundamentally the same Git-backed sync workflow.
+#######################################
+__mt_menu_git_sync() {
+  __mt_menu_submenu "🔄 Profile Sync" \
+    "Sync to Remote, AI-Assisted (mtupd)" __mt_menu_mtupd \
+    "Sync to Remote, Fast/No AI (mtupd-fast)" __mt_menu_mtupd_fast \
+    "Pull Latest Updates (mt-get-update)" mt-get-update \
+    "One-Time Symlink Migration (mt-migrate-symlink)" mt-migrate-symlink \
+    "Download Release Zip (mt-download-release)" mt-download-release \
+    "Reindex Personal Repos for mt-hub (mtindp)" __mt_menu_mtindp
+}
+
+#######################################
+# System: "Git Workflows" category picker -- split into Branches &
+# Repos, Commit/Push & PRs, AI Tools, Maintenance & Cleanup, and Profile
+# Sync submenus since the flat list grew past 20 items once mt-hub and
+# every profile-sync command were folded in.
+#######################################
+__mt_menu_git() {
+  __mt_menu_category "🌿 Git Workflows" \
+    "🌱 Branches & Repos" __mt_menu_git_repos \
+    "📤 Commit, Push & PRs" __mt_menu_git_commit \
+    "🤖 AI Tools" __mt_menu_git_ai \
+    "🧹 Maintenance & Cleanup" __mt_menu_git_maintenance \
+    "🔄 Profile Sync" __mt_menu_git_sync
 }
 
 #######################################
@@ -576,7 +805,24 @@ __mt_menu_utilities_networking() {
 __mt_menu_utilities_scaffolding() {
   __mt_menu_submenu "🏗️  Scaffolding & Formatting" \
     "Scaffold Repo from Blueprint (mt-blueprint)" mt-blueprint \
-    "Format Code to Google Style (google-fmt)" google-fmt
+    "Format Code to Google Style (google-fmt)" google-fmt \
+    "Format Python with Ruff (ruff-fmt)" __mt_menu_ruff_fmt \
+    "Format Shell Scripts (sh-fmt-all)" __mt_menu_sh_fmt_all
+}
+
+#######################################
+# System: "General Utilities" -> "Dev Environment" submenu -- Python
+# venv/pip shortcuts and one-liner Maven/Spring Boot commands, all
+# operating on the current directory
+#######################################
+__mt_menu_utilities_dev() {
+  __mt_menu_submenu "🧑‍💻 Dev Environment" \
+    "Create + Activate venv (venv-make)" __mt_menu_venv_make \
+    "Activate Existing venv (venv-up)" __mt_menu_venv_up \
+    "Install pip Requirements (pip-load)" __mt_menu_pip_load \
+    "Save pip Requirements (pip-save)" __mt_menu_pip_save \
+    "Maven Clean Install (mci)" __mt_menu_mci \
+    "Spring Boot Run (boot-run)" __mt_menu_boot_run
 }
 
 #######################################
@@ -611,13 +857,15 @@ __mt_menu_utilities_backup() {
 
 #######################################
 # System: "General Utilities" category picker -- routes to Networking &
-# Serving, Scaffolding & Formatting, Encoding, Inspection & History, and
-# Backup & Jobs submenus instead of one flat undifferentiated list.
+# Serving, Scaffolding & Formatting, Dev Environment, Encoding,
+# Inspection & History, and Backup & Jobs submenus instead of one flat
+# undifferentiated list.
 #######################################
 __mt_menu_utilities() {
   __mt_menu_category "🛠️  General Utilities" \
     "🌐 Networking & Serving" __mt_menu_utilities_networking \
     "🏗️  Scaffolding & Formatting" __mt_menu_utilities_scaffolding \
+    "🧑‍💻 Dev Environment" __mt_menu_utilities_dev \
     "🔢 Encoding" __mt_menu_utilities_encoding \
     "📊 Inspection & History" __mt_menu_utilities_inspection \
     "💾 Backup & Jobs" __mt_menu_utilities_backup
@@ -631,10 +879,10 @@ __mt_menu_system() {
     "Install Missing Dependencies (bootstrap)" bootstrap \
     "Install Pending Packages (sys-install)" sys-install \
     "Update System Packages (sys-update)" sys-update \
+    "Update, Bootstrap & Reload (sys-update-install)" __mt_menu_sys_update_install \
     "Framework Health Dashboard (mt-status)" mt-status \
     "Show Profile Version (mt-get-version)" mt-get-version \
-    "View Framework Logs (mt-logs)" mt-logs \
-    "Download Release Zip (mt-download-release)" mt-download-release
+    "View Framework Logs (mt-logs)" mt-logs
 }
 
 #######################################
@@ -642,8 +890,11 @@ __mt_menu_system() {
 #######################################
 __mt_menu_launchers_navigate() {
   __mt_menu_submenu "📂 Navigate (cd)" \
-    "cd to AI Workspace (cd-ai-workspace)" cd-ai-workspace \
     "cd to Dotfiles Repo (mt-dotfiles)" mt-dotfiles \
+    "cd to ~/.bash.d (cd-bashd)" __mt_menu_cd_bashd \
+    "cd to VCS Root (cd-git-home)" __mt_menu_cd_git_home \
+    "cd to VCS Personal (cd-git-personal)" __mt_menu_cd_git_personal \
+    "cd to AI Workspace (cd-ai-workspace)" cd-ai-workspace \
     "cd to Docker Dir + Explorer (cd-win-docker)" cd-win-docker \
     "cd to Current Repo's Root (cd-repo-root)" cd-repo-root
 }
@@ -713,6 +964,7 @@ mt-menu() {
     "⚡ System & Bootstrap"
     "🚀 Launchers"
     "🔐 Secrets Manager"
+    "🔒 Private Commands"
   )
   local -a commands=(
     __mt_menu_setup
@@ -730,6 +982,7 @@ mt-menu() {
     __mt_menu_system
     __mt_menu_launchers
     mt-secrets
+    __mt_menu_private
   )
 
   while true; do
