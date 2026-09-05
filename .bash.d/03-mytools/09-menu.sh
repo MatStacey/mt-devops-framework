@@ -718,6 +718,7 @@ __mt_menu_terraform() {
 __mt_menu_git_repos() {
   __mt_menu_submenu "🌱 Branches & Repos" \
     "New Feature Branch (git-new-feature)" __mt_menu_git_new_feature \
+    "Create GitHub Repo for This Directory (git-create-repo)" git-create-repo \
     "List Local Repos (mt-repos)" mt-repos \
     "Repo Dashboard (mt-hub)" mt-hub \
     "Clone & Open in IDE (git-clone-ide)" __mt_menu_git_clone_ide \

@@ -978,13 +978,14 @@ mt-add-sync-url() {
 
 #######################################
 # Config: Ensure the GitHub CLI is authenticated, offering to run
-# 'gh auth login' interactively if it isn't yet. Used by
-# mt-become-collaborator so a brand-new collaborator doesn't need to know
-# to authenticate before forking.
+# 'gh auth login' interactively if it isn't yet. Shared by any command
+# that needs GitHub API access (mt-become-collaborator's fork setup,
+# git-create-repo's repo creation) so a first-time user doesn't need to
+# know to authenticate beforehand.
 # Returns:
 #   0 if 'gh' ends up authenticated, 1 if the user declined or login failed
 #######################################
-__mt_collab_ensure_gh_auth() {
+__mt_ensure_gh_auth() {
   gh auth status > /dev/null 2>&1 && return 0
 
   echo -e "${CB_YELLOW}⚠️  You're not authenticated with the GitHub CLI yet.${C_RESET}"
@@ -1035,7 +1036,7 @@ mt-become-collaborator() {
     return 1
   fi
 
-  __mt_collab_ensure_gh_auth || return 1
+  __mt_ensure_gh_auth || return 1
 
   local username
   username=$(gh api user -q .login 2> /dev/null)
