@@ -10,14 +10,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Reorganized `mt-menu`: consolidated the duplicate secrets flow into a single pointer at `mt-secrets`, split GCP and Git Workflows into per-service/per-workflow submenus, and added section headers to Docker Tools.
+- Added menu entries for every previously-missing shipped command (docker-reboot, docker-update, mt-hub, mt-push-update/mt-get-update, GCP list shortcuts, dev-tool aliases, and more).
+- Added a new dynamic "Private Commands" menu that surfaces whatever's under `40-private/`/`lib/private/` on the current machine without hardcoding anything personal into the shipped file.
 - Introduced `docker-containers`, an interactive `fzf`-powered console for managing container lifecycles (start, stop, restart, shell, logs, stats, inspect, and remove).
 - Added underlying container action helper functions (`__docker_container_*`) to support modular container management.
 - Updated the main Docker tools menu to integrate the new `docker-containers` command.
 - Updated the Secrets & Collaboration menu to clarify that credential management options support both adding and updating keys.
 - Added a new option to delete secrets directly from the Secrets submenu.
-- Expanded the Secrets & Collaboration menu with interactive setup options for Bitbucket API tokens and Docker Hub credentials.
-- Added maintenance guidance to the configuration template explaining AI model selection and recommending periodic audits of default provider models.
-- Added GitHub issue (`bug_report.md`, `feature_request.md`) and PR templates with pre-submission checklists.
 
 ---
 
