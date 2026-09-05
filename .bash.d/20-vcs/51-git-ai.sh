@@ -161,6 +161,18 @@ git-ai-push-all() {
   else
     echo "🤖 AI enabled: Generating feature-grouped commits..."
 
+    # Update README.md "Recent Updates & Enhancements" using AI
+    __git_sync_ai_update_readme_summary "."
+    local readme_status=$?
+
+    if [ "$readme_status" -eq 100 ]; then
+      echo -e "${CB_RED}🚨 Aborting push: README AI update failed.${C_RESET}"
+      return 1
+    fi
+
+    # README.md was modified by the AI summary, so make sure it is staged
+    git add .
+
     local loop_count=0
     local max_loops=10
 

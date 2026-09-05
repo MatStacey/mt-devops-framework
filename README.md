@@ -10,14 +10,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Integrated automated AI summary updates for `README.md` directly into the `git-ai-push-all` workflow.
+- Added error handling to abort push operations if the README update fails, ensuring generated changes are automatically staged.
 - Added a `--docs` option to `git-create-repo` to generate `.gitignore` and `README.md` files prior to setting up the remote repository.
 - Implemented AI-assisted generation (`mt-ai-gitignore` and `mt-ai-readme`) with automatic fallback to blank placeholder files and safety checks to prevent overwriting existing content.
 - Updated commit workflows in `git-create-repo` to automatically stage and commit newly created documentation.
 - Added pre-push file size validation to `git-create-repo` to catch files exceeding GitHub's 100MB limit before remote repository creation.
 - Improved error recovery to automatically roll back initial commits and clean up orphaned local `origin` remotes upon failed pushes.
 - Added `git-create-repo` tool to initialize local Git repositories and automatically create and push matching GitHub repositories.
-- Refactored GitHub CLI authentication checking into a reusable helper function (`__mt_ensure_gh_auth`) across VCS workflows.
-- Integrated the new `git-create-repo` command into the interactive repository submenu.
 
 ---
 
