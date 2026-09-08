@@ -1,5 +1,7 @@
 # mt-bulk-update summary table renderer
-# Input: pipe-delimited rows of REPOSITORY|BRANCH|UPDATE|PUSHED|AHEAD|BEHIND
+# Input: pipe-delimited rows of PATH|BRANCH|UPDATE|PUSHED|AHEAD|BEHIND --
+# REPOSITORY is derived here from PATH's final segment, not a separate
+# input field.
 # Expects color vars via -v: blue green yellow red dim rst cyan
 
 function pad(str, len,    out) {
@@ -9,13 +11,22 @@ function pad(str, len,    out) {
   return out
 }
 
+function repeat(ch, len,    out, i) {
+  out = ""
+  for (i = 0; i < len; i++) out = out ch
+  return out
+}
+
 BEGIN {
   FS = "|"
-  printf "%s%-45s %-20s %-14s %-8s %-7s %-7s%s\n", blue, "REPOSITORY", "BRANCH", "UPDATE", "PUSHED", "AHEAD", "BEHIND", rst
-  printf "%s%s%s\n", blue, "-----------------------------------------------------------------------------------------------------", rst
+  printf "%s%-45s %-45s %-20s %-14s %-8s %-7s %-7s%s\n", blue, "REPOSITORY", "PATH", "BRANCH", "UPDATE", "PUSHED", "AHEAD", "BEHIND", rst
+  printf "%s%s%s\n", blue, repeat("-", 152), rst
 }
 {
-  repo = pad($1, 45)
+  path_raw = $1
+  path_part_count = split(path_raw, path_parts, "/")
+  name = pad(path_parts[path_part_count], 45)
+  path = pad(path_raw, 45)
 
   branch_raw = $2
   branch_color = (branch_raw == "main" || branch_raw == "master") ? green : yellow
@@ -42,5 +53,5 @@ BEGIN {
   behind_color = (behind_raw + 0 > 0) ? yellow : dim
   behind = pad(behind_raw, 7)
 
-  printf "%s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s\n", rst, repo, rst, branch_color, branch, rst, update_color, update, rst, pushed_color, pushed, rst, ahead_color, ahead, rst, behind_color, behind, rst
+  printf "%s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s %s%s%s\n", rst, name, rst, rst, path, rst, branch_color, branch, rst, update_color, update, rst, pushed_color, pushed, rst, ahead_color, ahead, rst, behind_color, behind, rst
 }
