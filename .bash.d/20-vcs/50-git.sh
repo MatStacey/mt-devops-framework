@@ -431,61 +431,6 @@ git-view-remote() {
 }
 
 #######################################
-# Git: Clone repository into ~/vcs/, navigate into it, and open in default IDE
-# Usage: git-clone-ide [-ide vscode|intellij] <repo-url>
-# Arguments:
-#   -ide <name>  Override default IDE (vscode or intelliJ)
-#   <url>        Target repository URL
-#######################################
-git-clone-ide() {
-  local selected_ide="${DEFAULT_IDE:-vscode}"
-  local repo_url=""
-
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      -h | --help)
-        mt-help "${FUNCNAME[0]}"
-        return 0
-        ;;
-      -ide)
-        selected_ide="$2"
-        shift 2
-        ;;
-      *)
-        repo_url="$1"
-        shift
-        ;;
-    esac
-  done
-
-  [ -z "$repo_url" ] && {
-    echo -e "🚨 Error: Repository URL cannot be empty.\nUsage: git-clone-ide [-ide vscode|intellij] <repo-url>"
-    return 1
-  }
-
-  mkdir -p "$VCS_ROOT"
-  local repo_name
-  repo_name=$(basename "$repo_url" .git)
-
-  echo "📥 Cloning $repo_name to$VCS_ROOT/..."
-
-  if ! git clone "$repo_url" "$VCS_ROOT/$repo_name"; then
-    echo "🚨 Error: Clone failed."
-    return 1
-  fi
-
-  cd "$VCS_ROOT/$repo_name" || return 1
-  echo "✅ Moved to $(pwd)"
-  echo "🚀 Opening in $selected_ide..."
-
-  if [ "$selected_ide" = "intellij" ]; then
-    __launch_intellij . || echo "⚠️ Could not launch IntelliJ. Ensure 'idea' is on PATH (JetBrains Toolbox), or install IntelliJ IDEA via Homebrew on macOS."
-  else
-    code -n .
-  fi
-}
-
-#######################################
 # Git: Print a clean, color-coded, single-line log graph
 #######################################
 git-pretty-log() {

@@ -10,14 +10,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Removed the deprecated `git-clone-ide` command and its corresponding entry in the interactive menu.
+- Cleaned up shell aliases by removing legacy Kubernetes shortcuts and introducing `sh-fmt-all` for shell formatting.
+- Regenerated the technical reference documentation to reflect current alias and command configurations.
 - Replaced the naive `git clone` wrapper with `mt-git-clone`, featuring smart destination routing based on host and owner/workspace metadata alongside flags for path overrides, IDE integration, and checkout management.
 - Added Bitbucket server and workspace configuration options to the `mt-wizard-git` setup wizard.
 - Integrated `mt-git-clone` into the interactive tools menu.
 - Integrated automated AI summary updates for `README.md` directly into the `git-ai-push-all` workflow.
 - Added error handling to abort push operations if the README update fails, ensuring generated changes are automatically staged.
-- Added a `--docs` option to `git-create-repo` to generate `.gitignore` and `README.md` files prior to setting up the remote repository.
-- Implemented AI-assisted generation (`mt-ai-gitignore` and `mt-ai-readme`) with automatic fallback to blank placeholder files and safety checks to prevent overwriting existing content.
-- Updated commit workflows in `git-create-repo` to automatically stage and commit newly created documentation.
 
 ---
 

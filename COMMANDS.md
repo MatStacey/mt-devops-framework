@@ -464,7 +464,6 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `cd-repo-root` | Git: Change directory to the current repository's top-level root, |
 | `git-clean-merged` | Git: Delete local and remote branches merged into the default branch |
-| `git-clone-ide` | Git: Clone repository into ~/vcs/, navigate into it, and open in default IDE |
 | `git-create-repo` | Git: Create a new GitHub repository for the current directory and wire |
 | `git-default-rebase` | Git: Fetch upstream origin and rebase current branch onto default branch |
 | `git-new-feature` | Git: Create and checkout a new feature branch |
