@@ -766,6 +766,13 @@ mt-wizard-git() {
   read -r -p "Feature Branch Prefix [${GIT_FEATURE_PREFIX:-feature/}]: " prefix
   [ -n "$prefix" ] && python3 "$CONFIG_MANAGER" update "git" "feature_branch_prefix" "$prefix"
 
+  echo -e "${C_DIM}💡 Used by mt-git-clone to route Bitbucket clones into ~/vcs/work/bitbucket/<server>/<workspace>/ -- a Bitbucket clone URL doesn't encode the workspace/project grouping, so it can't be derived automatically.${C_RESET}"
+  read -r -p "Bitbucket Server [${BITBUCKET_SERVER:-Not set}]: " bb_server
+  [ -n "$bb_server" ] && python3 "$CONFIG_MANAGER" update "git" "bitbucket_server" "$bb_server"
+
+  read -r -p "Bitbucket Workspace [${BITBUCKET_WORKSPACE:-Not set}]: " bb_workspace
+  [ -n "$bb_workspace" ] && python3 "$CONFIG_MANAGER" update "git" "bitbucket_workspace" "$bb_workspace"
+
   read -r -p "AI Max Diff Bytes [${AI_MAX_DIFF_BYTES:-4000}]: " bytes
   [ -n "$bytes" ] && python3 "$CONFIG_MANAGER" update "ai" "max_context_bytes" "$bytes"
   echo -e "${CB_GREEN}✅ Git config updated.${C_RESET}"

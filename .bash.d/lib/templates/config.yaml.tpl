@@ -44,6 +44,13 @@ ai:
 git:
   feature_branch_prefix: feature/
   enable_format_on_push: true
+  # Bitbucket workspace/project mt-git-clone routes into automatically --
+  # unlike GitHub/GitLab, a Bitbucket clone URL only ever encodes the
+  # workspace (git@bitbucket.org:<workspace>/<repo>.git), never the
+  # project it's grouped under, so that second level can't be derived
+  # from the URL and has to be configured instead.
+  bitbucket_server: ""
+  bitbucket_workspace: ""
 
 llm_exports:
   enable_auto_cleanup: true
