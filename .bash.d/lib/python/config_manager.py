@@ -194,6 +194,8 @@ def load_env():
         git_cfg.get("enable_format_on_push", git_cfg.get("format_on_push", True)),
         to_lower=True,
     )
+    export("BITBUCKET_SERVER", git_cfg.get("bitbucket_server", ""))
+    export("BITBUCKET_WORKSPACE", git_cfg.get("bitbucket_workspace", ""))
 
     # Paths
     export(

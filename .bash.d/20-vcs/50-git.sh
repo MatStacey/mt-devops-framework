@@ -229,25 +229,175 @@ git-create-repo() {
 }
 
 #######################################
-# Git: Intercept 'clone' to automatically route repositories into ~/vcs/
-# Globals:
-#   VCS_ROOT
+# Git: Determine the routing key mt-git-clone uses to pick a default
+# clone destination for a repository URL -- "bitbucket" for a Bitbucket
+# host (its clone URL never encodes the workspace/project grouping, so
+# BITBUCKET_SERVER/BITBUCKET_WORKSPACE are used instead of anything
+# parsed here), or otherwise the path segment immediately before the
+# repo name (e.g. "octocat" for github.com/octocat/repo.git -- the same
+# position GitLab's immediate (sub)group falls in too).
 # Arguments:
-#   $@ - Standard git clone options and URL
+#   $1 - Repository clone URL (SSH scp-like, ssh://, or https://)
+# Outputs:
+#   "bitbucket", or the parsed owner/workspace segment
+# Returns:
+#   1 if the URL doesn't look like a recognizable owner/repo host URL
 #######################################
-git() {
-  if [ "$1" != "clone" ]; then
-    command git "$@"
-    return $?
+__mt_git_clone_parse_owner() {
+  local url="$1"
+  local host path
+
+  if [[ "$url" =~ ^[A-Za-z0-9_.+-]+@([^:/]+):(.+)$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    path="${BASH_REMATCH[2]}"
+  elif [[ "$url" =~ ^[A-Za-z]+://([^/]+)/(.+)$ ]]; then
+    host="${BASH_REMATCH[1]}"
+    path="${BASH_REMATCH[2]}"
+  else
+    return 1
   fi
 
-  shift
-  mkdir -p "$VCS_ROOT"
-  echo "📥 Intercepting 'git clone': Redirecting to $VCS_ROOT/..."
-  if (cd "$VCS_ROOT" && command git clone "$@"); then
-    local repo_name
-    repo_name=$(basename "${@: -1}" .git)
-    echo -e "\n✅ Repository cloned successfully.\n💡 To navigate to it, run: cd $VCS_ROOT/$repo_name"
+  if [[ "${host,,}" == *bitbucket* ]]; then
+    echo "bitbucket"
+    return 0
+  fi
+
+  path="${path%.git}"
+  path="${path%/}"
+  local owner="${path%/*}"
+  owner="${owner##*/}"
+  [ -z "$owner" ] && return 1
+  echo "$owner"
+}
+
+#######################################
+# Git: Clone a repository into a sensibly routed default location
+# instead of leaving it wherever the current directory happens to be --
+# ~/vcs/personal/<owner>/<repo> for GitHub/GitLab/etc (the owner read
+# straight off the clone URL), or
+# ~/vcs/work/bitbucket/<BITBUCKET_SERVER>/<BITBUCKET_WORKSPACE>/<repo>
+# for Bitbucket, since a Bitbucket clone URL never encodes the
+# workspace/project grouping the way GitHub/GitLab encode the owner.
+# Refuses to clone over an already-existing destination. The routed
+# default can be overridden entirely (--path), or swapped for the
+# current directory (--here).
+# Usage: mt-git-clone <repo-url> [-p|--path <dir>] [--here] [--ide]
+#        [-e|--explore] [-fr|--fetch-remote] [-c|--checkout <branch>]
+# Options:
+#   -p, --path <dir>          Clone into this exact directory instead of the routed default
+#   --here                    Clone into the current directory instead of the routed default
+#   --ide                     Open the cloned repo in the default IDE afterward
+#   -e, --explore             Open the cloned repo's directory in the file manager afterward
+#   -fr, --fetch-remote       Fetch every remote branch after cloning
+#   -c, --checkout <branch>   Create and check out a new local branch from the default branch
+#   -h, --help                 Show this help
+# Globals:
+#   VCS_PERSONAL, VCS_ROOT, BITBUCKET_SERVER, BITBUCKET_WORKSPACE, DEFAULT_IDE
+#######################################
+mt-git-clone() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local usage="Usage: mt-git-clone <repo-url> [-p|--path <dir>] [--here] [--ide] [-e|--explore] [-fr|--fetch-remote] [-c|--checkout <branch>]"
+  local repo_url="" override_path="" clone_here=false
+  local open_ide=false open_explorer=false fetch_remote=false checkout_branch=""
+
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -p | --path)
+        override_path="$2"
+        shift
+        ;;
+      --here) clone_here=true ;;
+      --ide) open_ide=true ;;
+      -e | --explore) open_explorer=true ;;
+      -fr | --fetch-remote) fetch_remote=true ;;
+      -c | --checkout)
+        checkout_branch="$2"
+        shift
+        ;;
+      -*)
+        echo "$usage" >&2
+        return 1
+        ;;
+      *) repo_url="$1" ;;
+    esac
+    shift
+  done
+
+  if [ -z "$repo_url" ]; then
+    echo "$usage" >&2
+    return 1
+  fi
+
+  local repo_name
+  repo_name=$(basename "$repo_url" .git)
+
+  local target_dir
+  if [ -n "$override_path" ]; then
+    target_dir="$override_path"
+  elif [ "$clone_here" = true ]; then
+    target_dir="${PWD}/${repo_name}"
+  else
+    local owner
+    owner=$(__mt_git_clone_parse_owner "$repo_url")
+    if [ -z "$owner" ]; then
+      echo -e "${CB_RED}🚨 Couldn't determine an owner/workspace from that URL. Use --path to specify a destination directly.${C_RESET}"
+      return 1
+    fi
+    if [ "$owner" = "bitbucket" ]; then
+      if [ -z "$BITBUCKET_SERVER" ] || [ -z "$BITBUCKET_WORKSPACE" ]; then
+        echo -e "${CB_RED}🚨 BITBUCKET_SERVER/BITBUCKET_WORKSPACE aren't configured -- set them via mt-wizard-git, or clone with --path instead.${C_RESET}"
+        return 1
+      fi
+      target_dir="${VCS_ROOT:-$HOME/vcs}/work/bitbucket/${BITBUCKET_SERVER}/${BITBUCKET_WORKSPACE}/${repo_name}"
+    else
+      target_dir="${VCS_PERSONAL:-$HOME/vcs/personal}/${owner}/${repo_name}"
+    fi
+  fi
+
+  if [ -e "$target_dir" ]; then
+    echo -e "${CB_YELLOW}⚠️  ${repo_name} already exists at: ${target_dir}${C_RESET}"
+    return 1
+  fi
+
+  mkdir -p "$(dirname "$target_dir")"
+
+  echo -e "${CB_BLUE}📥 Cloning ${repo_name} into ${target_dir}...${C_RESET}"
+  if ! git clone "$repo_url" "$target_dir"; then
+    echo -e "${CB_RED}🚨 Clone failed.${C_RESET}"
+    return 1
+  fi
+  echo -e "${CB_GREEN}✅ Cloned to ${target_dir}${C_RESET}"
+
+  if [ "$fetch_remote" = true ]; then
+    echo -e "${CB_BLUE}🔄 Fetching all remote branches...${C_RESET}"
+    git -C "$target_dir" fetch --all
+  fi
+
+  if [ -n "$checkout_branch" ]; then
+    local default_branch
+    default_branch=$(__mt_git_default_branch "$target_dir")
+    if [ -z "$default_branch" ]; then
+      echo -e "${CB_YELLOW}⚠️  Couldn't determine the default branch -- skipping checkout of '${checkout_branch}'.${C_RESET}"
+    else
+      echo -e "${CB_BLUE}🌱 Creating branch '${checkout_branch}' from ${default_branch}...${C_RESET}"
+      git -C "$target_dir" checkout -b "$checkout_branch" "$default_branch"
+    fi
+  fi
+
+  [ "$open_explorer" = true ] && __open_path_gui "$target_dir"
+
+  if [ "$open_ide" = true ]; then
+    local selected_ide="${DEFAULT_IDE:-vscode}"
+    echo -e "${CB_BLUE}🚀 Opening in ${selected_ide}...${C_RESET}"
+    if [ "$selected_ide" = "intellij" ]; then
+      __launch_intellij "$target_dir" || echo -e "${CB_YELLOW}⚠️  Could not launch IntelliJ. Ensure 'idea' is on PATH.${C_RESET}"
+    else
+      code -n "$target_dir"
+    fi
   fi
 }
 
