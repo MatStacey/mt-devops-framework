@@ -312,7 +312,6 @@ __mt_menu_docker_update() { __mt_menu_prompt_arg "Container or Compose project n
 
 __mt_menu_git_new_feature() { __mt_menu_prompt_arg "Ticket/branch suffix" git-new-feature; }
 __mt_menu_git_push_all() { __mt_menu_prompt_arg "Commit message" git-push-all; }
-__mt_menu_git_clone_ide() { __mt_menu_prompt_arg "Repository URL" git-clone-ide; }
 __mt_menu_git_clone() { __mt_menu_prompt_arg "Repository URL" mt-git-clone; }
 __mt_menu_clone_wizard() { mt-clone -i; }
 __mt_menu_bulk_update() { mt-bulk-update; }
@@ -723,7 +722,6 @@ __mt_menu_git_repos() {
     "List Local Repos (mt-repos)" mt-repos \
     "Repo Dashboard (mt-hub)" mt-hub \
     "Clone Repository (mt-git-clone)" __mt_menu_git_clone \
-    "Clone & Open in IDE (git-clone-ide)" __mt_menu_git_clone_ide \
     "Bulk-Clone a Project (mt-clone -i)" __mt_menu_clone_wizard \
     "Bulk-Update Repos (mt-bulk-update)" __mt_menu_bulk_update \
     "Bulk-Update Repos, Background (mt-bulk-update -b)" __mt_menu_bulk_update_bg
