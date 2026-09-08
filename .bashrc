@@ -122,3 +122,5 @@ fi
 
 # Notify successful load (Green text, resets color afterwards)
 echo -e "\033[0;32m✅ Custom Bash Environment Loaded\033[0m"
+eval "$(uv generate-shell-completion bash)"
+eval "$(uvx --generate-shell-completion bash)"
