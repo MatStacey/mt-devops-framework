@@ -471,7 +471,17 @@ __mt_push_update_commit_and_raise_pr() {
 
   if command -v shfmt > /dev/null 2>&1; then
     echo "🧹 Running Google Style code formatting before profile sync..."
-    shfmt -i 2 -ci -sr -w . > /dev/null 2>&1 || true
+    # Excludes 40-private/ and lib/private/, same as
+    # __mt_push_update_run_shellcheck -- 'shfmt -w .' has no path-exclude
+    # flag of its own, so the file list is built with shfmt's own -f
+    # (which finds exactly what -w . would have touched) and filtered
+    # before formatting. Without this, shfmt previously reformatted
+    # private files unconditionally on every push and, in doing so,
+    # silently corrupted a hyphenated associative-array key (shfmt
+    # treats a bracketed subscript as an arithmetic expression and
+    # spaces out the "-", e.g. [dovi-convert] -> [dovi - convert] --
+    # syntactically valid but a completely different string key).
+    shfmt -f . 2> /dev/null | grep -v -e "/40-private/" -e "/lib/private/" | xargs -r shfmt -i 2 -ci -sr -w > /dev/null 2>&1 || true
   fi
 
   __git_sync_generate_commands_md "$repo_dir"
