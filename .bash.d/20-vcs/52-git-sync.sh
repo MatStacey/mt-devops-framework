@@ -970,6 +970,13 @@ __mt_get_update_git_pull() {
 
   echo -e "${CB_BLUE}⬇️ ~/.bash.d is symlinked into ${repo_dir} -- pulling directly from ${UPSTREAM_REPO_PATH} instead of downloading a release archive.${C_RESET}"
 
+  # Compared against HEAD once everything below finishes, so the final
+  # message can tell "already up to date" apart from a real update --
+  # reconcile_branch's own reset/merge runs unconditionally whether or
+  # not upstream actually moved.
+  local before_sha
+  before_sha=$(git -C "$repo_dir" rev-parse HEAD 2> /dev/null)
+
   (__mt_push_update_reconcile_branch) || return 1
 
   # __mt_push_update_reconcile_branch's fetch only follows the default
@@ -1003,7 +1010,14 @@ __mt_get_update_git_pull() {
     __mt_report_runtime_dir_migration
   fi
 
-  echo -e "${CB_GREEN}✅ Updated to ${tag_name:-$(git -C "$repo_dir" rev-parse --short HEAD 2> /dev/null)}.${C_RESET}"
+  local after_sha
+  after_sha=$(git -C "$repo_dir" rev-parse HEAD 2> /dev/null)
+
+  if [ -n "$before_sha" ] && [ "$before_sha" = "$after_sha" ]; then
+    echo -e "${CB_GREEN}✅ Already on the latest version (${tag_name:-$(git -C "$repo_dir" rev-parse --short HEAD 2> /dev/null)}).${C_RESET}"
+  else
+    echo -e "${CB_GREEN}✅ Updated to ${tag_name:-$(git -C "$repo_dir" rev-parse --short HEAD 2> /dev/null)}.${C_RESET}"
+  fi
 }
 
 #######################################
