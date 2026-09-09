@@ -933,13 +933,15 @@ __mt_get_update_check_divergence() {
 # Arguments:
 #   $1 - Path to the extracted release's root directory
 #   $2 - Tag name to record as the new current version
+#   $3 - "true" to always print config_manager.py's migrate report, even
+#        when there's nothing to migrate (see __mt_get_update_run_config_migrate)
 # Globals:
 #   CONFIG_MANAGER, CONFIG_FILE
 # Returns:
 #   0 on success, 1 if install.sh is missing from the release
 #######################################
 __mt_get_update_install() {
-  local ext_root="$1" tag_name="$2"
+  local ext_root="$1" tag_name="$2" verbose="$3"
   if [ ! -f "$ext_root/install.sh" ]; then
     mt-log ERROR "install.sh missing from downloaded release."
     return 1
@@ -952,8 +954,28 @@ __mt_get_update_install() {
   echo "$tag_name" > "$VERSION_FILE"
 
   if [ -f "$CONFIG_MANAGER" ] && [ -f "$CONFIG_FILE" ]; then
-    python3 "$CONFIG_MANAGER" migrate
+    __mt_get_update_run_config_migrate "$verbose"
     __mt_report_runtime_dir_migration
+  fi
+}
+
+#######################################
+# System: Run config_manager.py's migrate subcommand, printing its
+# report only when something actually needed migrating or a real error
+# occurred -- the common "already matches the current schema" no-op
+# case is suppressed unless verbose, so a routine mt-get-update isn't
+# noisy every single run just because there was nothing to do.
+# Arguments:
+#   $1 - "true" to always print the report regardless of content
+# Globals:
+#   CONFIG_MANAGER
+#######################################
+__mt_get_update_run_config_migrate() {
+  local verbose="$1"
+  local output
+  output=$(python3 "$CONFIG_MANAGER" migrate)
+  if [ "$verbose" = true ] || [[ "$output" != *"nothing to migrate"* ]]; then
+    echo "$output"
   fi
 }
 
@@ -968,6 +990,10 @@ __mt_get_update_install() {
 # Arguments:
 #   $1 - Optional specific version tag to target (empty = latest via
 #        the default branch; a specific tag checks out detached)
+#   $2 - "true" to print routine progress/no-op messages (the "pulling
+#        directly via git" notice, config_manager.py's migrate report
+#        when there's nothing to migrate); always shown otherwise:
+#        errors, an actual config migration, and the final result line
 # Globals:
 #   DOTFILES_DIR, SYNC_REPO_DIR, UPSTREAM_REPO_PATH, CONFIG_MANAGER,
 #   CONFIG_FILE
@@ -975,10 +1001,12 @@ __mt_get_update_install() {
 #   0 on success, 1 on failure (dirty tree, fetch/merge conflict)
 #######################################
 __mt_get_update_git_pull() {
-  local target_version="$1"
+  local target_version="$1" verbose="$2"
   local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
 
-  echo -e "${CB_BLUE}⬇️ ~/.bash.d is symlinked into ${repo_dir} -- pulling directly from ${UPSTREAM_REPO_PATH} instead of downloading a release archive.${C_RESET}"
+  if [ "$verbose" = true ]; then
+    echo -e "${CB_BLUE}⬇️ ~/.bash.d is symlinked into ${repo_dir} -- pulling directly from ${UPSTREAM_REPO_PATH} instead of downloading a release archive.${C_RESET}"
+  fi
 
   # Compared against HEAD once everything below finishes, so the final
   # message can tell "already up to date" apart from a real update --
@@ -1016,7 +1044,7 @@ __mt_get_update_git_pull() {
   [ -n "$tag_name" ] && echo "$tag_name" > "$VERSION_FILE"
 
   if [ -f "$CONFIG_MANAGER" ] && [ -f "$CONFIG_FILE" ]; then
-    python3 "$CONFIG_MANAGER" migrate
+    __mt_get_update_run_config_migrate "$verbose"
     __mt_report_runtime_dir_migration
   fi
 
@@ -1034,31 +1062,41 @@ __mt_get_update_git_pull() {
 # System: Download and install profile updates from GitHub releases --
 # or, on a machine already cut over by mt-migrate-symlink, pull the
 # latest code directly via git instead (see __mt_get_update_git_pull).
-# Usage: mt-get-update [-v version]
+# Usage: mt-get-update [-v <version>] [-V|--verbose]
 # Options:
-#   -v <version>  Specify a target release version (e.g., v1.1.0)
+#   -v <version>     Specify a target release version (e.g., v1.1.0)
+#   -V, --verbose    Show routine progress/no-op messages that are
+#                    otherwise suppressed (e.g. "pulling directly via
+#                    git", "nothing to migrate") -- errors and the
+#                    final result are always shown regardless
+#   -h, --help       Show this help menu
 #######################################
 mt-get-update() {
-  local target_version=""
-  local OPTIND opt
-  while getopts "v:h" opt; do
-    case ${opt} in
-      v) target_version="$OPTARG" ;;
-      h)
+  local target_version="" verbose=false
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -v)
+        target_version="$2"
+        shift 2
+        ;;
+      -V | --verbose)
+        verbose=true
+        shift
+        ;;
+      -h | --help)
         mt-help "${FUNCNAME[0]}"
         return 0
         ;;
-      ?)
-        echo "Usage: mt-get-update [-v <version>]" >&2
+      *)
+        echo "Usage: mt-get-update [-v <version>] [-V|--verbose]" >&2
         return 1
         ;;
     esac
   done
-  shift $((OPTIND - 1))
 
   local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
   if __mt_bashd_is_symlinked_into_repo "$repo_dir"; then
-    __mt_get_update_git_pull "$target_version"
+    __mt_get_update_git_pull "$target_version" "$verbose"
     return $?
   fi
 
@@ -1078,7 +1116,7 @@ mt-get-update() {
     return 0
   fi
 
-  __mt_get_update_install "$ext_root" "$tag_name"
+  __mt_get_update_install "$ext_root" "$tag_name" "$verbose"
   rm -rf "$tmp_dir"
 }
 

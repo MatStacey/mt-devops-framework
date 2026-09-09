@@ -108,7 +108,27 @@ __check_profile_updates() {
         current_version=$(git -C "$repo_dir" describe --tags --abbrev=0 2> /dev/null || echo "")
       fi
 
-      if [ -n "$remote_version" ] && [ "$current_version" != "$remote_version" ]; then
+      # A plain != flags "update available" whenever the tags merely
+      # differ, not when remote is actually newer -- on a symlinked
+      # machine (pulling straight from main via git) that's wrong the
+      # moment local is AHEAD of GitHub's own "latest Release" listing,
+      # which publishes asynchronously after a push and can briefly lag
+      # behind a tag/commit that's already pullable. sort -V settles
+      # which of the two actually comes last; an unknown local version
+      # (no VERSION_FILE, no git checkout) always counts as needing the
+      # update, same as before this fix.
+      local should_update=false
+      if [ -n "$remote_version" ]; then
+        if [ -z "$current_version" ]; then
+          should_update=true
+        elif [ "$current_version" != "$remote_version" ]; then
+          local newest
+          newest=$(printf '%s\n%s\n' "$current_version" "$remote_version" | sort -V | tail -n1)
+          [ "$newest" = "$remote_version" ] && should_update=true
+        fi
+      fi
+
+      if [ "$should_update" = true ]; then
         echo "$remote_version" > "$pending_file"
       else
         date +%s > "$cache_file"
