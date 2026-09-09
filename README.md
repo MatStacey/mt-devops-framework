@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Updated the `git-sync` pre-push hook to exclude private directories (`40-private/` and `lib/private/`) from `shfmt` code formatting, preventing unintended syntax changes and key corruption in private scripts.
 - Enhanced `git-sync` update feedback to accurately distinguish between repositories that are already up-to-date and those that received new updates.
 - Added a REPOSITORY column to mt-bulk-update's summary table, derived from each repo's path, so nested repos (e.g. work/bitbucket/...) show their name instead of a truncated path.
 - Removed the deprecated `git-clone-ide` command and its corresponding entry in the interactive menu.
@@ -17,7 +18,6 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 - Regenerated the technical reference documentation to reflect current alias and command configurations.
 - Replaced the naive `git clone` wrapper with `mt-git-clone`, featuring smart destination routing based on host and owner/workspace metadata alongside flags for path overrides, IDE integration, and checkout management.
 - Added Bitbucket server and workspace configuration options to the `mt-wizard-git` setup wizard.
-- Integrated `mt-git-clone` into the interactive tools menu.
 
 ---
 
