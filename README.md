@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added a REPOSITORY column to mt-bulk-update's summary table, derived from each repo's path, so nested repos (e.g. work/bitbucket/...) show their name instead of a truncated path.
 - Removed the deprecated `git-clone-ide` command and its corresponding entry in the interactive menu.
 - Cleaned up shell aliases by removing legacy Kubernetes shortcuts and introducing `sh-fmt-all` for shell formatting.
 - Regenerated the technical reference documentation to reflect current alias and command configurations.
@@ -17,7 +18,6 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 - Added Bitbucket server and workspace configuration options to the `mt-wizard-git` setup wizard.
 - Integrated `mt-git-clone` into the interactive tools menu.
 - Integrated automated AI summary updates for `README.md` directly into the `git-ai-push-all` workflow.
-- Added error handling to abort push operations if the README update fails, ensuring generated changes are automatically staged.
 
 ---
 
