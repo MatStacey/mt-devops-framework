@@ -131,7 +131,8 @@ __mt_export_print_inclusion_diff() {
 # LLM: Run the interactive review/adjust menu loop for mt-export
 # Usage: __mt_export_interactive_menu; then check $__mt_export_aborted
 # Globals (read/write, set by mt-export):
-#   file_list, all_files, tmp_file, zip_out, schema_query, schemas_dir, verbose_mode
+#   file_list, all_files, tmp_file, zip_out, schema_query, schemas_dir,
+#   verbose_mode, target_dir, user_exclude
 # Globals (written):
 #   __mt_export_aborted -- set to "true" if the user cancelled
 #######################################
@@ -143,10 +144,11 @@ __mt_export_interactive_menu() {
     echo "  1) Review & Remove Files (fzf multi-select)"
     echo "  2) Change Output Format (Toggle TXT/ZIP)"
     echo "  3) Change Schema"
-    echo "  4) View Detailed Exclusions/Inclusions (-v)"
-    echo "  5) Proceed with Export"
-    echo "  6) Cancel"
-    read -p "Select an option [1-6] > " -r < /dev/tty
+    echo "  4) Exclude a Directory (path + subdirectories)"
+    echo "  5) View Detailed Exclusions/Inclusions (-v)"
+    echo "  6) Proceed with Export"
+    echo "  7) Cancel"
+    read -p "Select an option [1-7] > " -r < /dev/tty
 
     case "$REPLY" in
       1)
@@ -173,14 +175,35 @@ __mt_export_interactive_menu() {
         fi
         ;;
       4)
+        local exclude_path
+        read -r -p "Relative path to exclude (directory + all subdirectories, relative to ${target_dir}): " exclude_path < /dev/tty
+        exclude_path="${exclude_path#./}"
+        exclude_path="${exclude_path%/}"
+        if [ -z "$exclude_path" ]; then
+          echo -e "${CB_YELLOW}⚠️  No path given -- nothing excluded.${C_RESET}"
+        else
+          if [ ! -d "${target_dir}/${exclude_path}" ]; then
+            echo -e "${CB_YELLOW}⚠️  '${target_dir}/${exclude_path}' doesn't exist -- excluding anyway in case it matches elsewhere.${C_RESET}"
+          fi
+          # Reuses mt-export's own --exclude mechanism (comma-separated,
+          # each segment matched anywhere in a file's path) -- a
+          # multi-segment relative path like "src/legacy" works the same
+          # way a single folder name does, since '/' in the input is
+          # just a literal character in the resulting regex.
+          user_exclude="${user_exclude:+$user_exclude,}$exclude_path"
+          __mt_export_build_file_lists
+          echo -e "${CB_GREEN}✅ Excluded '$exclude_path' and its subdirectories.${C_RESET}"
+        fi
+        ;;
+      5)
         verbose_mode=true
         __mt_export_print_plan
         __mt_export_print_inclusion_diff
         read -p "Press Enter to return to menu..." -r < /dev/tty
         verbose_mode=false
         ;;
-      5) break ;;
-      6 | *)
+      6) break ;;
+      7 | *)
         echo -e "${CB_RED}🛑 Aborted.${C_RESET}"
         rm -f "$file_list" "$all_files" "$tmp_file"
         __mt_export_aborted=true
@@ -325,7 +348,7 @@ __mt_export_finalize() {
 #   -q, --quiet          Do not automatically open the output directory
 #   -p, --plan           Dry-run: show estimated size and included files, prompt to proceed
 #   -v, --verbose        Show detailed terraform-style plan of inclusions/exclusions
-#   -i, --interactive    Open an interactive menu to adjust export files, format, and schema
+#   -i, --interactive    Open an interactive menu to adjust export files, format, schema, and exclusions
 #######################################
 mt-export() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
