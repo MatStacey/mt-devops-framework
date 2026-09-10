@@ -23,7 +23,10 @@ __mt_export_calc_output_name() {
 #######################################
 # LLM: Resolve the active export schema and build the filtered file list
 # Globals (read, set by mt-export):
-#   schemas_dir, schema_query, target_dir
+#   schemas_dir, schema_query, target_dir, user_exclude -- comma-separated
+#   folder names (see mt-export's --exclude) matched anywhere in a
+#   file's path, on top of whatever the schema's own exclude_patterns
+#   and EXPORT_BLOCKLIST already filter out
 # Globals (written):
 #   schema_file, s_name, s_inc, s_exc, all_files, file_list
 #######################################
@@ -47,8 +50,29 @@ __mt_export_build_file_lists() {
   grep -E -vi "(${EXPORT_BLOCKLIST})" < "$all_files" |
     grep -E -i "\.(${s_inc})$" > "$file_list"
 
-  if [ -n "$s_exc" ] && [ "$s_exc" != "null" ] && [ "$s_exc" != '""' ]; then
-    grep -E -vi "(${s_exc})" "$file_list" > "${file_list}.filtered"
+  local combined_exc="$s_exc"
+  [ "$combined_exc" = "null" ] || [ "$combined_exc" = '""' ] && combined_exc=""
+
+  if [ -n "$user_exclude" ]; then
+    local -a exclude_dirs=()
+    IFS=',' read -ra exclude_dirs <<< "$user_exclude"
+    local dir_name
+    local -a exc_patterns=()
+    for dir_name in "${exclude_dirs[@]}"; do
+      [ -n "$dir_name" ] && exc_patterns+=("(^|/)${dir_name}(/|$)")
+    done
+    if [ "${#exc_patterns[@]}" -gt 0 ]; then
+      local user_exc_regex
+      user_exc_regex=$(
+        IFS='|'
+        echo "${exc_patterns[*]}"
+      )
+      combined_exc="${combined_exc:+$combined_exc|}$user_exc_regex"
+    fi
+  fi
+
+  if [ -n "$combined_exc" ]; then
+    grep -E -vi "(${combined_exc})" "$file_list" > "${file_list}.filtered"
     mv "${file_list}.filtered" "$file_list"
   fi
 }
@@ -289,10 +313,14 @@ __mt_export_finalize() {
 
 #######################################
 # LLM: Export codebase to text/zip for LLM context window using dynamic schemas
-# Usage: mt-export [-d dir] [-s schema] [-z] [-q] [-p] [-v] [-i]
+# Usage: mt-export [-d dir] [-s schema] [-e folder[,folder...]] [-z] [-q] [-p] [-v] [-i]
 # Options:
 #   -d, --dir <path>     Target directory to export (default: current directory)
 #   -s, --schema <name>  Export schema to apply (default, terraform, shell, python, springboot)
+#   -e, --exclude <folder>[,<folder>...]  Extra folder name(s) to exclude, on top of
+#                        the schema's own exclude_patterns and EXPORT_BLOCKLIST
+#                        (repeatable, and/or comma-separated; matched anywhere in
+#                        a file's path, e.g. -e vendor,test-fixtures)
 #   -z, --zip            Compress output into a .zip file
 #   -q, --quiet          Do not automatically open the output directory
 #   -p, --plan           Dry-run: show estimated size and included files, prompt to proceed
@@ -307,6 +335,7 @@ mt-export() {
 
   local target_dir="."
   local schema_query="default"
+  local user_exclude=""
   local zip_out=false
   local quiet_mode=false
   local plan_mode=false
@@ -321,6 +350,10 @@ mt-export() {
         ;;
       -s | --schema)
         schema_query="$2"
+        shift
+        ;;
+      -e | --exclude)
+        user_exclude="${user_exclude:+$user_exclude,}$2"
         shift
         ;;
       -z | --zip) zip_out=true ;;
