@@ -10,14 +10,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added a new `-e` / `--exclude` flag to `mt-export` to allow filtering out custom directory paths during codebase exports.
+- Enhanced file resolution logic to dynamically merge user-specified exclusion patterns with schema defaults and global blocklists.
 - **Version Detection Fix**: Refined profile update checks to use version-aware sorting (`sort -V`), preventing false "update available" notifications when local checkouts are ahead of remote releases.
 - **Verbose Mode Support**: Added a `-V`/`--verbose` flag to `mt-get-update` along with updated command-line argument parsing.
 - **Quieter Update Runs**: Suppressed routine, non-actionable status messages (such as no-op config migrations) during updates unless verbose output is explicitly enabled.
 - Updated the `git-sync` pre-push hook to exclude private directories (`40-private/` and `lib/private/`) from `shfmt` code formatting, preventing unintended syntax changes and key corruption in private scripts.
 - Enhanced `git-sync` update feedback to accurately distinguish between repositories that are already up-to-date and those that received new updates.
 - Added a REPOSITORY column to mt-bulk-update's summary table, derived from each repo's path, so nested repos (e.g. work/bitbucket/...) show their name instead of a truncated path.
-- Removed the deprecated `git-clone-ide` command and its corresponding entry in the interactive menu.
-- Cleaned up shell aliases by removing legacy Kubernetes shortcuts and introducing `sh-fmt-all` for shell formatting.
 
 ---
 
