@@ -1059,6 +1059,23 @@ __mt_get_update_git_pull() {
 }
 
 #######################################
+# System: Clear the periodic background check's cached "update pending"
+# state. __check_profile_updates only ever reads its pending-file blindly
+# once written (see 02-update-check.sh) -- without this, the "Terminal
+# profile update available!" banner keeps nagging about an update that
+# already happened, until the next full TTL cycle or a manual 'reload'.
+# Called from every mt-get-update path that ends confirmed current:
+# a real update, or a live check confirming "already on latest" --
+# never from an aborted/failed path, where an update is still genuinely
+# pending.
+# Globals:
+#   CACHE_DIR
+#######################################
+__mt_get_update_clear_pending_cache() {
+  rm -f "$CACHE_DIR/.profile_update_pending" "$CACHE_DIR/.profile_update_cache"
+}
+
+#######################################
 # System: Download and install profile updates from GitHub releases --
 # or, on a machine already cut over by mt-migrate-symlink, pull the
 # latest code directly via git instead (see __mt_get_update_git_pull).
@@ -1097,7 +1114,9 @@ mt-get-update() {
   local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
   if __mt_bashd_is_symlinked_into_repo "$repo_dir"; then
     __mt_get_update_git_pull "$target_version" "$verbose"
-    return $?
+    local pull_status=$?
+    [ "$pull_status" -eq 0 ] && __mt_get_update_clear_pending_cache
+    return "$pull_status"
   fi
 
   echo -e "${CB_BLUE}⬇️ Fetching release information...${C_RESET}"
@@ -1105,7 +1124,10 @@ mt-get-update() {
   local download_url="" tag_name=""
   __mt_get_update_resolve_release "$target_version"
   local resolve_status=$?
-  [ "$resolve_status" -eq 2 ] && return 0
+  if [ "$resolve_status" -eq 2 ]; then
+    __mt_get_update_clear_pending_cache
+    return 0
+  fi
   [ "$resolve_status" -eq 1 ] && return 1
 
   local tmp_dir="" ext_root=""
@@ -1117,7 +1139,10 @@ mt-get-update() {
   fi
 
   __mt_get_update_install "$ext_root" "$tag_name" "$verbose"
+  local install_status=$?
+  [ "$install_status" -eq 0 ] && __mt_get_update_clear_pending_cache
   rm -rf "$tmp_dir"
+  return "$install_status"
 }
 
 #######################################
