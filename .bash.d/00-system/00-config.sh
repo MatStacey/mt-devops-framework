@@ -218,17 +218,18 @@ mt-set-default-ide() {
 
 #######################################
 # Config: Set default AI model provider
-# Usage: mt-set-default-ai "gemini|claude|local"
+# Usage: mt-set-default-ai "gemini|claude|claude-code|local"
 # Arguments:
-#   $1 - AI provider identifier
+#   $1 - AI provider identifier ("claude-code" shells out to a headless
+#        'claude -p' using Claude Code's own login, no CLAUDE_API_KEY needed)
 #######################################
 mt-set-default-ai() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
-  if [[ "$1" != "gemini" && "$1" != "claude" && "$1" != "local" ]]; then
-    echo "Usage: mt-set-default-ai <gemini|claude|local>"
+  if [[ "$1" != "gemini" && "$1" != "claude" && "$1" != "claude-code" && "$1" != "local" ]]; then
+    echo "Usage: mt-set-default-ai <gemini|claude|claude-code|local>"
     return 1
   fi
   python3 "$CONFIG_MANAGER" update "ai" "default_provider" "$1"
@@ -641,7 +642,7 @@ mt-wizard-ai() {
   echo -e "${CB_BLUE}--- AI Configuration ---${C_RESET}"
   read -r -p "Enable AI Features? (true/false) [${AI_ENABLED:-true}]: " enabled
   [ -n "$enabled" ] && python3 "$CONFIG_MANAGER" update "ai" "enable_ai" "$enabled"
-  read -r -p "Default Provider (gemini/claude/local) [${DEFAULT_AI:-gemini}]: " prov
+  read -r -p "Default Provider (gemini/claude/claude-code/local) [${DEFAULT_AI:-gemini}]: " prov
   [ -n "$prov" ] && python3 "$CONFIG_MANAGER" update "ai" "default_provider" "$prov"
 
   echo -e "\n${CB_CYAN}Gemini Settings:${C_RESET}"
@@ -655,6 +656,11 @@ mt-wizard-ai() {
   [ -n "$c_ver" ] && python3 "$CONFIG_MANAGER" update "ai.providers.claude" "model" "$c_ver"
   echo -e "  ${C_DIM}🔑 Run 'mt-add-claude-key' to add/update your key${C_RESET}"
   echo -e "  ${C_DIM}💡 Or run 'mt-set-claude-model' to fzf-pick from Anthropic's live model catalog instead of typing an ID here${C_RESET}"
+
+  echo -e "\n${CB_CYAN}Claude Code Settings:${C_RESET}"
+  echo -e "  ${C_DIM}No API key needed -- shells out to a headless 'claude -p' using whichever account Claude Code itself is logged into.${C_RESET}"
+  read -r -p "Claude Code Model Alias/ID (blank = Claude Code's own default) [${CLAUDE_CODE_VERSION:-}]: " cc_ver
+  [ -n "$cc_ver" ] && python3 "$CONFIG_MANAGER" update "ai.providers.claude_code" "model" "$cc_ver"
 
   echo -e "\n${CB_CYAN}Local AI Settings:${C_RESET}"
   read -r -p "Local AI Base URL [${LOCAL_AI_BASE_URL:-http://localhost:11434/v1}]: " l_url

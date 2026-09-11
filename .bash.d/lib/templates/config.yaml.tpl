@@ -40,6 +40,12 @@ ai:
       enable_extended_reasoning: false
     claude:
       model: claude-sonnet-5
+    # No API key needed -- shells out to a headless 'claude -p' using
+    # whichever account Claude Code itself is logged into. Leave model
+    # blank to use Claude Code's own default; otherwise an alias
+    # ("sonnet", "opus") or a full model ID both work.
+    claude_code:
+      model: ""
     local:
       base_url: "http://localhost:11434/v1"
       model: llama3.2

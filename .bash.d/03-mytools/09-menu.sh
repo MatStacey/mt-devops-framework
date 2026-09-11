@@ -302,7 +302,7 @@ __mt_menu_sh_fmt_all() { sh-fmt-all; }
 __mt_menu_ai_query() { __mt_menu_prompt_arg "Prompt for AI" ai; }
 __mt_menu_ai_explain() { __mt_menu_prompt_arg "Command to explain" ai-explain; }
 
-__mt_menu_pick_default_ai() { __mt_menu_pick_enum "🤖 Default AI Provider" mt-set-default-ai gemini claude local; }
+__mt_menu_pick_default_ai() { __mt_menu_pick_enum "🤖 Default AI Provider" mt-set-default-ai gemini claude claude-code local; }
 __mt_menu_pick_default_ide() { __mt_menu_pick_enum "💻 Default IDE" mt-set-default-ide vscode intellij; }
 __mt_menu_pick_cicd() { __mt_menu_pick_enum "⚙️  CI/CD Provider" mt-set-cicd github bitbucket gitlab azure jenkins; }
 __mt_menu_add_sync_url() { __mt_menu_prompt_arg "Git sync repository URL" mt-add-sync-url; }

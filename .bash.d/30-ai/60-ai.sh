@@ -310,6 +310,63 @@ __ai_query_claude() {
 }
 
 #######################################
+# AI: Query Claude via a headless, non-interactive Claude Code invocation
+# ('claude -p') instead of the raw Messages API -- uses whichever account
+# Claude Code itself is logged into (a personal Claude.ai subscription,
+# not just a metered Console API key), and needs no CLAUDE_API_KEY at
+# all. Run with --restricted (strips Bash/code-execution tools) and
+# --permission-prompts none (deny anything that would otherwise prompt)
+# since this is meant to be a plain text-in/text-out completion, not an
+# agentic session that can act on the caller's filesystem.
+# Globals:
+#   CLAUDE_CODE_VERSION, AI_SYSTEM_PROMPT
+# Arguments:
+#   $1 - User prompt string
+#   $2 - Output title context
+#   $3 - Path to compiled context file
+#   $4 - Override model alias/name (e.g. "sonnet", "opus", or a full model ID)
+# Outputs:
+#   Prints response text to STDOUT
+# Returns:
+#   0 on success, 1 if the 'claude' CLI isn't installed, 100 on hard failure
+#######################################
+__ai_query_claude_code() {
+  local prompt="$1" title="$2" context_file="$3" req_version="$4"
+
+  if ! command -v claude > /dev/null 2>&1; then
+    echo "🚨 Error: The 'claude' CLI is not installed or not on PATH." >&2
+    return 1
+  fi
+
+  local final_model="${req_version:-${CLAUDE_CODE_VERSION:-}}"
+
+  local full_prompt="Prompt: ${prompt}"
+  [ -n "$title" ] && full_prompt="Requested Title: ${title}"$'\n'"${full_prompt}"
+  if [ -f "$context_file" ]; then
+    full_prompt="${full_prompt}"$'\n\n=== LOCAL DIRECTORY CONTEXT ===\n'"$(command cat "$context_file")"
+  fi
+
+  local -a claude_cli_args=(-p "$full_prompt" --output-format json --restricted --permission-prompts none)
+  [ -n "$final_model" ] && claude_cli_args+=(--model "$final_model")
+  [ -n "${AI_SYSTEM_PROMPT:-}" ] && claude_cli_args+=(--system-prompt "$AI_SYSTEM_PROMPT")
+
+  echo "⏳ Querying Claude Code (${final_model:-default model})..." >&2
+
+  local response is_error content
+  response=$(claude "${claude_cli_args[@]}" 2>&1)
+  is_error=$(echo "$response" | jq -r '.is_error' 2> /dev/null)
+  content=$(echo "$response" | jq -r '.result // empty' 2> /dev/null)
+
+  if [ "$is_error" != "false" ] || [ -z "$content" ]; then
+    echo -e "\n${CB_RED}🚨 Error: Claude Code query failed.${C_RESET}" >&2
+    echo "$response" >&2
+    return 100
+  fi
+
+  echo "$content"
+}
+
+#######################################
 # AI: Save generated LLM code payloads into structured directory trees
 # Globals:
 #   AI_WORKSPACE_DIR
@@ -412,7 +469,7 @@ __ai_extract_json_array() {
 #   DEFAULT_AI
 # Usage: ai [OPTIONS] <prompt>
 # Options:
-#   -m <model>     Override provider model (gemini, claude, local)
+#   -m <model>     Override provider model (gemini, claude, claude-code, local)
 #   -t <title>     Set context title
 #   -e             Attach entire active directory as context
 #   -f <file>      Attach a single file as context
@@ -441,7 +498,7 @@ ai() {
       v) req_version="$(echo "$OPTARG" | tr '[:upper:]' '[:lower:]')" ;;
       x) req_extended=true ;;
       \?)
-        echo "Usage: ai [-m gemini|claude] [-t title] [-e] [-f file] [-o out_file] [-v version] [-x] <prompt>" >&2
+        echo "Usage: ai [-m gemini|claude|claude-code|local] [-t title] [-e] [-f file] [-o out_file] [-v version] [-x] <prompt>" >&2
         return 1
         ;;
     esac
@@ -450,7 +507,7 @@ ai() {
   prompt="$*"
 
   [ -z "${prompt}" ] && {
-    echo "Usage: ai [-m gemini|claude] [-t title] [-e] [-f file] [-o out_file] [-v version] [-x] <your question>" >&2
+    echo "Usage: ai [-m gemini|claude|claude-code|local] [-t title] [-e] [-f file] [-o out_file] [-v version] [-x] <your question>" >&2
     return 1
   }
 
@@ -464,6 +521,8 @@ ai() {
     if ! content=$(__ai_query_gemini "$prompt" "$title" "$context_file" "$req_version" "$req_extended"); then return 1; fi
   elif [ "$provider" = "claude" ]; then
     if ! content=$(__ai_query_claude "$prompt" "$title" "$context_file" "$req_version"); then return 1; fi
+  elif [ "$provider" = "claude-code" ]; then
+    if ! content=$(__ai_query_claude_code "$prompt" "$title" "$context_file" "$req_version"); then return 1; fi
   elif [ "$provider" = "local" ]; then
     if ! content=$(__ai_query_local "$prompt" "$title" "$context_file" "$req_version"); then return 1; fi
   else
@@ -767,6 +826,10 @@ mt-ai-quota() {
   case "$provider" in
     claude) __mt_ai_quota_check_claude ;;
     gemini) __mt_ai_quota_check_gemini ;;
+    claude-code)
+      echo -e "  ${CB_GREEN}✅ Claude Code (headless) selected -- no Console API key involved.${C_RESET}"
+      echo -e "  ${C_DIM}Usage is tracked against whatever account 'claude' is logged into. Run 'claude' and check '/status', or your Anthropic Console usage page, for limits.${C_RESET}"
+      ;;
     local)
       echo -e "  ${CB_GREEN}✅ Local LLM selected.${C_RESET}"
       echo -e "  ${C_DIM}No cloud quotas apply to localhost environments! Run indefinitely.${C_RESET}"
@@ -1032,9 +1095,11 @@ mt-set-gemini-model() {
 # with an opaque API error instead of a clear "go update your model"
 # prompt -- this surfaces that before it turns into a support puzzle.
 # Skipped entirely when AI is disabled, the active provider is "local"
-# (no cloud catalog to check), or no API key is configured for it (a
-# missing key is __ai_query_claude/gemini's problem to report, not this
-# check's). Defined here rather than alongside the framework's other
+# or "claude-code" (neither has a fetchable model catalog on our side --
+# a local endpoint's models are the user's own, and Claude Code resolves
+# its own model aliases), or no API key is configured for it (a missing
+# key is __ai_query_claude/gemini's problem to report, not this check's).
+# Defined here rather than alongside the framework's other
 # periodic background checks (.bash.d/00-system/02-update-check.sh)
 # because 00-system loads before this file -- calling
 # __ai_fetch_models_claude/gemini from there would hit them before
@@ -1048,7 +1113,9 @@ __check_ai_model_freshness() {
   [ "${AI_ENABLED:-true}" = "true" ] || return
 
   local provider="${DEFAULT_AI:-gemini}"
-  [ "$provider" = "local" ] && return
+  case "$provider" in
+    local | claude-code) return ;;
+  esac
 
   local pending_file="$CACHE_DIR/.ai_model_stale_pending"
   mkdir -p "$CACHE_DIR" 2> /dev/null

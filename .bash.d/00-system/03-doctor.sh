@@ -204,6 +204,9 @@ __mt_doctor_check_ai_model() {
   if [ "$provider" = "local" ]; then
     __mt_doctor_line SKIP "Active provider is 'local' -- no cloud catalog to check."
     return
+  elif [ "$provider" = "claude-code" ]; then
+    __mt_doctor_line SKIP "Active provider is 'claude-code' -- it resolves its own model aliases, no catalog to check here."
+    return
   fi
 
   local pending_file="$CACHE_DIR/.ai_model_stale_pending"
