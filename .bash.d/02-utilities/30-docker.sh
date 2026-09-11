@@ -835,7 +835,10 @@ docker-reboot-all() {
 
 #######################################
 # Docker: List all running containers in a clean table format
-# Usage: docker-ls
+# Usage: docker-ls [-j|--json]
+# Options:
+#   -j, --json   Print containers as a JSON array (docker ps's own
+#                per-container fields) instead of the table
 #######################################
 docker-ls() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -843,6 +846,11 @@ docker-ls() {
     return 0
   fi
   __docker_ensure_running || return 1
+
+  if [[ "$1" == "-j" || "$1" == "--json" ]]; then
+    docker ps --format '{{json .}}' | jq -s .
+    return
+  fi
   docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
 }
 

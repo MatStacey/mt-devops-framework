@@ -7,25 +7,34 @@
 #######################################
 # System: Print one mt-doctor report line with a status prefix, and
 # track whether anything worth acting on was found. Internal to this
-# file -- never called directly.
+# file -- never called directly. In JSON mode (__mt_doctor_json=true,
+# set by mt-doctor), appends a {section,status,message} object to
+# __mt_doctor_results instead of printing colorized text.
 # Arguments:
 #   $1 - Status: OK, WARN, FAIL, or SKIP
 #   $2 - Message
+# Globals (read):
+#   __mt_doctor_json, __mt_doctor_section
 # Globals (written):
 #   __mt_doctor_issues -- incremented on WARN/FAIL
+#   __mt_doctor_results -- appended to in JSON mode
 #######################################
 __mt_doctor_line() {
   local status="$1" msg="$2"
+
+  if [ "$status" = "WARN" ] || [ "$status" = "FAIL" ]; then
+    __mt_doctor_issues=$((__mt_doctor_issues + 1))
+  fi
+
+  if [ "${__mt_doctor_json:-false}" = "true" ]; then
+    __mt_doctor_results+=("$(jq -nc --arg section "$__mt_doctor_section" --arg status "$status" --arg message "$msg" '{section: $section, status: $status, message: $message}')")
+    return
+  fi
+
   case "$status" in
     OK) echo -e "  ${CB_GREEN}✅ ${msg}${C_RESET}" ;;
-    WARN)
-      echo -e "  ${CB_YELLOW}⚠️  ${msg}${C_RESET}"
-      __mt_doctor_issues=$((__mt_doctor_issues + 1))
-      ;;
-    FAIL)
-      echo -e "  ${CB_RED}🚨 ${msg}${C_RESET}"
-      __mt_doctor_issues=$((__mt_doctor_issues + 1))
-      ;;
+    WARN) echo -e "  ${CB_YELLOW}⚠️  ${msg}${C_RESET}" ;;
+    FAIL) echo -e "  ${CB_RED}🚨 ${msg}${C_RESET}" ;;
     SKIP) echo -e "  ${C_DIM}⏭️  ${msg}${C_RESET}" ;;
   esac
 }
@@ -38,7 +47,8 @@ __mt_doctor_line() {
 #   __mt_doctor_issues (written, via __mt_doctor_line)
 #######################################
 __mt_doctor_check_version() {
-  echo -e "${CB_BLUE}📦 Version${C_RESET}"
+  __mt_doctor_section="version"
+  [ "${__mt_doctor_json:-false}" = "true" ] || echo -e "${CB_BLUE}📦 Version${C_RESET}"
 
   local installed="Local"
   [ -f "$VERSION_FILE" ] && installed=$(command cat "$VERSION_FILE")
@@ -63,7 +73,8 @@ __mt_doctor_check_version() {
 #   __mt_doctor_issues (written, via __mt_doctor_line)
 #######################################
 __mt_doctor_check_sync_config() {
-  echo -e "${CB_BLUE}🔗 Sync Configuration${C_RESET}"
+  __mt_doctor_section="sync_config"
+  [ "${__mt_doctor_json:-false}" = "true" ] || echo -e "${CB_BLUE}🔗 Sync Configuration${C_RESET}"
 
   if [ -z "${SYNC_REPO_URL:-}" ] || [ "$SYNC_REPO_URL" = "YOUR_SYNC_REPO_URL" ] || [ "$SYNC_REPO_URL" = "null" ]; then
     __mt_doctor_line WARN "SYNC_REPO_URL not configured. Run 'mt-become-collaborator' (or 'mt-add-sync-url' if you have direct write access)."
@@ -107,7 +118,8 @@ __mt_doctor_check_sync_config() {
 #   __mt_doctor_issues (written, via __mt_doctor_line)
 #######################################
 __mt_doctor_check_sync_repo_state() {
-  echo -e "${CB_BLUE}🌿 Sync Repo Git State${C_RESET}"
+  __mt_doctor_section="sync_repo_state"
+  [ "${__mt_doctor_json:-false}" = "true" ] || echo -e "${CB_BLUE}🌿 Sync Repo Git State${C_RESET}"
 
   local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
   if [ ! -d "$repo_dir/.git" ]; then
@@ -178,7 +190,8 @@ __mt_doctor_check_sync_repo_state() {
 #   __mt_doctor_issues (written, via __mt_doctor_line)
 #######################################
 __mt_doctor_check_config_schema() {
-  echo -e "${CB_BLUE}⚙️  Config Schema${C_RESET}"
+  __mt_doctor_section="config_schema"
+  [ "${__mt_doctor_json:-false}" = "true" ] || echo -e "${CB_BLUE}⚙️  Config Schema${C_RESET}"
 
   if [ ! -f "$CONFIG_MANAGER" ]; then
     __mt_doctor_line FAIL "config_manager.py not found."
@@ -194,9 +207,11 @@ __mt_doctor_check_config_schema() {
     SKIP:*) __mt_doctor_line SKIP "${first_line#SKIP: }" ;;
     WARN:*)
       __mt_doctor_line WARN "${first_line#WARN: }"
-      echo "$output" | tail -n +2 | while IFS= read -r line; do
-        echo -e "      ${C_DIM}${line}${C_RESET}"
-      done
+      if [ "${__mt_doctor_json:-false}" != "true" ]; then
+        echo "$output" | tail -n +2 | while IFS= read -r line; do
+          echo -e "      ${C_DIM}${line}${C_RESET}"
+        done
+      fi
       ;;
     *) __mt_doctor_line FAIL "Unexpected output from 'config_manager.py check-config'." ;;
   esac
@@ -210,7 +225,12 @@ __mt_doctor_check_config_schema() {
 # drift. Report-only: never modifies anything, just names the command
 # that would fix each issue found (mt-get-update, mt-push-update,
 # mt-migrate-config, gh auth login, ...).
-# Usage: mt-doctor
+# Usage: mt-doctor [-j|--json]
+# Options:
+#   -j, --json   Print every check as one JSON object ({issues, checks:
+#                [{section, status, message}, ...]}) instead of the
+#                colorized report (for scripts/editor integrations)
+#   -h, --help   Show this help menu
 # Returns:
 #   0 if every check passed, 1 if any WARN/FAIL was reported
 # Globals:
@@ -221,20 +241,32 @@ mt-doctor() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
+  local __mt_doctor_json=false
+  [[ "$1" == "-j" || "$1" == "--json" ]] && __mt_doctor_json=true
 
-  echo -e "${CB_BLUE}==========================================================${C_RESET}"
-  echo -e "${CB_BLUE}              MT DEVOPS FRAMEWORK - DOCTOR                 ${C_RESET}"
-  echo -e "${CB_BLUE}==========================================================${C_RESET}\n"
+  if [ "$__mt_doctor_json" != "true" ]; then
+    echo -e "${CB_BLUE}==========================================================${C_RESET}"
+    echo -e "${CB_BLUE}              MT DEVOPS FRAMEWORK - DOCTOR                 ${C_RESET}"
+    echo -e "${CB_BLUE}==========================================================${C_RESET}\n"
+  fi
 
   local __mt_doctor_issues=0
+  local __mt_doctor_section=""
+  local -a __mt_doctor_results=()
 
   __mt_doctor_check_version
-  echo
+  [ "$__mt_doctor_json" = "true" ] || echo
   __mt_doctor_check_sync_config
-  echo
+  [ "$__mt_doctor_json" = "true" ] || echo
   __mt_doctor_check_sync_repo_state
-  echo
+  [ "$__mt_doctor_json" = "true" ] || echo
   __mt_doctor_check_config_schema
+
+  if [ "$__mt_doctor_json" = "true" ]; then
+    printf '%s\n' "${__mt_doctor_results[@]}" | jq -s --argjson issues "$__mt_doctor_issues" '{issues: $issues, checks: .}'
+    [ "$__mt_doctor_issues" -eq 0 ]
+    return
+  fi
 
   echo -e "\n${CB_BLUE}==========================================================${C_RESET}"
   if [ "$__mt_doctor_issues" -eq 0 ]; then

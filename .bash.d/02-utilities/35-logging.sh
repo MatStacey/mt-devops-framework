@@ -75,7 +75,7 @@ __mt_logs_filter_search() {
 
 #######################################
 # System: View, filter, and manage framework logs
-# Usage: mt-logs [-n lines] [-l level] [-s keyword] [-o] [-f] [-c]
+# Usage: mt-logs [-n lines] [-l level] [-s keyword] [-o] [-f] [-c] [-j|--json]
 # Options:
 #   -n, --lines <num>     Number of lines to display (default: 50)
 #   -l, --level <level>   Filter by severity (INFO, SUCCESS, WARN, ERROR)
@@ -83,6 +83,10 @@ __mt_logs_filter_search() {
 #   -o, --open            Open the log file in your default IDE
 #   -f, --follow          Tail the logs live
 #   -c, --clear           Clear the log file
+#   -j, --json            Print the matched lines as a JSON array of
+#                          {ts, level, message} objects instead of raw
+#                          text -- only applies to the default listing
+#                          mode (ignored alongside -o/-f/-c)
 #######################################
 mt-logs() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -97,6 +101,7 @@ mt-logs() {
   local do_open=false
   local do_follow=false
   local do_clear=false
+  local json_mode=false
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -115,6 +120,7 @@ mt-logs() {
       -o | --open) do_open=true ;;
       -f | --follow) do_follow=true ;;
       -c | --clear) do_clear=true ;;
+      -j | --json) json_mode=true ;;
       -*)
         echo -e "${CB_RED}🚨 Unknown option: $1${C_RESET}"
         return 1
@@ -146,6 +152,12 @@ mt-logs() {
 
   if [ "$do_follow" = true ]; then
     tail -f "$log_file"
+    return 0
+  fi
+
+  if [ "$json_mode" = true ]; then
+    __mt_logs_filter_level "$level_filter" < "$log_file" | __mt_logs_filter_search "$search_term" | tail -n "$lines" |
+      jq -R -n '[inputs | capture("^\\[(?<ts>[^]]+)\\] \\[(?<level>[^]]+)\\] (?<message>.*)$")? // {ts: null, level: null, message: .}]'
     return 0
   fi
 

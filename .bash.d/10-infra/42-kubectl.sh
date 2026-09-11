@@ -61,7 +61,10 @@ __k8s_confirm_destructive() {
 #######################################
 # Kubernetes: Dashboard summarizing the active context -- cluster,
 # namespace, server version, node and pod counts.
-# Usage: k8s-status
+# Usage: k8s-status [-j|--json]
+# Options:
+#   -j, --json   Print the same fields as one JSON object instead of the
+#                colorized dashboard
 #######################################
 k8s-status() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -69,6 +72,8 @@ k8s-status() {
     return 0
   fi
   __k8s_ensure_context || return 1
+  local json_mode=false
+  [[ "$1" == "-j" || "$1" == "--json" ]] && json_mode=true
 
   local ctx ns version nodes pods
   ctx=$(kubectl config current-context)
@@ -77,6 +82,13 @@ k8s-status() {
   version=$(kubectl get --raw /version 2> /dev/null | jq -r '.gitVersion // "unknown"' 2> /dev/null)
   nodes=$(kubectl get nodes --no-headers 2> /dev/null | wc -l | tr -d ' ')
   pods=$(kubectl get pods -n "$ns" --no-headers 2> /dev/null | wc -l | tr -d ' ')
+
+  if [ "$json_mode" = true ]; then
+    jq -n --arg context "$ctx" --arg namespace "$ns" --arg server_version "${version:-unknown}" \
+      --argjson nodes "${nodes:-0}" --argjson pods "${pods:-0}" \
+      '{context: $context, namespace: $namespace, server_version: $server_version, nodes: $nodes, pods: $pods}'
+    return
+  fi
 
   echo -e "${CB_BLUE}==========================================================${C_RESET}"
   echo -e "${CB_BLUE}              KUBERNETES STATUS                            ${C_RESET}"
@@ -211,9 +223,11 @@ complete -F _k8s_ns_completions k8s-ns
 
 #######################################
 # Kubernetes: List pods in a clean table
-# Usage: k8s-pods [-A]
+# Usage: k8s-pods [-A] [-j|--json]
 # Options:
-#   -A  Show pods across all namespaces
+#   -A           Show pods across all namespaces
+#   -j, --json   Print pods via kubectl's own full JSON output instead
+#                of the wide table
 #######################################
 k8s-pods() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -222,10 +236,22 @@ k8s-pods() {
   fi
   __k8s_ensure_context || return 1
 
-  if [[ "$1" == "-A" ]]; then
-    kubectl get pods --all-namespaces -o wide
+  local all_namespaces=false json_mode=false
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -A) all_namespaces=true ;;
+      -j | --json) json_mode=true ;;
+    esac
+    shift
+  done
+
+  local -a scope=()
+  [ "$all_namespaces" = true ] && scope=(--all-namespaces)
+
+  if [ "$json_mode" = true ]; then
+    kubectl get pods "${scope[@]}" -o json
   else
-    kubectl get pods -o wide
+    kubectl get pods "${scope[@]}" -o wide
   fi
 }
 
