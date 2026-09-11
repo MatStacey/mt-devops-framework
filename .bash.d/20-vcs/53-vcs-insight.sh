@@ -227,6 +227,10 @@ __mt_hub_summarize_repo() {
 #   $5 - force_reindex (true/false)
 #   $6 - update_missing (true/false) -- re-index an already-cached repo
 #        anyway if its entry has a gap (see __mt_hub_load_existing_keys)
+#   $7 - quiet (true/false, default false) -- suppress the per-repo
+#        skip/re-indexing status lines, for a dry-run pass that only
+#        wants the resulting count (see __mt_hub_index's bulk-indexing
+#        warning, which needs this decision without echoing it twice)
 # Globals (read):
 #   __mt_hub_existing_keys -- associative array of cache_file keys,
 #     pre-populated by the caller via __mt_hub_load_existing_keys
@@ -237,6 +241,7 @@ __mt_hub_summarize_repo() {
 #######################################
 __mt_hub_should_index() {
   local repo_path="$1" search_dir="$2" filter_type="$3" filter_repo="$4" force_reindex="$5" update_missing="$6"
+  local quiet="${7:-false}"
   local repo_name
   repo_name=$(basename "$repo_path")
 
@@ -249,10 +254,10 @@ __mt_hub_should_index() {
 
   if [ -n "${__mt_hub_existing_keys[$repo_path]:-}" ] && [ "$force_reindex" != "true" ]; then
     if [ "$update_missing" = "true" ] && [ -n "${__mt_hub_needs_update[$repo_path]:-}" ]; then
-      echo -e "${C_DIM}🔄 Re-indexing $repo_name (filling in missing data)${C_RESET}"
+      [ "$quiet" = "true" ] || echo -e "${C_DIM}🔄 Re-indexing $repo_name (filling in missing data)${C_RESET}"
       return 0
     fi
-    echo -e "${C_DIM}⏭️  Skipping $repo_name (already indexed)${C_RESET}"
+    [ "$quiet" = "true" ] || echo -e "${C_DIM}⏭️  Skipping $repo_name (already indexed)${C_RESET}"
     return 1
   fi
   return 0
@@ -406,10 +411,17 @@ __mt_hub_prune_stale_entries() {
 # heuristic/AI metadata cache. Prunes stale entries first (unfiltered
 # runs only -- see __mt_hub_prune_stale_entries), then loads the set of
 # already-cached keys once for the whole run rather than re-reading the
-# cache file per repo.
+# cache file per repo. Before actually indexing anything, dry-runs
+# __mt_hub_should_index over every candidate (quietly, so its normal
+# skip/re-index messages aren't printed twice) to count how many repos
+# will actually call the AI provider -- if that exceeds
+# HUB_INDEX_WARN_THRESHOLD and the warning isn't disabled, prints a
+# quota warning and (when run from a real terminal) asks for
+# confirmation before proceeding; a non-interactive run (e.g. -b) just
+# gets the warning printed and continues.
 # Usage: __mt_hub_index <cache_file> <filter_type> <filter_repo> <force_reindex> <provider> <update_missing>
 # Globals:
-#   VCS_ROOT
+#   VCS_ROOT, HUB_INDEX_WARN_ENABLED, HUB_INDEX_WARN_THRESHOLD
 # Arguments:
 #   $1 - Path to the JSON cache file
 #   $2 - Type filter (empty = no filter)
@@ -446,6 +458,27 @@ __mt_hub_index() {
   local -A __mt_hub_existing_keys
   local -A __mt_hub_needs_update
   __mt_hub_load_existing_keys "$cache_file"
+
+  local pending=0
+  for repo_path in "${repos[@]}"; do
+    __mt_hub_should_index "$repo_path" "$search_dir" "$filter_type" "$filter_repo" "$force_reindex" "$update_missing" true &&
+      pending=$((pending + 1))
+  done
+
+  if [ "${HUB_INDEX_WARN_ENABLED:-true}" = "true" ] && [ "$pending" -gt "${HUB_INDEX_WARN_THRESHOLD:-10}" ]; then
+    echo -e "${CB_YELLOW}⚠️  This will run AI summarization on ${pending} repositories -- mt-hub indexing is an AI feature, and a run this size can use a considerable amount of your provider's quota.${C_RESET}"
+    echo -e "${C_DIM}   Consider indexing individual repositories instead: mt-hub --index -r <name> (or -t <type> to narrow to one folder).${C_RESET}"
+    echo -e "${C_DIM}   Disable this warning, or change its threshold (currently ${HUB_INDEX_WARN_THRESHOLD:-10}), via 'ai.enable_bulk_index_warning'/'ai.bulk_index_warning_threshold' in config.yaml (mt-toggle-hub-index-warning / mt-set-hub-index-warning-threshold).${C_RESET}"
+    if [ -t 0 ]; then
+      local reply
+      read -r -p "Proceed with indexing ${pending} repositories? [y/N] " -n 1 reply < /dev/tty
+      echo
+      if [[ ! $reply =~ ^[Yy]$ ]]; then
+        echo -e "${CB_YELLOW}🛑 Indexing cancelled.${C_RESET}"
+        return 0
+      fi
+    fi
+  fi
 
   local processed=0
   for repo_path in "${repos[@]}"; do

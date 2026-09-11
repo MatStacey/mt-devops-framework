@@ -34,6 +34,15 @@ ai:
   # listed, so this no longer needs to be a recurring-self-audit item --
   # it only matters here for what a brand-new install starts pinned to.
   model_check_ttl_sec: 86400
+  # mt-hub --index calls the AI provider once per un-cached/gapped repo,
+  # which can add up fast across a whole VCS_ROOT scan -- this warns (and
+  # asks for confirmation, when run from a real terminal) before an
+  # indexing run that would actually call AI on more than the threshold
+  # below, recommending -r/-t to narrow scope instead. Set enable_ to
+  # false to skip the check entirely, or raise the threshold if your
+  # provider's quota comfortably covers larger bulk runs.
+  enable_bulk_index_warning: true
+  bulk_index_warning_threshold: 10
   providers:
     gemini:
       model: gemini-3.6-flash
