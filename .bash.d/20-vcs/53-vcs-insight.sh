@@ -4,7 +4,9 @@
 # ------------------------------------------
 
 #######################################
-# Repo Hub: Find every git repository under a search root
+# Repo Hub: Find every git repository under a search root -- test -e
+# (not -d) on ".git" so this also catches worktree checkouts, where
+# ".git" is a plain file ("gitdir: ...") rather than a directory
 # Arguments:
 #   $1 - Root directory to search
 # Outputs:
@@ -12,7 +14,7 @@
 #######################################
 __mt_hub_find_repos() {
   local search_dir="$1"
-  find "$search_dir" -type d -exec test -d "{}/.git" \; -prune -print
+  find "$search_dir" -type d -exec test -e "{}/.git" \; -prune -print
 }
 
 #######################################
@@ -50,6 +52,12 @@ __mt_hub_detect_build_tool() {
     build="Pip/Poetry"
   fi
   [ -f "$repo_path/go.mod" ] && build="Go Modules"
+  [ -f "$repo_path/Cargo.toml" ] && build="Cargo"
+  [ -f "$repo_path/Gemfile" ] && build="Bundler"
+  [ -f "$repo_path/composer.json" ] && build="Composer"
+  if compgen -G "$repo_path/*.csproj" > /dev/null 2>&1 || compgen -G "$repo_path/*.sln" > /dev/null 2>&1; then
+    build="MSBuild/.NET"
+  fi
   echo "$build"
 }
 
@@ -63,12 +71,14 @@ __mt_hub_detect_build_tool() {
 __mt_hub_detect_test_framework() {
   local repo_path="$1"
   local testing="None"
-  if [ -d "$repo_path/tests" ] || [ -d "$repo_path/src/test" ]; then
+  if [ -d "$repo_path/tests" ] || [ -d "$repo_path/src/test" ] || [ -d "$repo_path/spec" ]; then
     testing="Standard Dirs"
   fi
   grep -qi "pytest" "$repo_path/requirements.txt" 2> /dev/null && testing="PyTest"
   grep -qi "jest" "$repo_path/package.json" 2> /dev/null && testing="Jest"
   grep -qi "junit" "$repo_path/pom.xml" 2> /dev/null && testing="JUnit"
+  grep -qiE "nunit|xunit" "$repo_path"/*.csproj 2> /dev/null && testing="NUnit/xUnit"
+  grep -qi "rspec" "$repo_path/Gemfile" 2> /dev/null && testing="RSpec"
   echo "$testing"
 }
 
@@ -83,7 +93,7 @@ __mt_hub_detect_test_framework() {
 __mt_hub_detect_stack() {
   local repo_path="$1"
   local top_ext
-  top_ext=$(find "$repo_path" -maxdepth 3 -type f -not -path "*/\.git/*" -not -path "*/node_modules/*" -not -path "*/venv/*" 2> /dev/null | rev | cut -d. -f1 | rev | grep -E "^(py|java|js|ts|tf|go|sh|cpp|c|html|css)$" | sort | uniq -c | sort -rn | head -n1 | awk '{print $2}')
+  top_ext=$(find "$repo_path" -maxdepth 3 -type f -not -path "*/\.git/*" -not -path "*/node_modules/*" -not -path "*/venv/*" 2> /dev/null | rev | cut -d. -f1 | rev | grep -E "^(py|java|js|ts|tf|go|sh|cpp|c|html|css|cs|rb|php|rs)$" | sort | uniq -c | sort -rn | head -n1 | awk '{print $2}')
 
   local stack="Unknown"
   case "$top_ext" in
@@ -95,15 +105,62 @@ __mt_hub_detect_stack() {
     go) stack="Go" ;;
     sh) stack="Bash/Shell" ;;
     html) stack="HTML/Web" ;;
+    cs) stack="C#" ;;
+    rb) stack="Ruby" ;;
+    php) stack="PHP" ;;
+    rs) stack="Rust" ;;
+  esac
+  echo "$stack"
+}
+
+#######################################
+# Repo Hub: Override the extension-histogram stack guess with a
+# manifest-derived language when the build tool detected is an
+# unambiguous 1:1 signal for one -- a real manifest file is stronger
+# evidence than a raw file-count histogram, which a large but secondary
+# subdirectory (e.g. a Java repo's bundled frontend/) can otherwise
+# dominate. Left alone for NPM/Yarn, since that maps ambiguously to
+# either JavaScript or TypeScript and the histogram already disambiguates
+# those correctly.
+# Arguments:
+#   $1 - Detected build tool (from __mt_hub_detect_build_tool)
+#   $2 - Detected stack (from __mt_hub_detect_stack)
+# Outputs:
+#   Prints the (possibly overridden) stack name
+#######################################
+__mt_hub_reconcile_stack() {
+  local build="$1" stack="$2"
+  case "$build" in
+    Maven | Gradle) stack="Java" ;;
+    MSBuild/.NET) stack="C#" ;;
+    Cargo) stack="Rust" ;;
+    Bundler) stack="Ruby" ;;
+    Composer) stack="PHP" ;;
+    "Go Modules") stack="Go" ;;
+    Pip/Poetry) stack="Python" ;;
   esac
   echo "$stack"
 }
 
 #######################################
 # Repo Hub: Ask the configured AI to produce a 1-sentence description and
-# category for a repository, based on its README and directory tree
+# category for a repository, based on its README and directory tree.
+# Calls __ai_query_provider directly instead of the public 'ai' command
+# -- 'ai' always pipes its response through __ai_parse_response, which
+# treats any non-empty, non-"chat" "category" field as generated code to
+# save to a file, printing only "Saved to: <path>" instead of the JSON
+# text. Since this function's own prompt asks for a "category" field
+# with a completely different vocabulary ("Application"/"Tooling"/...),
+# that collision meant this never returned usable JSON at all -- for any
+# provider whose response happened to get wrapped in that envelope
+# shape. Bypassing 'ai' entirely for this call is the fix. Diagnostics
+# (rate limits, retries, errors) are also left on stderr here rather
+# than discarded, so a bulk '--index' run's failures are visible instead
+# of silently producing "Unknown" everywhere.
 # Arguments:
 #   $1 - Repository path
+# Globals:
+#   DEFAULT_AI
 # Globals (written, expected pre-declared local by the caller):
 #   ai_description, ai_category
 #######################################
@@ -118,7 +175,7 @@ __mt_hub_summarize_repo() {
   find "$repo_path" -maxdepth 2 -not -path "*/\.git/*" -not -path "*/node_modules/*" >> "$ctx_file"
 
   local ai_res
-  ai_res=$(ai -f "$ctx_file" "$ai_prompt" 2> /dev/null)
+  ai_res=$(__ai_query_provider "${DEFAULT_AI:-gemini}" "$ai_prompt" "" "$ctx_file" "" false)
   rm -f "$ctx_file"
 
   ai_description="No description available."
@@ -128,7 +185,10 @@ __mt_hub_summarize_repo() {
   local clean_json
   # shellcheck disable=SC2016
   clean_json=$(echo "$ai_res" | sed 's/```json//gi; s/```//g')
-  echo "$clean_json" | jq -e . > /dev/null 2>&1 || return 0
+  if ! echo "$clean_json" | jq -e . > /dev/null 2>&1; then
+    mt-log WARN "AI summary for $(basename "$repo_path") wasn't valid JSON -- leaving it as Unknown."
+    return 0
+  fi
 
   ai_description=$(echo "$clean_json" | jq -r '.description // "No description available."')
   ai_category=$(echo "$clean_json" | jq -r '.category // "Unknown"')
@@ -136,20 +196,27 @@ __mt_hub_summarize_repo() {
 
 #######################################
 # Repo Hub: Decide whether a repo should be indexed given the active
-# type/name filters and cache/force-reindex state
+# type/name filters and cache/force-reindex state. Takes the set of
+# already-cached repo paths as an associative array (built once by the
+# caller via __mt_hub_load_existing_keys) rather than re-reading and
+# re-parsing the whole cache file with a fresh jq process on every single
+# repo -- the latter is what this used to do, and it's pure repeated work
+# since the answer can't change mid-loop.
 # Arguments:
 #   $1 - Repository path
 #   $2 - VCS search root (used to derive the repo's type from its
 #        relative path)
 #   $3 - Type filter (lowercased; empty = no filter)
 #   $4 - Name filter (empty = no filter)
-#   $5 - Cache file path
-#   $6 - force_reindex (true/false)
+#   $5 - force_reindex (true/false)
+# Globals (read):
+#   __mt_hub_existing_keys -- associative array of cache_file keys,
+#   pre-populated by the caller via __mt_hub_load_existing_keys
 # Returns:
 #   0 if the repo should be indexed, 1 if it should be skipped
 #######################################
 __mt_hub_should_index() {
-  local repo_path="$1" search_dir="$2" filter_type="$3" filter_repo="$4" cache_file="$5" force_reindex="$6"
+  local repo_path="$1" search_dir="$2" filter_type="$3" filter_repo="$4" force_reindex="$5"
   local repo_name
   repo_name=$(basename "$repo_path")
 
@@ -160,14 +227,69 @@ __mt_hub_should_index() {
   [ -n "$filter_type" ] && [ "${repo_type,,}" != "$filter_type" ] && return 1
   [ -n "$filter_repo" ] && [ "$repo_name" != "$filter_repo" ] && return 1
 
-  local exists="false"
-  [ -f "$cache_file" ] && exists=$(jq -r "has(\"$repo_path\")" "$cache_file" 2> /dev/null || echo "false")
-
-  if [ "$exists" = "true" ] && [ "$force_reindex" != "true" ]; then
+  if [ -n "${__mt_hub_existing_keys[$repo_path]:-}" ] && [ "$force_reindex" != "true" ]; then
     echo -e "${C_DIM}⏭️  Skipping $repo_name (already indexed)${C_RESET}"
     return 1
   fi
   return 0
+}
+
+#######################################
+# Repo Hub: Populate the __mt_hub_existing_keys associative array (one
+# entry per already-cached repo path) from a single read of the cache
+# file, so __mt_hub_should_index can do an in-memory lookup per repo
+# instead of shelling out to jq against the file itself every time.
+# Arguments:
+#   $1 - Path to the JSON cache file
+# Globals (written, must be declared by the caller as
+#   `declare -A __mt_hub_existing_keys` before calling this):
+#   __mt_hub_existing_keys
+#######################################
+__mt_hub_load_existing_keys() {
+  local cache_file="$1"
+  __mt_hub_existing_keys=()
+  [ -f "$cache_file" ] || return 0
+
+  local key
+  while IFS= read -r key; do
+    [ -n "$key" ] && __mt_hub_existing_keys["$key"]=1
+  done < <(jq -r 'keys[]' "$cache_file" 2> /dev/null)
+}
+
+#######################################
+# Repo Hub: Write one repo's metadata into the JSON cache under an
+# exclusive file lock, so a background '--index -b' run and a concurrent
+# foreground run (or two overlapping filtered runs) can't interleave
+# their read-modify-write cycles and silently drop each other's updates.
+# Arguments:
+#   $1 - Path to the JSON cache file
+#   $2 - Repository path (becomes the cache key)
+#   $3 - Category (AI-derived)
+#   $4 - Description (AI-derived)
+#   $5 - Stack
+#   $6 - Build tool
+#   $7 - CI/CD provider
+#   $8 - Test framework
+#######################################
+__mt_hub_write_cache_entry() {
+  local cache_file="$1" repo_path="$2" category="$3" description="$4" stack="$5" build="$6" cicd="$7" testing="$8"
+  local lock_file="${cache_file}.lock"
+
+  (
+    flock -x 200
+    local tmp_cache
+    tmp_cache=$(mktemp)
+    jq --arg r "$repo_path" \
+      --arg c "$category" \
+      --arg d "$description" \
+      --arg s "$stack" \
+      --arg b "$build" \
+      --arg ci "$cicd" \
+      --arg t "$testing" \
+      --argjson ts "$(date +%s)" \
+      '.[$r] = {"category": $c, "description": $d, "stack": $s, "build": $b, "cicd": $ci, "testing": $t, "last_indexed": $ts}' \
+      "$cache_file" > "$tmp_cache" && mv "$tmp_cache" "$cache_file"
+  ) 200> "$lock_file"
 }
 
 #######################################
@@ -189,28 +311,62 @@ __mt_hub_index_one_repo() {
   build=$(__mt_hub_detect_build_tool "$repo_path")
   testing=$(__mt_hub_detect_test_framework "$repo_path")
   stack=$(__mt_hub_detect_stack "$repo_path")
+  stack=$(__mt_hub_reconcile_stack "$build" "$stack")
 
   local ai_description="" ai_category=""
   __mt_hub_summarize_repo "$repo_path"
 
-  local tmp_cache
-  tmp_cache=$(mktemp)
-  jq --arg r "$repo_path" \
-    --arg c "$ai_category" \
-    --arg d "$ai_description" \
-    --arg s "$stack" \
-    --arg b "$build" \
-    --arg ci "$cicd" \
-    --arg t "$testing" \
-    '.[$r] = {"category": $c, "description": $d, "stack": $s, "build": $b, "cicd": $ci, "testing": $t}' \
-    "$cache_file" > "$tmp_cache" && mv "$tmp_cache" "$cache_file"
+  __mt_hub_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing"
 
   echo -e "${CB_GREEN}✅ Indexed $repo_name${C_RESET}"
 }
 
 #######################################
+# Repo Hub: Remove cache entries for repos no longer found on disk (moved,
+# renamed, or deleted). Only called from an unfiltered index run ('-t'/'-r'
+# not given) -- a filtered scan only sees a subset of repos, so pruning
+# against that subset would wrongly delete every entry outside the
+# filter. Also skipped if the scan found zero repos at all, since that's
+# almost certainly a transient scan failure (VCS_ROOT briefly
+# inaccessible, a permissions glitch) rather than genuinely nothing to
+# index, and pruning on it would wipe the entire cache.
+# Arguments:
+#   $1   - Path to the JSON cache file
+#   $@   - Every currently-live repo path from this run's full scan
+#######################################
+__mt_hub_prune_stale_entries() {
+  local cache_file="$1"
+  shift
+  [ -f "$cache_file" ] || return 0
+  [ "$#" -eq 0 ] && return 0
+
+  local live_json
+  live_json=$(printf '%s\n' "$@" | jq -R . | jq -s .)
+
+  local lock_file="${cache_file}.lock"
+  (
+    flock -x 200
+    local before after
+    before=$(jq 'keys | length' "$cache_file" 2> /dev/null || echo 0)
+    local tmp_cache
+    tmp_cache=$(mktemp)
+    jq --argjson live "$live_json" 'with_entries(select(.key as $k | $live | index($k)))' "$cache_file" > "$tmp_cache" && mv "$tmp_cache" "$cache_file"
+    after=$(jq 'keys | length' "$cache_file" 2> /dev/null || echo 0)
+    local removed=$((before - after))
+    if [ "$removed" -gt 0 ]; then
+      local plural="ies"
+      [ "$removed" -eq 1 ] && plural="y"
+      echo -e "${C_DIM}🧹 Pruned ${removed} stale cache entr${plural} for repos no longer on disk.${C_RESET}"
+    fi
+  ) 200> "$lock_file"
+}
+
+#######################################
 # Repo Hub: Index every discovered repository under VCS_ROOT into the
-# heuristic/AI metadata cache
+# heuristic/AI metadata cache. Prunes stale entries first (unfiltered
+# runs only -- see __mt_hub_prune_stale_entries), then loads the set of
+# already-cached keys once for the whole run rather than re-reading the
+# cache file per repo.
 # Usage: __mt_hub_index <cache_file> <filter_type> <filter_repo> <force_reindex>
 # Globals:
 #   VCS_ROOT
@@ -236,9 +392,16 @@ __mt_hub_index() {
   local repo_path
   while IFS= read -r repo_path; do repos+=("$repo_path"); done < <(__mt_hub_find_repos "$search_dir")
 
+  if [ -z "$filter_type" ] && [ -z "$filter_repo" ]; then
+    __mt_hub_prune_stale_entries "$cache_file" "${repos[@]}"
+  fi
+
+  local -A __mt_hub_existing_keys
+  __mt_hub_load_existing_keys "$cache_file"
+
   local processed=0
   for repo_path in "${repos[@]}"; do
-    __mt_hub_should_index "$repo_path" "$search_dir" "$filter_type" "$filter_repo" "$cache_file" "$force_reindex" || continue
+    __mt_hub_should_index "$repo_path" "$search_dir" "$filter_type" "$filter_repo" "$force_reindex" || continue
     processed=$((processed + 1))
     __mt_hub_index_one_repo "$repo_path" "$cache_file"
   done
@@ -250,6 +413,17 @@ __mt_hub_index() {
   fi
 }
 
+#######################################
+# Repo Hub: Print one repo's cached metadata plus its 3 most recent
+# commits -- used both as fzf's live preview pane (called with the
+# hidden absolute-path field) and directly via `mt-hub --preview <repo>`.
+# Accepts either form: an exact cache key (an absolute path) or a bare
+# repo name, resolved by matching cache keys' basenames.
+# Arguments:
+#   $1 - Repo identifier: an absolute path (exact cache key) or a bare
+#        repo name
+#   $2 - Path to the JSON cache file
+#######################################
 __mt_hub_preview() {
   local repo="$1"
   local cache_file="$2"
@@ -261,7 +435,16 @@ __mt_hub_preview() {
   echo -e "${CB_CYAN}============================================================${C_RESET}\n"
 
   local meta
-  meta=$(jq -r ".[ \"$repo\" ] // empty" "$cache_file" 2> /dev/null)
+  meta=$(jq -r --arg r "$repo" '.[$r] // empty' "$cache_file" 2> /dev/null)
+
+  if [ -z "$meta" ]; then
+    local resolved
+    resolved=$(jq -r --arg name "$repo" 'to_entries[] | select((.key | split("/") | last) == $name) | .key' "$cache_file" 2> /dev/null | head -n1)
+    if [ -n "$resolved" ]; then
+      repo="$resolved"
+      meta=$(jq -r --arg r "$repo" '.[$r] // empty' "$cache_file" 2> /dev/null)
+    fi
+  fi
 
   if [ -z "$meta" ] || [ "$meta" == "null" ]; then
     echo -e "${CB_YELLOW}⚠️ No metadata found.${C_RESET}\n"
@@ -281,6 +464,8 @@ __mt_hub_preview() {
   cicd=$(echo "$meta" | jq -r '.cicd')
   local test_fw
   test_fw=$(echo "$meta" | jq -r '.testing')
+  local last_indexed
+  last_indexed=$(echo "$meta" | jq -r '.last_indexed // empty')
 
   echo -e "${CB_MAGENTA}▶ OVERVIEW${C_RESET}"
   echo -e "${C_RESET}${desc}${C_RESET}\n"
@@ -291,21 +476,31 @@ __mt_hub_preview() {
   echo -e " ${CB_CYAN}Build Tools :${C_RESET} ${build}"
   echo -e " ${CB_CYAN}CI/CD       :${C_RESET} ${cicd}"
   echo -e " ${CB_CYAN}Testing     :${C_RESET} ${test_fw}"
+  if [ -n "$last_indexed" ]; then
+    local last_indexed_human
+    last_indexed_human=$(date -d "@$last_indexed" '+%Y-%m-%d %H:%M' 2> /dev/null || date -r "$last_indexed" '+%Y-%m-%d %H:%M' 2> /dev/null || echo "$last_indexed")
+    echo -e " ${CB_CYAN}Last Indexed:${C_RESET} ${last_indexed_human}"
+  fi
 
   echo -e "\n${CB_MAGENTA}▶ RECENT COMMITS${C_RESET}"
   git -C "$repo" log -3 --format="%C(yellow)%h%Creset - %s %Cgreen(%cr)%Creset" 2> /dev/null || echo "No commits yet."
 }
 
 #######################################
-# System: Interactive AI-powered Repository Dashboard
+# System: Interactive AI-powered Repository Dashboard. An unfiltered
+# --index run also prunes cache entries for repos no longer found on
+# disk (moved, renamed, or deleted) before indexing.
 # Usage: mt-hub [--index [-b] [-f] [-t <type>] [-r <name>]] [--preview <repo>]
 # Options:
 #   --index                    Scan and build the AI metadata cache
 #   -b, --bg, --background     Run the index scan as a background job (with --index)
 #   -f, --force                Force reindex even if a repo is already cached (with --index)
-#   -t, --type <name>          Filter indexing to a specific folder (e.g. personal, work)
-#   -r, --repo <name>          Filter indexing to a specific repository name
-#   --preview <repo>           Show cached metadata for one repo and exit
+#   -t, --type <name>          Filter indexing to a specific folder (e.g. personal, work) --
+#                              also disables stale-entry pruning for this run
+#   -r, --repo <name>          Filter indexing to a specific repository name --
+#                              also disables stale-entry pruning for this run
+#   --preview <repo>           Show cached metadata for one repo (by absolute path or
+#                              bare repo name) and exit
 #   -h, --help                 Show this help menu
 #######################################
 mt-hub() {
@@ -382,7 +577,7 @@ mt-hub() {
     [ -z "$branch" ] && branch="No commits"
 
     echo "${repo_type}|${repo_name}|${branch}|${repo_path}" >> "$tmp_out"
-  done < <(find "$search_dir" -type d -exec test -d "{}/.git" \; -prune -print)
+  done < <(__mt_hub_find_repos "$search_dir")
 
   sort -t'|' -k1,1 -k2,2 "$tmp_out" -o "$tmp_out"
 

@@ -329,7 +329,7 @@ Complex bash functions, framework utilities, and automated workflows.
 ### MT Repo Hub - AI & Heuristic Metadata Dashboard
 | Command | Description |
 |---|---|
-| `mt-hub` | System: Interactive AI-powered Repository Dashboard |
+| `mt-hub` | System: Interactive AI-powered Repository Dashboard. An unfiltered |
 
 ### MyTools Documentation & Runner
 | Command | Description |

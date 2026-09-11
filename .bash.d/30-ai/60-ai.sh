@@ -464,6 +464,43 @@ __ai_extract_json_array() {
 }
 
 #######################################
+# AI: Dispatch a query to the given provider's own query function and
+# return its raw text response -- no save-to-file/category
+# post-processing. Shared by 'ai' (which pipes this through
+# __ai_parse_response afterwards) and any caller that needs the model's
+# literal text back untouched (e.g. mt-hub's repo summarizer), since
+# routing through the public 'ai' command itself would collide with its
+# save-generated-code branch whenever the caller's own prompt asks for a
+# JSON schema that happens to include a non-"chat" "category" field --
+# __ai_parse_response would intercept it as generated code, write it to
+# a file, and return only "Saved to: <path>" instead of the JSON text.
+# Arguments:
+#   $1 - Provider name (gemini, claude, claude-code, local)
+#   $2 - User prompt string
+#   $3 - Output title context
+#   $4 - Path to compiled context file
+#   $5 - Override model version/alias
+#   $6 - Boolean flag to force extended reasoning mode (gemini only)
+# Outputs:
+#   Prints the provider's raw text response to STDOUT
+# Returns:
+#   0 on success, or the failing provider function's own non-zero code
+#######################################
+__ai_query_provider() {
+  local provider="$1" prompt="$2" title="$3" context_file="$4" req_version="$5" req_extended="$6"
+  case "$provider" in
+    gemini) __ai_query_gemini "$prompt" "$title" "$context_file" "$req_version" "$req_extended" ;;
+    claude) __ai_query_claude "$prompt" "$title" "$context_file" "$req_version" ;;
+    claude-code) __ai_query_claude_code "$prompt" "$title" "$context_file" "$req_version" ;;
+    local) __ai_query_local "$prompt" "$title" "$context_file" "$req_version" ;;
+    *)
+      echo "🚨 Error: Invalid provider '$provider'." >&2
+      return 1
+      ;;
+  esac
+}
+
+#######################################
 # AI: Query configured LLM with prompt and optional context
 # Globals:
 #   DEFAULT_AI
@@ -517,16 +554,7 @@ ai() {
   fi
 
   local content=""
-  if [ "$provider" = "gemini" ]; then
-    if ! content=$(__ai_query_gemini "$prompt" "$title" "$context_file" "$req_version" "$req_extended"); then return 1; fi
-  elif [ "$provider" = "claude" ]; then
-    if ! content=$(__ai_query_claude "$prompt" "$title" "$context_file" "$req_version"); then return 1; fi
-  elif [ "$provider" = "claude-code" ]; then
-    if ! content=$(__ai_query_claude_code "$prompt" "$title" "$context_file" "$req_version"); then return 1; fi
-  elif [ "$provider" = "local" ]; then
-    if ! content=$(__ai_query_local "$prompt" "$title" "$context_file" "$req_version"); then return 1; fi
-  else
-    echo "🚨 Error: Invalid provider '$provider'." >&2
+  if ! content=$(__ai_query_provider "$provider" "$prompt" "$title" "$context_file" "$req_version" "$req_extended"); then
     return 1
   fi
 
