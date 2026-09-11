@@ -10,14 +10,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Refactored the devcontainer VSIX setup script into a modular `install_vsix` function with parameterized repository paths.
+- Added support for installing multiple extension packages (`mt-devops-vscode-extension-pack` and `mt-devops-companion`) independently.
+- Improved script resilience by allowing individual package installation failures without aborting the entire setup process.
+- Fixed the Dev Container's `install-vsix.sh` to also sideload the **MT DevOps Framework Companion** VS Code extension, not just the extension pack -- it had never been updated to install it since that extension was introduced.
 - Added `-j` / `--json` support to `mt-doctor` and `docker-ls` for structured, machine-readable JSON output.
 - Refactored `mt-doctor` internal check functions to aggregate diagnostic results via `jq` when running in JSON mode.
 - Added a subtle terminal-background warning (`mt-toggle-display --prod-bg-warning`) that tints the actual terminal background red whenever the active GCP project name looks like production, disabled by default.
 - Added `-e` / `--enhancement` flag to `mt-suggest` to explicitly mark suggestions as enhancements and bypass the interactive prompt.
-- Added an interactive directory exclusion feature to the `mt-export` menu to dynamically exclude specific paths and subdirectories before exporting.
-- Updated menu options and help documentation to reflect the addition of interactive path exclusions.
-- Fixed persistent update notification banners by automatically clearing cached update state files upon successful profile updates or up-to-date verifications.
-- Added a new `-e` / `--exclude` flag to `mt-export` to allow filtering out custom directory paths during codebase exports.
 
 ---
 
@@ -27,7 +27,7 @@ Before installing this terminal environment, ensure your local workstation meets
 
 * **Operating System:** Officially supports WSL2 (Debian/Ubuntu), macOS (via Homebrew), and native Linux.
 * **IDE (Optional):** Both **Visual Studio Code** and **JetBrains IntelliJ** are natively supported for launcher integration (`ide`, `git-clone-ide`, configurable via `mt-set-default-ide`). If using VS Code on Windows, ensure the **WSL Extension** is installed.
-* **VSCode Extension Pack:** If your `DEFAULT_IDE` is VS Code, it is highly recommended to install the standardized extension pack to ensure all linting, formatting, and infrastructure integrations (like Terraform and Checkov) function perfectly alongside this terminal environment. You can install it from the dedicated repository here: [MatStacey/mt-devops-vscode-extension-pack](https://github.com/MatStacey/mt-devops-vscode-extension-pack).
+* **VSCode Extension Pack & Companion:** If your `DEFAULT_IDE` is VS Code, it is highly recommended to install the standardized extension pack (linting, formatting, and infrastructure integrations like Terraform and Checkov) plus the **MT DevOps Framework Companion** -- a real extension giving command-palette access to the full `mt-` catalog, an activity bar view (Jobs/Repo Hub/Secrets/Status/Doctor/Docker/Kubernetes), a `@mtdevops` AI chat participant, and an Explorer "Copy for LLM" action. Both are released from the same repository: [MatStacey/mt-devops-vscode-extension-pack](https://github.com/MatStacey/mt-devops-vscode-extension-pack).
 * **Git:** Required to clone the initial repository and handle ongoing AI-assisted profile synchronization.
 
 ---
@@ -132,7 +132,7 @@ This formats, commits, pushes to your fork, and raises the Pull Request for you.
 
 This framework includes a fully functional `Dockerfile` and `.devcontainer` configuration, allowing you to instantly spin up a pristine, isolated development environment without installing local dependencies.
 
-When launched, the Dev Container automatically builds the base image, installs all framework tooling, and securely sideloads the latest release of our companion [MT DevOps VSCode Extension Pack](https://github.com/MatStacey/mt-devops-vscode-extension-pack) directly from GitHub.
+When launched, the Dev Container automatically builds the base image, installs all framework tooling, and securely sideloads the latest release of both the [MT DevOps VSCode Extension Pack and the MT DevOps Framework Companion](https://github.com/MatStacey/mt-devops-vscode-extension-pack) directly from GitHub.
 
 ### 📋 Dev Container Prerequisites
 
@@ -146,7 +146,7 @@ When launched, the Dev Container automatically builds the base image, installs a
 2. Open the `mt-devops-framework` folder in Visual Studio Code.
 3. Press `Ctrl+Shift+P` (or `Cmd+Shift+P` on macOS) to open the Command Palette.
 4. Type and select **Dev Containers: Reopen in Container**.
-5. VS Code will build the image, initialize the framework, fetch the latest extension pack `.vsix` release, and drop you into a ready-to-use terminal!
+5. VS Code will build the image, initialize the framework, fetch the latest extension pack and companion `.vsix` releases, and drop you into a ready-to-use terminal!
 
 ---
 

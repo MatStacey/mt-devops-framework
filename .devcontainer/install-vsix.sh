@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-set -e
 
 LOCK_FILE="/tmp/.mt_vsix_installed"
+REPO="MatStacey/mt-devops-vscode-extension-pack"
 
 # 1. Fast idempotency check (avoids calling the CLI repeatedly)
 if [ -f "$LOCK_FILE" ]; then
-  echo "✅ Extension pack already processed for this session. Skipping."
+  echo "✅ Extensions already processed for this session. Skipping."
   exit 0
 fi
 
 # 2. Wait for VS Code Server to finish injecting the 'code' CLI into PATH
 echo "⏳ Waiting for VS Code CLI..."
-for i in {1..60}; do
+for _ in {1..60}; do
   if command -v code > /dev/null 2>&1; then
     break
   fi
@@ -23,16 +23,9 @@ if ! command -v code > /dev/null 2>&1; then
   exit 1
 fi
 
-# Deep check in case it's already installed
-if code --list-extensions | grep -qi "mt-devops-vscode-extension-pack"; then
-  echo "✅ Extension pack is already installed. Skipping."
-  touch "$LOCK_FILE"
-  exit 0
-fi
-
 # 3. Bypass GitHub API Rate Limits by querying the release web redirect
-echo "📦 Fetching latest MT DevOps Extension Pack..."
-LATEST_URL=$(curl -Ls -o /dev/null -w %{url_effective} "https://github.com/MatStacey/mt-devops-vscode-extension-pack/releases/latest")
+echo "📦 Resolving latest release of ${REPO}..."
+LATEST_URL=$(curl -Ls -o /dev/null -w "%{url_effective}" "https://github.com/${REPO}/releases/latest")
 TAG=$(basename "$LATEST_URL")
 
 if [[ "$TAG" != v* ]]; then
@@ -42,15 +35,42 @@ fi
 
 # Extract version number without the 'v' prefix (e.g., v0.0.5 -> 0.0.5)
 VERSION="${TAG#v}"
-VSIX_URL="https://github.com/MatStacey/mt-devops-vscode-extension-pack/releases/download/${TAG}/mt-devops-vscode-extension-pack-${VERSION}.vsix"
 
-echo "⬇️ Downloading ${VSIX_URL}..."
-TMP_VSIX=$(mktemp --suffix=.vsix)
-curl -L -# --fail "$VSIX_URL" -o "$TMP_VSIX"
+#######################################
+# Installs one package's VSIX from the resolved release, skipping it if
+# already installed. Never aborts the whole script on one package's
+# failure -- each package is independent, so a transient download issue
+# on one shouldn't block the other.
+# Arguments:
+#   $1 - Package name (matches both the VSIX filename prefix and, as a
+#        substring, the installed extension ID)
+#######################################
+install_vsix() {
+  local package_name="$1"
 
-echo "⚙️ Installing extension pack..."
-code --install-extension "$TMP_VSIX" --force
-rm -f "$TMP_VSIX"
+  if code --list-extensions | grep -qi "$package_name"; then
+    echo "✅ ${package_name} is already installed. Skipping."
+    return 0
+  fi
+
+  local vsix_url="https://github.com/${REPO}/releases/download/${TAG}/${package_name}-${VERSION}.vsix"
+  echo "⬇️ Downloading ${vsix_url}..."
+  local tmp_vsix
+  tmp_vsix=$(mktemp --suffix=.vsix)
+
+  if ! curl -L -# --fail "$vsix_url" -o "$tmp_vsix"; then
+    echo "🚨 Error: Could not download ${package_name} from ${vsix_url}."
+    rm -f "$tmp_vsix"
+    return 1
+  fi
+
+  echo "⚙️ Installing ${package_name}..."
+  code --install-extension "$tmp_vsix" --force
+  rm -f "$tmp_vsix"
+  echo "✅ ${package_name} installed successfully!"
+}
+
+install_vsix "mt-devops-vscode-extension-pack"
+install_vsix "mt-devops-companion"
 
 touch "$LOCK_FILE"
-echo "✅ Extension pack installed successfully!"
