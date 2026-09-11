@@ -27,16 +27,19 @@ ai:
   max_retries: 3
   max_context_files: 1000
   # The model names below are point-in-time picks, not permanent defaults --
-  # providers rev their model lineups on their own schedule, so revisit
-  # these periodically (see CONTRIBUTING.md's recurring self-audit note)
-  # and bump them here rather than leaving new installs pinned to a model
-  # that's since been superseded or deprecated.
+  # providers rev their model lineups on their own schedule. A background
+  # check (see mt-ai-models/mt-set-claude-model/mt-set-gemini-model) now
+  # watches the active provider's live catalog and nags (via the shell
+  # startup banner and 'mt-doctor') once its configured model is no longer
+  # listed, so this no longer needs to be a recurring-self-audit item --
+  # it only matters here for what a brand-new install starts pinned to.
+  model_check_ttl_sec: 86400
   providers:
     gemini:
       model: gemini-3.6-flash
       enable_extended_reasoning: false
     claude:
-      model: claude-3-7-sonnet-latest
+      model: claude-sonnet-5
     local:
       base_url: "http://localhost:11434/v1"
       model: llama3.2

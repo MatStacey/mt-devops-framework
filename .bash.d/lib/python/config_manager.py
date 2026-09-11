@@ -129,6 +129,7 @@ def load_env():
     )
     export("AI_MAX_RETRIES", ai_cfg.get("max_retries", 3))
     export("AI_MAX_CONTEXT_FILES", ai_cfg.get("max_context_files", 1000))
+    export("AI_MODEL_CHECK_TTL_SEC", ai_cfg.get("model_check_ttl_sec", 86400))
 
     sys_prompt_file = ai_cfg.get("system_prompt_file", "")
     sys_prompt = ""
@@ -155,7 +156,7 @@ def load_env():
     cla_cfg = prov_cfg.get("claude") or ai_cfg.get("claude") or {}
     export(
         "CLAUDE_VERSION",
-        cla_cfg.get("model", cla_cfg.get("version", "claude-3-7-sonnet-latest")),
+        cla_cfg.get("model", cla_cfg.get("version", "claude-sonnet-5")),
     )
 
     loc_cfg = prov_cfg.get("local") or ai_cfg.get("local") or {}

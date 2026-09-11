@@ -648,11 +648,13 @@ mt-wizard-ai() {
   read -r -p "Gemini Model Version [${GEMINI_VERSION:-gemini-3.6-flash}]: " g_ver
   [ -n "$g_ver" ] && python3 "$CONFIG_MANAGER" update "ai.providers.gemini" "model" "$g_ver"
   echo -e "  ${C_DIM}🔑 Run 'mt-add-gemini-key' to add/update your key${C_RESET}"
+  echo -e "  ${C_DIM}💡 Or run 'mt-set-gemini-model' to fzf-pick from Google's live model catalog instead of typing an ID here${C_RESET}"
 
   echo -e "\n${CB_CYAN}Claude Settings:${C_RESET}"
-  read -r -p "Claude Model Version [${CLAUDE_VERSION:-claude-3-7-sonnet-latest}]: " c_ver
+  read -r -p "Claude Model Version [${CLAUDE_VERSION:-claude-sonnet-5}]: " c_ver
   [ -n "$c_ver" ] && python3 "$CONFIG_MANAGER" update "ai.providers.claude" "model" "$c_ver"
   echo -e "  ${C_DIM}🔑 Run 'mt-add-claude-key' to add/update your key${C_RESET}"
+  echo -e "  ${C_DIM}💡 Or run 'mt-set-claude-model' to fzf-pick from Anthropic's live model catalog instead of typing an ID here${C_RESET}"
 
   echo -e "\n${CB_CYAN}Local AI Settings:${C_RESET}"
   read -r -p "Local AI Base URL [${LOCAL_AI_BASE_URL:-http://localhost:11434/v1}]: " l_url
