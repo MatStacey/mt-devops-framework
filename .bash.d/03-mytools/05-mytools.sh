@@ -663,10 +663,60 @@ mt-refresh-caches() {
 
 #######################################
 # System: Display a unified health check and status dashboard
+# Usage: mt-status [-j|--json]
+# Options:
+#   -j, --json   Print the same data as one JSON object instead of the
+#                colorized dashboard (for scripts/editor integrations)
+#   -h, --help   Show this help menu
 #######################################
 mt-status() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  local json_mode=false
+  [[ "$1" == "-j" || "$1" == "--json" ]] && json_mode=true
+
+  local current_version="Local"
+  [ -f "$VERSION_FILE" ] && current_version=$(tr -d '[:space:]' < "$VERSION_FILE")
+
+  local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
+  local repo_initialized=false repo_branch="" repo_changes=0
+  if [ -n "$repo_dir" ] && [ -d "$repo_dir/.git" ]; then
+    repo_initialized=true
+    repo_branch=$(git -C "$repo_dir" branch --show-current 2> /dev/null)
+    repo_changes=$(git -C "$repo_dir" status --porcelain 2> /dev/null | wc -l)
+  fi
+
+  local docker_running=false docker_containers_running=0 docker_containers_total=0
+  if command -v docker > /dev/null 2>&1 && docker info > /dev/null 2>&1; then
+    docker_running=true
+    docker_containers_running=$(docker ps -q 2> /dev/null | wc -l)
+    docker_containers_total=$(docker ps -aq 2> /dev/null | wc -l)
+  fi
+
+  local os_updates_pending=0
+  [ -f "$CACHE_DIR/.update_pending" ] && os_updates_pending=$(tr -d '[:space:]' < "$CACHE_DIR/.update_pending")
+
+  local framework_update_available=""
+  [ -f "$CACHE_DIR/.profile_update_pending" ] && framework_update_available=$(tr -d '[:space:]' < "$CACHE_DIR/.profile_update_pending")
+
+  if [ "$json_mode" = true ]; then
+    jq -n \
+      --arg version "$current_version" \
+      --arg theme "${BASH_THEME:-default}" \
+      --argjson ai_enabled "$([ "${AI_ENABLED:-true}" = "true" ] && echo true || echo false)" \
+      --arg ai_provider "${DEFAULT_AI:-gemini}" \
+      --argjson repo_initialized "$repo_initialized" \
+      --arg repo_path "$repo_dir" \
+      --arg repo_branch "$repo_branch" \
+      --argjson repo_uncommitted "$repo_changes" \
+      --argjson docker_running "$docker_running" \
+      --argjson docker_containers_running "$docker_containers_running" \
+      --argjson docker_containers_total "$docker_containers_total" \
+      --argjson os_updates_pending "$os_updates_pending" \
+      --arg fw_update "$framework_update_available" \
+      '{framework: {version: $version, theme: $theme, ai_enabled: $ai_enabled, ai_provider: $ai_provider}, sync_repo: {initialized: $repo_initialized, path: $repo_path, branch: $repo_branch, uncommitted_files: $repo_uncommitted}, docker: {daemon_running: $docker_running, containers_running: $docker_containers_running, containers_total: $docker_containers_total}, updates: {os_packages_pending: $os_updates_pending, framework_update_available: (if ($fw_update | length) > 0 then $fw_update else null end)}}'
     return 0
   fi
 
@@ -674,24 +724,17 @@ mt-status() {
   echo -e "${CB_BLUE}                 MT DEVOPS DASHBOARD                      ${C_RESET}"
   echo -e "${CB_BLUE}==========================================================${C_RESET}"
 
-  local current_version="Local"
-  [ -f "$VERSION_FILE" ] && current_version=$(tr -d '[:space:]' < "$VERSION_FILE")
   echo -e "${CB_YELLOW}▶ FRAMEWORK${C_RESET}"
   echo -e "  ${CB_CYAN}Version       ${C_RESET}: ${current_version}"
   echo -e "  ${CB_CYAN}Theme         ${C_RESET}: ${BASH_THEME:-default}"
   echo -e "  ${CB_CYAN}AI Enabled    ${C_RESET}: ${AI_ENABLED:-true} (${DEFAULT_AI:-gemini})"
 
   echo -e "\n${CB_YELLOW}▶ PROFILE SYNC REPO${C_RESET}"
-  local repo_dir="${DOTFILES_DIR:-$SYNC_REPO_DIR}"
-  if [ -n "$repo_dir" ] && [ -d "$repo_dir/.git" ]; then
-    local branch
-    branch=$(git -C "$repo_dir" branch --show-current 2> /dev/null)
-    local changes
-    changes=$(git -C "$repo_dir" status --porcelain 2> /dev/null | wc -l)
+  if [ "$repo_initialized" = true ]; then
     echo -e "  ${CB_CYAN}Path          ${C_RESET}: ${repo_dir}"
-    echo -e "  ${CB_CYAN}Branch        ${C_RESET}: ${branch}"
-    if [ "$changes" -gt 0 ]; then
-      echo -e "  ${CB_CYAN}Uncommitted   ${C_RESET}: ${CB_RED}${changes} file(s) (Run mt-push-update)${C_RESET}"
+    echo -e "  ${CB_CYAN}Branch        ${C_RESET}: ${repo_branch}"
+    if [ "$repo_changes" -gt 0 ]; then
+      echo -e "  ${CB_CYAN}Uncommitted   ${C_RESET}: ${CB_RED}${repo_changes} file(s) (Run mt-push-update)${C_RESET}"
     else
       echo -e "  ${CB_CYAN}Uncommitted   ${C_RESET}: ${CB_GREEN}Clean${C_RESET}"
     fi
@@ -700,30 +743,22 @@ mt-status() {
   fi
 
   echo -e "\n${CB_YELLOW}▶ DOCKER ENVIRONMENT${C_RESET}"
-  if command -v docker > /dev/null 2>&1 && docker info > /dev/null 2>&1; then
-    local running
-    running=$(docker ps -q 2> /dev/null | wc -l)
-    local total
-    total=$(docker ps -aq 2> /dev/null | wc -l)
+  if [ "$docker_running" = true ]; then
     echo -e "  ${CB_CYAN}Daemon        ${C_RESET}: ${CB_GREEN}Running${C_RESET}"
-    echo -e "  ${CB_CYAN}Containers    ${C_RESET}: ${running} running / ${total} total"
+    echo -e "  ${CB_CYAN}Containers    ${C_RESET}: ${docker_containers_running} running / ${docker_containers_total} total"
   else
     echo -e "  ${CB_CYAN}Daemon        ${C_RESET}: ${CB_RED}Stopped or Not Installed${C_RESET}"
   fi
 
   echo -e "\n${CB_YELLOW}▶ SYSTEM UPDATES${C_RESET}"
-  if [ -f "$CACHE_DIR/.update_pending" ]; then
-    local sys_updates
-    sys_updates=$(tr -d '[:space:]' < "$CACHE_DIR/.update_pending")
-    echo -e "  ${CB_CYAN}OS Packages   ${C_RESET}: ${CB_RED}${sys_updates} available (Run sys-install)${C_RESET}"
+  if [ "$os_updates_pending" -gt 0 ]; then
+    echo -e "  ${CB_CYAN}OS Packages   ${C_RESET}: ${CB_RED}${os_updates_pending} available (Run sys-install)${C_RESET}"
   else
     echo -e "  ${CB_CYAN}OS Packages   ${C_RESET}: ${CB_GREEN}Up to date${C_RESET}"
   fi
 
-  if [ -f "$CACHE_DIR/.profile_update_pending" ]; then
-    local prof_update
-    prof_update=$(tr -d '[:space:]' < "$CACHE_DIR/.profile_update_pending")
-    echo -e "  ${CB_CYAN}Framework     ${C_RESET}: ${CB_RED}${prof_update} available (Run mt-get-update)${C_RESET}"
+  if [ -n "$framework_update_available" ]; then
+    echo -e "  ${CB_CYAN}Framework     ${C_RESET}: ${CB_RED}${framework_update_available} available (Run mt-get-update)${C_RESET}"
   else
     echo -e "  ${CB_CYAN}Framework     ${C_RESET}: ${CB_GREEN}Up to date${C_RESET}"
   fi

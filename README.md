@@ -10,15 +10,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added `-j` / `--json` support to `mt-doctor` and `docker-ls` for structured, machine-readable JSON output.
+- Refactored `mt-doctor` internal check functions to aggregate diagnostic results via `jq` when running in JSON mode.
 - Added a subtle terminal-background warning (`mt-toggle-display --prod-bg-warning`) that tints the actual terminal background red whenever the active GCP project name looks like production, disabled by default.
 - Added `-e` / `--enhancement` flag to `mt-suggest` to explicitly mark suggestions as enhancements and bypass the interactive prompt.
 - Added an interactive directory exclusion feature to the `mt-export` menu to dynamically exclude specific paths and subdirectories before exporting.
 - Updated menu options and help documentation to reflect the addition of interactive path exclusions.
 - Fixed persistent update notification banners by automatically clearing cached update state files upon successful profile updates or up-to-date verifications.
 - Added a new `-e` / `--exclude` flag to `mt-export` to allow filtering out custom directory paths during codebase exports.
-- Enhanced file resolution logic to dynamically merge user-specified exclusion patterns with schema defaults and global blocklists.
-- **Version Detection Fix**: Refined profile update checks to use version-aware sorting (`sort -V`), preventing false "update available" notifications when local checkouts are ahead of remote releases.
-- **Verbose Mode Support**: Added a `-V`/`--verbose` flag to `mt-get-update` along with updated command-line argument parsing.
 
 ---
 
