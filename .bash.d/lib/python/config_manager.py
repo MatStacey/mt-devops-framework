@@ -159,6 +159,9 @@ def load_env():
         cla_cfg.get("model", cla_cfg.get("version", "claude-sonnet-5")),
     )
 
+    cc_cfg = prov_cfg.get("claude_code") or ai_cfg.get("claude_code") or {}
+    export("CLAUDE_CODE_VERSION", cc_cfg.get("model", cc_cfg.get("version", "")))
+
     loc_cfg = prov_cfg.get("local") or ai_cfg.get("local") or {}
     export("LOCAL_AI_BASE_URL", loc_cfg.get("base_url", "http://localhost:11434/v1"))
     export("LOCAL_AI_MODEL", loc_cfg.get("model", "llama3.2"))
