@@ -10,10 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-- Refactored the devcontainer VSIX setup script into a modular `install_vsix` function with parameterized repository paths.
-- Added support for installing multiple extension packages (`mt-devops-vscode-extension-pack` and `mt-devops-companion`) independently.
-- Improved script resilience by allowing individual package installation failures without aborting the entire setup process.
-- Fixed the Dev Container's `install-vsix.sh` to also sideload the **MT DevOps Framework Companion** VS Code extension, not just the extension pack -- it had never been updated to install it since that extension was introduced.
+- Fixed the Dev Container's `install-vsix.sh` to also sideload the **MT DevOps Framework Companion** VS Code extension, not just the extension pack -- it had never been updated to install it since that extension was introduced. Refactored into a reusable `install_vsix` function so a failure installing one package no longer aborts the other.
 - Added `-j` / `--json` support to `mt-doctor` and `docker-ls` for structured, machine-readable JSON output.
 - Refactored `mt-doctor` internal check functions to aggregate diagnostic results via `jq` when running in JSON mode.
 - Added a subtle terminal-background warning (`mt-toggle-display --prod-bg-warning`) that tints the actual terminal background red whenever the active GCP project name looks like production, disabled by default.
