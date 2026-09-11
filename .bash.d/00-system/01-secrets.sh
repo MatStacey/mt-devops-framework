@@ -306,7 +306,29 @@ __mt_secrets_add_or_update() {
 
 #######################################
 # System: Delete a configured secret (and its paired variable, if any)
-# after confirmation
+# by name, with no confirmation prompt of its own -- the caller (the
+# interactive menu, or mt-secrets --delete) is responsible for
+# confirming first. Silently no-ops if the name isn't in the registry.
+# Arguments:
+#   $1 - Secret variable name (e.g. GEMINI_API_KEY)
+# Globals:
+#   SECRETS_MANAGER
+#######################################
+__mt_secrets_delete_by_name() {
+  local name="$1"
+  [ -z "$name" ] && return 1
+
+  local desc_line paired
+  desc_line=$(python3 "$SECRETS_MANAGER" describe "$name") || return 1
+  paired="${desc_line#*|}"
+  __mt_delete_secret "$name" "$paired"
+  echo -e "${CB_GREEN}✅ ${name} removed.${C_RESET}"
+}
+
+#######################################
+# System: fzf-pick a configured secret, confirm, then delete it via
+# __mt_secrets_delete_by_name. The interactive counterpart to
+# `mt-secrets --delete <name>`.
 # Globals:
 #   SECRETS_MANAGER
 #######################################
@@ -324,11 +346,28 @@ __mt_secrets_delete() {
     return 0
   fi
 
-  local desc_line paired
-  desc_line=$(python3 "$SECRETS_MANAGER" describe "$name")
-  paired="${desc_line#*|}"
-  __mt_delete_secret "$name" "$paired"
-  echo -e "${CB_GREEN}✅ ${name} removed.${C_RESET}"
+  __mt_secrets_delete_by_name "$name"
+}
+
+#######################################
+# System: Run the real mt-add-*-key/mt-add-*-secret command for one
+# registered secret name -- the non-interactive-selection counterpart
+# to __mt_secrets_add_or_update (which fzf-picks the name itself). The
+# add command it dispatches to still reads its value from /dev/tty, so
+# this only works with a real attached terminal.
+# Arguments:
+#   $1 - Secret variable name (e.g. GEMINI_API_KEY)
+# Globals:
+#   SECRETS_MANAGER
+#######################################
+__mt_secrets_add_by_name() {
+  local name="$1"
+  [ -z "$name" ] && return 1
+
+  local desc_line add_cmd
+  desc_line=$(python3 "$SECRETS_MANAGER" describe "$name") || return 1
+  add_cmd="${desc_line%%|*}"
+  "$add_cmd"
 }
 
 #######################################
@@ -378,13 +417,52 @@ __mt_secrets_info() {
 # secrets (currently Gemini, Claude, Bitbucket, Docker Hub) -- add/update, delete,
 # and view metadata (system, features using it, expiry, last used).
 # Secret VALUES are never displayed, only whether each is configured.
-# Usage: mt-secrets
+# Usage: mt-secrets [--add <name>] [--delete <name>]
+# Options:
+#   --add <name>      Run the real add/update command for one registered
+#                      secret name directly (no fzf picker) -- still
+#                      prompts for the value itself on /dev/tty, so this
+#                      needs a real attached terminal.
+#   --delete <name>   Delete one configured secret by name, no fzf
+#                      picker and no confirmation prompt of its own --
+#                      the caller is responsible for confirming first.
+#   -h, --help        Show this help menu
 #######################################
 mt-secrets() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
+
+  local add_name="" delete_name=""
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      --add)
+        add_name="$2"
+        shift
+        ;;
+      --delete)
+        delete_name="$2"
+        shift
+        ;;
+      *)
+        echo -e "${CB_RED}🚨 Unknown option: $1${C_RESET}"
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  if [ -n "$add_name" ]; then
+    __mt_secrets_add_by_name "$add_name"
+    return $?
+  fi
+
+  if [ -n "$delete_name" ]; then
+    __mt_secrets_delete_by_name "$delete_name"
+    return $?
+  fi
+
   __mt_menu_submenu "🔐 Secrets Manager" \
     "List Secrets" __mt_secrets_print_table \
     "Add / Update a Secret" __mt_secrets_add_or_update \
