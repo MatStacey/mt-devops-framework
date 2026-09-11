@@ -131,6 +131,106 @@ __mt_jobs_reap_orphans() {
 }
 
 #######################################
+# System: Restart one job by ID -- replays its original command via a
+# fresh background job. mt-http-server is special-cased the same way
+# the interactive menu always has: its port/auth/idle-timeout came from
+# env vars local to the original launch and were never persisted in the
+# jobs file, so replaying its bare argv would silently come back on
+# defaults -- its own -b flag re-reads the same config the original run
+# used instead.
+# Arguments:
+#   $1 - Job ID
+# Globals (read, set by mt-jobs):
+#   jobs_file
+# Returns:
+#   0 on success, 1 if the job ID isn't found
+#######################################
+__mt_jobs_restart_by_id() {
+  local target_id="$1"
+  local sel_data
+  sel_data=$(grep "^${target_id}|" "$jobs_file" | head -n 1)
+  if [ -z "$sel_data" ]; then
+    echo -e "${CB_RED}🚨 No job found with ID: ${target_id}${C_RESET}"
+    return 1
+  fi
+
+  local j_id j_pid j_name j_start j_end j_status j_log j_cmd
+  IFS='|' read -r j_id j_pid j_name j_start j_end j_status j_log j_cmd <<< "$sel_data"
+
+  if [ "$j_name" = "mt-http-server" ]; then
+    mt-http-server --stop
+    mt-http-server -b
+  else
+    local new_log
+    new_log="$LOG_DIR/indexer_$(date +%s).log"
+    __mt_bg_run "${j_name}" "$new_log" "$j_cmd"
+  fi
+}
+
+#######################################
+# System: Stop one RUNNING job by ID, marking it CANCELLED. A no-op
+# (with a message, not an error) if the job isn't currently RUNNING.
+# Arguments:
+#   $1 - Job ID
+# Globals (read, set by mt-jobs):
+#   jobs_file, current_time
+# Returns:
+#   0 on success, 1 if the job ID isn't found
+#######################################
+__mt_jobs_stop_by_id() {
+  local target_id="$1"
+  local sel_data
+  sel_data=$(grep "^${target_id}|" "$jobs_file" | head -n 1)
+  if [ -z "$sel_data" ]; then
+    echo -e "${CB_RED}🚨 No job found with ID: ${target_id}${C_RESET}"
+    return 1
+  fi
+
+  local j_id j_pid j_name j_start j_end j_status j_log j_cmd
+  IFS='|' read -r j_id j_pid j_name j_start j_end j_status j_log j_cmd <<< "$sel_data"
+
+  if [ "$j_status" != "RUNNING" ]; then
+    echo -e "${CB_YELLOW}⚠️  Job '${j_name}' is not running (status: ${j_status}).${C_RESET}"
+    return 0
+  fi
+
+  __mt_jobs_stop_pid "$j_pid" "$j_name"
+  local tmp_m
+  tmp_m=$(mktemp)
+  awk -F'|' -v id="$j_id" -v e="$current_time" 'BEGIN{OFS="|"}$1==id{$5=e;$6="CANCELLED"}{print $0}' "$jobs_file" > "$tmp_m" && mv "$tmp_m" "$jobs_file"
+  echo -e "${CB_GREEN}✅ Job '${j_name}' cancelled.${C_RESET}"
+}
+
+#######################################
+# System: Remove one job's history entry (and its log file) by ID,
+# regardless of its status.
+# Arguments:
+#   $1 - Job ID
+# Globals (read, set by mt-jobs):
+#   jobs_file
+# Returns:
+#   0 on success, 1 if the job ID isn't found
+#######################################
+__mt_jobs_remove_by_id() {
+  local target_id="$1"
+  local sel_data
+  sel_data=$(grep "^${target_id}|" "$jobs_file" | head -n 1)
+  if [ -z "$sel_data" ]; then
+    echo -e "${CB_RED}🚨 No job found with ID: ${target_id}${C_RESET}"
+    return 1
+  fi
+
+  local j_id j_pid j_name j_start j_end j_status j_log j_cmd
+  IFS='|' read -r j_id j_pid j_name j_start j_end j_status j_log j_cmd <<< "$sel_data"
+
+  local tmp_m
+  tmp_m=$(mktemp)
+  grep -v "^${j_id}|" "$jobs_file" > "$tmp_m" && mv "$tmp_m" "$jobs_file"
+  [ -f "$j_log" ] && rm -f "$j_log"
+  echo -e "${CB_GREEN}✅ Removed '${j_name}' from job history.${C_RESET}"
+}
+
+#######################################
 # System: Render the jobs table into a tab-delimited temp file for display/fzf
 # Globals (read, set by mt-jobs):
 #   jobs_file, current_time
@@ -242,36 +342,13 @@ ${CB_BLUE}▶ Selected Job: ${j_name} (${j_id})${C_RESET}"
       [ -f "$j_log" ] && tail -f "$j_log" || echo -e "${CB_RED}🚨 Log file missing ($j_log).${C_RESET}"
       ;;
     3*)
-      if [ "$j_status" = "RUNNING" ]; then
-        __mt_jobs_stop_pid "$j_pid" "$j_name"
-        local tmp_m
-        tmp_m=$(mktemp)
-        awk -F'|' -v id="$j_id" -v e="$current_time" 'BEGIN{OFS="|"}$1==id{$5=e;$6="CANCELLED"}{print $0}' "$jobs_file" > "$tmp_m" && mv "$tmp_m" "$jobs_file"
-        echo -e "${CB_GREEN}✅ Job cancelled.${C_RESET}"
-      fi
+      __mt_jobs_stop_by_id "$j_id"
       ;;
     4*)
-      if [ "$j_name" = "mt-http-server" ]; then
-        # The generic replay below only has the captured argv (j_cmd) --
-        # mt-http-server's port/auth/idle-timeout are passed as env vars
-        # that were function-local to the original launch and were never
-        # persisted here, so replaying j_cmd directly would silently come
-        # back on the default port with auth disabled. Its own -b already
-        # re-reads the same config the original run used.
-        mt-http-server --stop
-        mt-http-server -b
-      else
-        local new_log
-        new_log="$LOG_DIR/indexer_$(date +%s).log"
-        __mt_bg_run "${j_name}" "$new_log" "$j_cmd"
-      fi
+      __mt_jobs_restart_by_id "$j_id"
       ;;
     5*)
-      local tmp_m
-      tmp_m=$(mktemp)
-      grep -v "^${j_id}|" "$jobs_file" > "$tmp_m" && mv "$tmp_m" "$jobs_file"
-      [ -f "$j_log" ] && rm -f "$j_log"
-      echo -e "${CB_GREEN}✅ Selected job history cleared.${C_RESET}"
+      __mt_jobs_remove_by_id "$j_id"
       ;;
     6*)
       true > "$jobs_file"
@@ -283,6 +360,16 @@ ${CB_BLUE}▶ Selected Job: ${j_name} (${j_id})${C_RESET}"
 #######################################
 # System: List and manage MT background jobs
 # Usage: mt-jobs [-i|--interactive] [-p|--purge] [-c|--clean] [-w|--watch]
+#                [--restart <job_id>] [--stop <job_id>] [--remove <job_id>]
+# Options:
+#   -i, --interactive     fzf-pick a job, then an action to run against it
+#   -p, --purge           Kill every RUNNING job (marks them CANCELLED)
+#   -c, --clean           Drop every finished (non-RUNNING) job and its log
+#   -w, --watch           Live-refreshing table view (Ctrl+C to exit)
+#   --restart <job_id>    Replay one job's original command as a new job
+#   --stop <job_id>       Cancel one RUNNING job by ID
+#   --remove <job_id>     Drop one job's history entry (and log) by ID
+#   -h, --help            Show this help menu
 #######################################
 mt-jobs() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -292,6 +379,7 @@ mt-jobs() {
 
   local jobs_file="$CACHE_DIR/.mt_jobs.tsv"
   local interactive=false do_purge=false do_clean=false watch=false
+  local restart_id="" stop_id="" remove_id=""
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -299,6 +387,18 @@ mt-jobs() {
       -p | --purge) do_purge=true ;;
       -c | --clean) do_clean=true ;;
       -w | --watch) watch=true ;;
+      --restart)
+        restart_id="$2"
+        shift
+        ;;
+      --stop)
+        stop_id="$2"
+        shift
+        ;;
+      --remove)
+        remove_id="$2"
+        shift
+        ;;
       *)
         echo -e "${CB_RED}🚨 Unknown option: $1${C_RESET}"
         return 1
@@ -306,6 +406,23 @@ mt-jobs() {
     esac
     shift
   done
+
+  if [ -n "$restart_id" ]; then
+    __mt_jobs_restart_by_id "$restart_id"
+    return $?
+  fi
+
+  if [ -n "$stop_id" ]; then
+    local current_time
+    current_time=$(date +%s)
+    __mt_jobs_stop_by_id "$stop_id"
+    return $?
+  fi
+
+  if [ -n "$remove_id" ]; then
+    __mt_jobs_remove_by_id "$remove_id"
+    return $?
+  fi
 
   if [ "$do_purge" = true ]; then
     local current_time
