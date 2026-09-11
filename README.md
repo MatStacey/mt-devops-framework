@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added a subtle terminal-background warning (`mt-toggle-display --prod-bg-warning`) that tints the actual terminal background red whenever the active GCP project name looks like production, disabled by default.
 - Added `-e` / `--enhancement` flag to `mt-suggest` to explicitly mark suggestions as enhancements and bypass the interactive prompt.
 - Added an interactive directory exclusion feature to the `mt-export` menu to dynamically exclude specific paths and subdirectories before exporting.
 - Updated menu options and help documentation to reflect the addition of interactive path exclusions.
