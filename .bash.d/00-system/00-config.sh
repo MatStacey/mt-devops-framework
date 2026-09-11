@@ -281,22 +281,24 @@ mt-toggle-ai() {
 # from mt-toggle-ai, which controls whether AI integration runs at all
 # elsewhere in the framework. Called with no arguments, prints the
 # current display configuration instead of changing anything.
-# Usage: mt-toggle-display [-e|--element <git|gcp|ai|k8s>] [--gcp-mode <project|account|both>] [--ai-model] [--compact] [--git-branch-len <n>]
+# Usage: mt-toggle-display [-e|--element <git|gcp|ai|k8s>] [--gcp-mode <project|account|both>] [--ai-model] [--compact] [--git-branch-len <n>] [--prod-bg-warning]
 # Options:
 #   -e, --element <git|gcp|ai|k8s>      Show/hide the given prompt segment
 #   --gcp-mode <project|account|both>   Which GCP identity field(s) to show
 #   --ai-model                          Show/hide the AI segment's model/version detail
 #   --compact                           Toggle icon labels instead of text labels
 #   --git-branch-len <n>                Max Git branch name length before truncation (0 = unlimited)
+#   --prod-bg-warning                   Toggle a subtle red terminal-background warning
+#                                        when the active GCP project looks like production
 #   -h, --help                          Show this help menu
 # Globals:
 #   DISPLAY_SHOW_GIT, DISPLAY_SHOW_GCP, DISPLAY_SHOW_AI, DISPLAY_SHOW_K8S,
 #   DISPLAY_SHOW_AI_MODEL, DISPLAY_COMPACT_LABELS, DISPLAY_GCP_MODE,
-#   DISPLAY_GIT_BRANCH_MAX_LEN
+#   DISPLAY_GIT_BRANCH_MAX_LEN, DISPLAY_PROD_BG_WARNING
 #######################################
 mt-toggle-display() {
   local element="" gcp_mode="" toggle_ai_model=false toggle_compact=false
-  local branch_len=""
+  local branch_len="" toggle_prod_bg=false
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -324,6 +326,10 @@ mt-toggle-display() {
         branch_len="$2"
         shift 2
         ;;
+      --prod-bg-warning)
+        toggle_prod_bg=true
+        shift
+        ;;
       *)
         echo "🚨 Unknown option: $1"
         return 1
@@ -332,7 +338,7 @@ mt-toggle-display() {
   done
 
   if [ -z "$element" ] && [ -z "$gcp_mode" ] && [ "$toggle_ai_model" = false ] &&
-    [ "$toggle_compact" = false ] && [ -z "$branch_len" ]; then
+    [ "$toggle_compact" = false ] && [ -z "$branch_len" ] && [ "$toggle_prod_bg" = false ]; then
     echo -e "${CB_BLUE}==========================================================${C_RESET}"
     echo -e "${CB_BLUE}               PROMPT DISPLAY SETTINGS                    ${C_RESET}"
     echo -e "${CB_BLUE}==========================================================${C_RESET}"
@@ -341,6 +347,7 @@ mt-toggle-display() {
     echo -e " ${CB_CYAN}ai     ${C_RESET} : ${DISPLAY_SHOW_AI:-true} (model: ${DISPLAY_SHOW_AI_MODEL:-true})"
     echo -e " ${CB_CYAN}k8s    ${C_RESET} : ${DISPLAY_SHOW_K8S:-true}"
     echo -e " ${CB_CYAN}compact${C_RESET} : ${DISPLAY_COMPACT_LABELS:-false}"
+    echo -e " ${CB_CYAN}prod-bg${C_RESET} : ${DISPLAY_PROD_BG_WARNING:-false}"
     echo -e "${CB_BLUE}==========================================================${C_RESET}"
     return 0
   fi
@@ -379,6 +386,14 @@ mt-toggle-display() {
     python3 "$CONFIG_MANAGER" update "display" "compact_labels" "$next_compact"
     export DISPLAY_COMPACT_LABELS="$next_compact"
     echo "✅ Compact icon labels set to $next_compact."
+  fi
+
+  if [ "$toggle_prod_bg" = true ]; then
+    local next_prod_bg="true"
+    [ "${DISPLAY_PROD_BG_WARNING:-false}" = "true" ] && next_prod_bg="false"
+    python3 "$CONFIG_MANAGER" update "display" "prod_bg_warning" "$next_prod_bg"
+    export DISPLAY_PROD_BG_WARNING="$next_prod_bg"
+    echo "✅ Production GCP background warning set to $next_prod_bg."
   fi
 
   if [ -n "$element" ]; then

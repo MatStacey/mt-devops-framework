@@ -33,6 +33,25 @@ __prompt_gcp_info() {
 }
 
 #######################################
+# UI: Test whether a GCP project ID looks like a production project --
+# "prod"/"production" as a leading or trailing segment (bounded by a
+# "-"/"_" separator, or the whole ID), never a mid-string or partial
+# match, so words like "produce"/"producer"/"reproduction" never trigger
+# it (only genuine cases like "prod-web", "web-prod", or "production")
+# Arguments:
+#   $1 - GCP project ID to test
+# Returns:
+#   0 if the project ID looks like production, 1 otherwise
+#######################################
+__prompt_is_prod_project() {
+  local project="${1,,}"
+  [ -z "$project" ] && return 1
+  [[ "$project" =~ ^(prod|production)([-_]|$) ]] && return 0
+  [[ "$project" =~ [-_](prod|production)$ ]] && return 0
+  return 1
+}
+
+#######################################
 # UI: Extract active Kubernetes context for the prompt
 # Globals:
 #   __prompt_k8s_ctx (Output)
@@ -113,6 +132,11 @@ __prompt_git_info() {
 #   DISPLAY_GIT_BRANCH_MAX_LEN -- truncate a longer branch name with an
 #     ellipsis in the visible text only, never in the segment's
 #     hyperlink; 0 disables truncation (default: 30)
+#   DISPLAY_PROD_BG_WARNING -- tint the actual terminal background (via
+#     OSC 11, not just prompt text) a subtle red whenever the active GCP
+#     project looks like production; resets it (OSC 111) otherwise, so
+#     switching projects or disabling this leaves the terminal exactly
+#     as configured (default: false)
 # Outputs:
 #   Prints formatted prompt string to STDOUT
 #######################################
@@ -126,6 +150,7 @@ __cloud_ps1() {
   local show_gcp="${DISPLAY_SHOW_GCP:-true}" show_git="${DISPLAY_SHOW_GIT:-true}"
   local show_ai="${DISPLAY_SHOW_AI:-true}" show_k8s="${DISPLAY_SHOW_K8S:-true}"
   local compact="${DISPLAY_COMPACT_LABELS:-false}"
+  local prod_bg_warning="${DISPLAY_PROD_BG_WARNING:-false}"
 
   local label_gcp="GCP: " label_k8s="K8s: " label_ai="AI: " label_git="Git: "
   if [ "$compact" = "true" ]; then
@@ -135,9 +160,27 @@ __cloud_ps1() {
     label_git="🌿 "
   fi
 
-  [ "$show_gcp" = "true" ] && __prompt_gcp_info
+  # The prod-bg warning needs the resolved project even if the GCP prompt
+  # segment itself is hidden, so it's fetched on either condition.
+  if [ "$show_gcp" = "true" ] || [ "$prod_bg_warning" = "true" ]; then
+    __prompt_gcp_info
+  fi
   [ "$show_k8s" = "true" ] && __prompt_k8s_info
   [ "$show_git" = "true" ] && __prompt_git_info
+
+  # Tint the real terminal background (OSC 11), not just prompt text, so
+  # the warning is visible even scrolled back or with the GCP segment
+  # hidden. Always emits set-or-reset (never just "set once") since
+  # __cloud_ps1 runs in a fresh command-substitution subshell every
+  # prompt draw -- there's no bash state that would survive between
+  # renders to know whether a reset is actually needed.
+  if [ "$prod_bg_warning" = "true" ]; then
+    if __prompt_is_prod_project "$__prompt_gcp_proj"; then
+      echo -n "${np_start}${e}]11;#402226${e}\\${np_end}"
+    else
+      echo -n "${np_start}${e}]111${e}\\${np_end}"
+    fi
+  fi
 
   local out=""
 

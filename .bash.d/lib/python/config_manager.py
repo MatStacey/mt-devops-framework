@@ -311,6 +311,11 @@ def load_env():
     )
     export("DISPLAY_GCP_MODE", disp_cfg.get("gcp_display", "both"), to_lower=True)
     export("DISPLAY_GIT_BRANCH_MAX_LEN", disp_cfg.get("git_branch_max_len", 30))
+    export(
+        "DISPLAY_PROD_BG_WARNING",
+        disp_cfg.get("prod_bg_warning", False),
+        to_lower=True,
+    )
 
 
 _MISSING = object()

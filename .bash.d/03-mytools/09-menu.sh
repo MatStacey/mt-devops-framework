@@ -219,6 +219,15 @@ __mt_menu_set_git_branch_len() {
 }
 
 #######################################
+# System: Toggle the production-GCP-project terminal background warning
+# via mt-toggle-display --prod-bg-warning -- wrapped since
+# __mt_menu_submenu commands can't take inline arguments
+#######################################
+__mt_menu_toggle_prod_bg_warning() {
+  mt-toggle-display --prod-bg-warning
+}
+
+#######################################
 # System: Prompt for freeform gcloud command args and run them via
 # gcl-as-json, since gcloud subcommands are multiple separate tokens
 # (e.g. "compute instances list") rather than one single argument
@@ -443,7 +452,8 @@ __mt_menu_setup_terminal() {
     "Set GCP Display Mode (mt-toggle-display)" __mt_menu_pick_gcp_display_mode \
     "Toggle AI Model/Version Detail (mt-toggle-display)" __mt_menu_toggle_ai_model \
     "Toggle Compact Icon Labels (mt-toggle-display)" __mt_menu_toggle_compact_labels \
-    "Set Max Git Branch Name Length (mt-toggle-display)" __mt_menu_set_git_branch_len
+    "Set Max Git Branch Name Length (mt-toggle-display)" __mt_menu_set_git_branch_len \
+    "Toggle Production GCP Background Warning (mt-toggle-display)" __mt_menu_toggle_prod_bg_warning
 }
 
 #######################################

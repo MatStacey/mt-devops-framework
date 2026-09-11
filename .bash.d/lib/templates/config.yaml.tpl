@@ -90,3 +90,4 @@ display:
   compact_labels: false
   gcp_display: both
   git_branch_max_len: 30
+  prod_bg_warning: false
