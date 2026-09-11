@@ -211,8 +211,9 @@ __mt_hub_summarize_repo() {
 
 #######################################
 # Repo Hub: Decide whether a repo should be indexed given the active
-# type/name filters and cache/force-reindex state. Takes the set of
-# already-cached repo paths as an associative array (built once by the
+# type/name filters and cache/force-reindex/update-missing state. Takes
+# the set of already-cached repo paths, and the subset of those whose
+# cached entry has a gap, as associative arrays (built once by the
 # caller via __mt_hub_load_existing_keys) rather than re-reading and
 # re-parsing the whole cache file with a fresh jq process on every single
 # repo -- the latter is what this used to do, and it's pure repeated work
@@ -224,14 +225,18 @@ __mt_hub_summarize_repo() {
 #   $3 - Type filter (lowercased; empty = no filter)
 #   $4 - Name filter (empty = no filter)
 #   $5 - force_reindex (true/false)
+#   $6 - update_missing (true/false) -- re-index an already-cached repo
+#        anyway if its entry has a gap (see __mt_hub_load_existing_keys)
 # Globals (read):
 #   __mt_hub_existing_keys -- associative array of cache_file keys,
-#   pre-populated by the caller via __mt_hub_load_existing_keys
+#     pre-populated by the caller via __mt_hub_load_existing_keys
+#   __mt_hub_needs_update -- associative array of cache_file keys whose
+#     entry has a gap, pre-populated by the same call
 # Returns:
 #   0 if the repo should be indexed, 1 if it should be skipped
 #######################################
 __mt_hub_should_index() {
-  local repo_path="$1" search_dir="$2" filter_type="$3" filter_repo="$4" force_reindex="$5"
+  local repo_path="$1" search_dir="$2" filter_type="$3" filter_repo="$4" force_reindex="$5" update_missing="$6"
   local repo_name
   repo_name=$(basename "$repo_path")
 
@@ -243,6 +248,10 @@ __mt_hub_should_index() {
   [ -n "$filter_repo" ] && [ "$repo_name" != "$filter_repo" ] && return 1
 
   if [ -n "${__mt_hub_existing_keys[$repo_path]:-}" ] && [ "$force_reindex" != "true" ]; then
+    if [ "$update_missing" = "true" ] && [ -n "${__mt_hub_needs_update[$repo_path]:-}" ]; then
+      echo -e "${C_DIM}🔄 Re-indexing $repo_name (filling in missing data)${C_RESET}"
+      return 0
+    fi
     echo -e "${C_DIM}⏭️  Skipping $repo_name (already indexed)${C_RESET}"
     return 1
   fi
@@ -250,25 +259,39 @@ __mt_hub_should_index() {
 }
 
 #######################################
-# Repo Hub: Populate the __mt_hub_existing_keys associative array (one
-# entry per already-cached repo path) from a single read of the cache
-# file, so __mt_hub_should_index can do an in-memory lookup per repo
-# instead of shelling out to jq against the file itself every time.
+# Repo Hub: Populate two associative arrays from a single read of the
+# cache file: every already-cached repo path, and the subset of those
+# whose entry has a gap -- category/description never came back from the
+# AI (still sitting at their failure-mode defaults), or the stack
+# heuristic found nothing recognizable. build/cicd/testing being "None"
+# is deliberately NOT treated as a gap here: unlike the AI-derived
+# fields (which the model is always instructed to fill in) and stack
+# (an extension histogram that should almost always match something),
+# "None" is frequently the correct, heuristically-detected answer for a
+# repo that genuinely has no CI/build tool/test framework -- flagging it
+# as "missing" would re-run (and re-bill) AI summarization for most
+# simple repos for no real gain.
 # Arguments:
 #   $1 - Path to the JSON cache file
 # Globals (written, must be declared by the caller as
-#   `declare -A __mt_hub_existing_keys` before calling this):
-#   __mt_hub_existing_keys
+#   `declare -A __mt_hub_existing_keys` and
+#   `declare -A __mt_hub_needs_update` before calling this):
+#   __mt_hub_existing_keys, __mt_hub_needs_update
 #######################################
 __mt_hub_load_existing_keys() {
   local cache_file="$1"
   __mt_hub_existing_keys=()
+  __mt_hub_needs_update=()
   [ -f "$cache_file" ] || return 0
 
   local key
   while IFS= read -r key; do
     [ -n "$key" ] && __mt_hub_existing_keys["$key"]=1
   done < <(jq -r 'keys[]' "$cache_file" 2> /dev/null)
+
+  while IFS= read -r key; do
+    [ -n "$key" ] && __mt_hub_needs_update["$key"]=1
+  done < <(jq -r 'to_entries[] | select(.value.category == "Unknown" or .value.description == "No description available." or .value.stack == "Unknown") | .key' "$cache_file" 2> /dev/null)
 }
 
 #######################################
@@ -384,7 +407,7 @@ __mt_hub_prune_stale_entries() {
 # runs only -- see __mt_hub_prune_stale_entries), then loads the set of
 # already-cached keys once for the whole run rather than re-reading the
 # cache file per repo.
-# Usage: __mt_hub_index <cache_file> <filter_type> <filter_repo> <force_reindex> <provider>
+# Usage: __mt_hub_index <cache_file> <filter_type> <filter_repo> <force_reindex> <provider> <update_missing>
 # Globals:
 #   VCS_ROOT
 # Arguments:
@@ -394,6 +417,8 @@ __mt_hub_prune_stale_entries() {
 #   $4 - force_reindex (true/false)
 #   $5 - Provider override (gemini, claude, claude-code, local); empty
 #        falls back to DEFAULT_AI
+#   $6 - update_missing (true/false) -- re-index an already-cached repo
+#        anyway if its entry has a gap (see __mt_hub_load_existing_keys)
 #######################################
 __mt_hub_index() {
   local cache_file="$1"
@@ -401,6 +426,7 @@ __mt_hub_index() {
   local filter_repo="$3"
   local force_reindex="$4"
   local provider="$5"
+  local update_missing="$6"
   local search_dir="${VCS_ROOT:-$HOME/vcs}"
 
   local msg_suffix=""
@@ -418,11 +444,12 @@ __mt_hub_index() {
   fi
 
   local -A __mt_hub_existing_keys
+  local -A __mt_hub_needs_update
   __mt_hub_load_existing_keys "$cache_file"
 
   local processed=0
   for repo_path in "${repos[@]}"; do
-    __mt_hub_should_index "$repo_path" "$search_dir" "$filter_type" "$filter_repo" "$force_reindex" || continue
+    __mt_hub_should_index "$repo_path" "$search_dir" "$filter_type" "$filter_repo" "$force_reindex" "$update_missing" || continue
     processed=$((processed + 1))
     __mt_hub_index_one_repo "$repo_path" "$cache_file" "$provider"
   done
@@ -511,11 +538,15 @@ __mt_hub_preview() {
 # System: Interactive AI-powered Repository Dashboard. An unfiltered
 # --index run also prunes cache entries for repos no longer found on
 # disk (moved, renamed, or deleted) before indexing.
-# Usage: mt-hub [--index [-b] [-f] [-t <type>] [-r <name>] [-p <provider>]] [--preview <repo>]
+# Usage: mt-hub [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>]] [--preview <repo>]
 # Options:
 #   --index                    Scan and build the AI metadata cache
 #   -b, --bg, --background     Run the index scan as a background job (with --index)
 #   -f, --force                Force reindex even if a repo is already cached (with --index)
+#   -u, --update               Re-index an already-cached repo anyway if its entry has a
+#                              gap (AI category/description never came back, or the stack
+#                              heuristic found nothing) -- unlike -f, repos with a complete
+#                              entry are still skipped. Ignored if -f is also given.
 #   -t, --type <name>          Filter indexing to a specific folder (e.g. personal, work) --
 #                              also disables stale-entry pruning for this run
 #   -r, --repo <name>          Filter indexing to a specific repository name --
@@ -536,6 +567,7 @@ mt-hub() {
   local do_index=false
   local run_bg=false
   local force_index=false
+  local update_missing=false
   local filter_type=""
   local filter_repo=""
   local provider_override=""
@@ -546,6 +578,7 @@ mt-hub() {
       --index) do_index=true ;;
       -b | --bg | --background) run_bg=true ;;
       -f | --force) force_index=true ;;
+      -u | --update) update_missing=true ;;
       -t | --type)
         filter_type="$2"
         shift
@@ -582,10 +615,10 @@ mt-hub() {
     if [ "$run_bg" = true ]; then
       local log_out
       log_out="$LOG_DIR/indexer_$(date +%s).log"
-      local cmd_str="__mt_hub_index \"$cache_file\" \"$filter_type\" \"$filter_repo\" \"$force_index\" \"$provider_override\""
+      local cmd_str="__mt_hub_index \"$cache_file\" \"$filter_type\" \"$filter_repo\" \"$force_index\" \"$provider_override\" \"$update_missing\""
       __mt_bg_run "mt-hub-indexer" "$log_out" "$cmd_str"
     else
-      __mt_hub_index "$cache_file" "$filter_type" "$filter_repo" "$force_index" "$provider_override"
+      __mt_hub_index "$cache_file" "$filter_type" "$filter_repo" "$force_index" "$provider_override" "$update_missing"
     fi
     return 0
   fi
