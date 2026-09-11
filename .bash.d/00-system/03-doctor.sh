@@ -182,6 +182,41 @@ __mt_doctor_check_sync_repo_state() {
 }
 
 #######################################
+# System: Report whether the active AI provider's configured model was
+# last confirmed present in that provider's live catalog, reusing the
+# periodic background check's own pending-marker file instead of making
+# a fresh network call on every mt-doctor run (same pattern as
+# __mt_doctor_check_version).
+# Globals:
+#   CACHE_DIR, AI_ENABLED, DEFAULT_AI
+#   __mt_doctor_issues (written, via __mt_doctor_line)
+#######################################
+__mt_doctor_check_ai_model() {
+  __mt_doctor_section="ai_model"
+  [ "${__mt_doctor_json:-false}" = "true" ] || echo -e "${CB_BLUE}🤖 AI Model${C_RESET}"
+
+  if [ "${AI_ENABLED:-true}" != "true" ]; then
+    __mt_doctor_line SKIP "AI integration is disabled ('mt-toggle-ai' to enable)."
+    return
+  fi
+
+  local provider="${DEFAULT_AI:-gemini}"
+  if [ "$provider" = "local" ]; then
+    __mt_doctor_line SKIP "Active provider is 'local' -- no cloud catalog to check."
+    return
+  fi
+
+  local pending_file="$CACHE_DIR/.ai_model_stale_pending"
+  if [ -f "$pending_file" ]; then
+    local stale_model
+    stale_model=$(jq -r '.model' "$pending_file" 2> /dev/null)
+    __mt_doctor_line WARN "${provider^} model '${stale_model}' is no longer listed by its provider's API. Run 'mt-set-${provider}-model'."
+  else
+    __mt_doctor_line OK "${provider^} model confirmed present as of the last periodic check (or not yet checked -- run 'mt-ai-models -r' to check now)."
+  fi
+}
+
+#######################################
 # System: Report legacy config.yaml keys pending migration, via
 # config_manager.py's read-only 'check-config' subcommand -- never
 # mutates config.yaml as a side effect of a report command.
@@ -221,10 +256,12 @@ __mt_doctor_check_config_schema() {
 # System: Diagnostic health-check for the framework's environment --
 # framework version, sync configuration (SYNC_REPO_URL, gh auth, clone
 # state), the sync repo's git state (stuck branches, open/stale PRs, an
-# in-progress merge, uncommitted changes), and config.yaml schema
-# drift. Report-only: never modifies anything, just names the command
-# that would fix each issue found (mt-get-update, mt-push-update,
-# mt-migrate-config, gh auth login, ...).
+# in-progress merge, uncommitted changes), config.yaml schema drift, and
+# whether the active AI provider's configured model is still listed by
+# that provider's API. Report-only: never modifies anything, just names
+# the command that would fix each issue found (mt-get-update,
+# mt-push-update, mt-migrate-config, gh auth login, mt-set-claude-model /
+# mt-set-gemini-model, ...).
 # Usage: mt-doctor [-j|--json]
 # Options:
 #   -j, --json   Print every check as one JSON object ({issues, checks:
@@ -261,6 +298,8 @@ mt-doctor() {
   __mt_doctor_check_sync_repo_state
   [ "$__mt_doctor_json" = "true" ] || echo
   __mt_doctor_check_config_schema
+  [ "$__mt_doctor_json" = "true" ] || echo
+  __mt_doctor_check_ai_model
 
   if [ "$__mt_doctor_json" = "true" ]; then
     printf '%s\n' "${__mt_doctor_results[@]}" | jq -s --argjson issues "$__mt_doctor_issues" '{issues: $issues, checks: .}'

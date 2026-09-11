@@ -420,6 +420,8 @@ __mt_menu_setup_wizards() {
 __mt_menu_setup_quick() {
   __mt_menu_submenu "⚡ Quick Setters & Toggles" \
     "Set Default AI Provider (mt-set-default-ai)" __mt_menu_pick_default_ai \
+    "Set Claude Model (mt-set-claude-model)" mt-set-claude-model \
+    "Set Gemini Model (mt-set-gemini-model)" mt-set-gemini-model \
     "Set Default IDE (mt-set-default-ide)" __mt_menu_pick_default_ide \
     "Set CI/CD Provider (mt-set-cicd)" __mt_menu_pick_cicd \
     "Toggle AI Integration (mt-toggle-ai)" mt-toggle-ai \
@@ -492,7 +494,8 @@ __mt_menu_ai() {
     "Query AI (ai)" __mt_menu_ai_query \
     "Explain a Command (ai-explain)" __mt_menu_ai_explain \
     "Debug Last Failed Command (mt-ai-debug)" mt-ai-debug \
-    "Check AI Quota (mt-ai-quota)" mt-ai-quota
+    "Check AI Quota (mt-ai-quota)" mt-ai-quota \
+    "View Live Model Catalog (mt-ai-models)" mt-ai-models
 }
 
 #######################################

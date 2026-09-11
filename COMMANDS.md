@@ -141,7 +141,10 @@ Complex bash functions, framework utilities, and automated workflows.
 | `ai` | AI: Query configured LLM with prompt and optional context |
 | `ai-explain` | AI: Explain a terminal command in detail, grounding the explanation in |
 | `mt-ai-debug` | AI: Debug and explain the last failed terminal command |
+| `mt-ai-models` | AI: Print the live model catalog for one or both cloud providers, |
 | `mt-ai-quota` | AI: Check API quota and rate limits for the active AI provider |
+| `mt-set-claude-model` | AI: Set which Claude model 'ai'/'ai-explain'/'tf-ai-iam' use when |
+| `mt-set-gemini-model` | AI: Set which Gemini model 'ai'/'ai-explain'/'tf-ai-iam' use when |
 
 ### Base64 Encoding & Decoding Utilities
 | Command | Description |
