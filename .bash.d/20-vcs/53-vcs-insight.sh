@@ -159,13 +159,28 @@ __mt_hub_reconcile_stack() {
 # of silently producing "Unknown" everywhere.
 # Arguments:
 #   $1 - Repository path
+#   $2 - Provider override (gemini, claude, claude-code, local); empty
+#        falls back to DEFAULT_AI
 # Globals:
 #   DEFAULT_AI
+# Globals (shadowed): AI_SYSTEM_PROMPT is locally blanked for this call
+#   and everything it calls -- the framework's ambient system prompt
+#   (config/ai/system_prompt.md) hard-instructs every model to respond
+#   with a "category" restricted to "gcloud"|"script"|"project"|"chat".
+#   That directly competes with this function's own "category" field
+#   (a completely different vocabulary), and having both instructions
+#   present made the model's choice of which schema to honor
+#   non-deterministic -- confirmed by reproducing both a clean JSON
+#   response and a "category": "chat" envelope-leak from the exact same
+#   prompt on different runs. The prompt below already states the full
+#   schema explicitly, so no system prompt is needed here at all.
 # Globals (written, expected pre-declared local by the caller):
 #   ai_description, ai_category
 #######################################
 __mt_hub_summarize_repo() {
-  local repo_path="$1"
+  local repo_path="$1" provider="${2:-${DEFAULT_AI:-gemini}}"
+  # shellcheck disable=SC2034  # read via dynamic scope by __ai_query_* in 60-ai.sh
+  local AI_SYSTEM_PROMPT=""
   local ai_prompt="Analyze this repository structure and README. Return ONLY a valid JSON object matching exactly this schema: {\"description\": \"A highly concise 1-sentence description of what this project does\", \"category\": \"Application\" | \"Infrastructure\" | \"CI/CD\" | \"Tooling\" | \"Library\" | \"Dotfiles\" | \"Other\"}"
 
   local ctx_file
@@ -175,7 +190,7 @@ __mt_hub_summarize_repo() {
   find "$repo_path" -maxdepth 2 -not -path "*/\.git/*" -not -path "*/node_modules/*" >> "$ctx_file"
 
   local ai_res
-  ai_res=$(__ai_query_provider "${DEFAULT_AI:-gemini}" "$ai_prompt" "" "$ctx_file" "" false)
+  ai_res=$(__ai_query_provider "$provider" "$ai_prompt" "" "$ctx_file" "" false)
   rm -f "$ctx_file"
 
   ai_description="No description available."
@@ -298,9 +313,11 @@ __mt_hub_write_cache_entry() {
 # Arguments:
 #   $1 - Repository path
 #   $2 - Path to the JSON cache file
+#   $3 - Provider override (gemini, claude, claude-code, local); empty
+#        falls back to DEFAULT_AI
 #######################################
 __mt_hub_index_one_repo() {
-  local repo_path="$1" cache_file="$2"
+  local repo_path="$1" cache_file="$2" provider="$3"
   local repo_name
   repo_name=$(basename "$repo_path")
 
@@ -314,7 +331,7 @@ __mt_hub_index_one_repo() {
   stack=$(__mt_hub_reconcile_stack "$build" "$stack")
 
   local ai_description="" ai_category=""
-  __mt_hub_summarize_repo "$repo_path"
+  __mt_hub_summarize_repo "$repo_path" "$provider"
 
   __mt_hub_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing"
 
@@ -367,7 +384,7 @@ __mt_hub_prune_stale_entries() {
 # runs only -- see __mt_hub_prune_stale_entries), then loads the set of
 # already-cached keys once for the whole run rather than re-reading the
 # cache file per repo.
-# Usage: __mt_hub_index <cache_file> <filter_type> <filter_repo> <force_reindex>
+# Usage: __mt_hub_index <cache_file> <filter_type> <filter_repo> <force_reindex> <provider>
 # Globals:
 #   VCS_ROOT
 # Arguments:
@@ -375,18 +392,22 @@ __mt_hub_prune_stale_entries() {
 #   $2 - Type filter (empty = no filter)
 #   $3 - Name filter (empty = no filter)
 #   $4 - force_reindex (true/false)
+#   $5 - Provider override (gemini, claude, claude-code, local); empty
+#        falls back to DEFAULT_AI
 #######################################
 __mt_hub_index() {
   local cache_file="$1"
   local filter_type="${2,,}"
   local filter_repo="$3"
   local force_reindex="$4"
+  local provider="$5"
   local search_dir="${VCS_ROOT:-$HOME/vcs}"
 
   local msg_suffix=""
   [ -n "$filter_type" ] && msg_suffix=" of type '${filter_type}'"
   [ -n "$filter_repo" ] && msg_suffix="${msg_suffix} matching repo '${filter_repo}'"
   echo -e "${CB_BLUE}🔍 Scanning for repositories to index${msg_suffix}...${C_RESET}"
+  echo -e "${C_DIM}🤖 Using AI provider: ${provider:-${DEFAULT_AI:-gemini}}${C_RESET}"
 
   local repos=()
   local repo_path
@@ -403,7 +424,7 @@ __mt_hub_index() {
   for repo_path in "${repos[@]}"; do
     __mt_hub_should_index "$repo_path" "$search_dir" "$filter_type" "$filter_repo" "$force_reindex" || continue
     processed=$((processed + 1))
-    __mt_hub_index_one_repo "$repo_path" "$cache_file"
+    __mt_hub_index_one_repo "$repo_path" "$cache_file" "$provider"
   done
 
   if [ "$processed" -eq 0 ]; then
@@ -490,7 +511,7 @@ __mt_hub_preview() {
 # System: Interactive AI-powered Repository Dashboard. An unfiltered
 # --index run also prunes cache entries for repos no longer found on
 # disk (moved, renamed, or deleted) before indexing.
-# Usage: mt-hub [--index [-b] [-f] [-t <type>] [-r <name>]] [--preview <repo>]
+# Usage: mt-hub [--index [-b] [-f] [-t <type>] [-r <name>] [-p <provider>]] [--preview <repo>]
 # Options:
 #   --index                    Scan and build the AI metadata cache
 #   -b, --bg, --background     Run the index scan as a background job (with --index)
@@ -499,6 +520,10 @@ __mt_hub_preview() {
 #                              also disables stale-entry pruning for this run
 #   -r, --repo <name>          Filter indexing to a specific repository name --
 #                              also disables stale-entry pruning for this run
+#   -p, --provider <name>      Override DEFAULT_AI for this indexing run only
+#                              (gemini, claude, claude-code, local) -- e.g. to
+#                              save Claude usage by indexing with Gemini instead
+#                              without changing your actual default provider
 #   --preview <repo>           Show cached metadata for one repo (by absolute path or
 #                              bare repo name) and exit
 #   -h, --help                 Show this help menu
@@ -513,6 +538,7 @@ mt-hub() {
   local force_index=false
   local filter_type=""
   local filter_repo=""
+  local provider_override=""
 
   # Argument parsing
   while [[ "$#" -gt 0 ]]; do
@@ -526,6 +552,14 @@ mt-hub() {
         ;;
       -r | --repo)
         filter_repo="$2"
+        shift
+        ;;
+      -p | --provider)
+        provider_override="$(echo "$2" | tr '[:upper:]' '[:lower:]')"
+        if [[ "$provider_override" != "gemini" && "$provider_override" != "claude" && "$provider_override" != "claude-code" && "$provider_override" != "local" ]]; then
+          echo -e "${CB_RED}🚨 Invalid provider '$2'. Use gemini, claude, claude-code, or local.${C_RESET}"
+          return 1
+        fi
         shift
         ;;
       --preview)
@@ -548,10 +582,10 @@ mt-hub() {
     if [ "$run_bg" = true ]; then
       local log_out
       log_out="$LOG_DIR/indexer_$(date +%s).log"
-      local cmd_str="__mt_hub_index \"$cache_file\" \"$filter_type\" \"$filter_repo\" \"$force_index\""
+      local cmd_str="__mt_hub_index \"$cache_file\" \"$filter_type\" \"$filter_repo\" \"$force_index\" \"$provider_override\""
       __mt_bg_run "mt-hub-indexer" "$log_out" "$cmd_str"
     else
-      __mt_hub_index "$cache_file" "$filter_type" "$filter_repo" "$force_index"
+      __mt_hub_index "$cache_file" "$filter_type" "$filter_repo" "$force_index" "$provider_override"
     fi
     return 0
   fi
