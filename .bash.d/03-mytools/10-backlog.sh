@@ -15,9 +15,10 @@
 # label (plus bug or enhancement) so it surfaces separately from
 # fully-written issues during the next recurring self-audit (see
 # CONTRIBUTING.md).
-# Usage: mt-suggest [-b|--bug] [--context <text>] ["<description>"]
+# Usage: mt-suggest [-b|--bug | -e|--enhancement] [--context <text>] ["<description>"]
 # Options:
 #   -b, --bug             File as a bug (something broken) instead of an enhancement (something missing)
+#   -e, --enhancement     File as an enhancement (something missing) instead of a bug -- skips the interactive prompt just like -b
 #   --context <text>      What you were doing / what you did instead -- omit to be prompted
 #   -h, --help             Show this help menu
 # Arguments:
@@ -43,6 +44,10 @@ mt-suggest() {
     case $1 in
       -b | --bug)
         is_bug="1"
+        bug_given="1"
+        ;;
+      -e | --enhancement)
+        is_bug=""
         bug_given="1"
         ;;
       --context)

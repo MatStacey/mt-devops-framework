@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added `-e` / `--enhancement` flag to `mt-suggest` to explicitly mark suggestions as enhancements and bypass the interactive prompt.
 - Added an interactive directory exclusion feature to the `mt-export` menu to dynamically exclude specific paths and subdirectories before exporting.
 - Updated menu options and help documentation to reflect the addition of interactive path exclusions.
 - Fixed persistent update notification banners by automatically clearing cached update state files upon successful profile updates or up-to-date verifications.
@@ -17,7 +18,6 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 - Enhanced file resolution logic to dynamically merge user-specified exclusion patterns with schema defaults and global blocklists.
 - **Version Detection Fix**: Refined profile update checks to use version-aware sorting (`sort -V`), preventing false "update available" notifications when local checkouts are ahead of remote releases.
 - **Verbose Mode Support**: Added a `-V`/`--verbose` flag to `mt-get-update` along with updated command-line argument parsing.
-- **Quieter Update Runs**: Suppressed routine, non-actionable status messages (such as no-op config migrations) during updates unless verbose output is explicitly enabled.
 
 ---
 
