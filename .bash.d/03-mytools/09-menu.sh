@@ -228,6 +228,17 @@ __mt_menu_toggle_prod_bg_warning() {
 }
 
 #######################################
+# System: Prompt for mt-hub --index's bulk-indexing quota warning
+# threshold via mt-set-hub-index-warning-threshold -- wrapped since
+# __mt_menu_submenu commands can't take inline arguments
+#######################################
+__mt_menu_set_hub_index_warning_threshold() {
+  local threshold
+  read -r -p "Warn when indexing more than how many repos [${HUB_INDEX_WARN_THRESHOLD:-10}]: " threshold < /dev/tty
+  mt-set-hub-index-warning-threshold "${threshold:-${HUB_INDEX_WARN_THRESHOLD:-10}}"
+}
+
+#######################################
 # System: Prompt for freeform gcloud command args and run them via
 # gcl-as-json, since gcloud subcommands are multiple separate tokens
 # (e.g. "compute instances list") rather than one single argument
@@ -425,6 +436,8 @@ __mt_menu_setup_quick() {
     "Set Default IDE (mt-set-default-ide)" __mt_menu_pick_default_ide \
     "Set CI/CD Provider (mt-set-cicd)" __mt_menu_pick_cicd \
     "Toggle AI Integration (mt-toggle-ai)" mt-toggle-ai \
+    "Toggle mt-hub Bulk-Indexing Warning (mt-toggle-hub-index-warning)" mt-toggle-hub-index-warning \
+    "Set mt-hub Bulk-Indexing Warning Threshold (mt-set-hub-index-warning-threshold)" __mt_menu_set_hub_index_warning_threshold \
     "Toggle Format-on-Push (mt-toggle-format-on-push)" mt-toggle-format-on-push \
     "Toggle Update-Divergence Confirmation (mt-toggle-update-confirm)" mt-toggle-update-confirm \
     "Set Git Sync URL (mt-add-sync-url)" __mt_menu_add_sync_url

@@ -130,6 +130,14 @@ def load_env():
     export("AI_MAX_RETRIES", ai_cfg.get("max_retries", 3))
     export("AI_MAX_CONTEXT_FILES", ai_cfg.get("max_context_files", 1000))
     export("AI_MODEL_CHECK_TTL_SEC", ai_cfg.get("model_check_ttl_sec", 86400))
+    export(
+        "HUB_INDEX_WARN_ENABLED",
+        ai_cfg.get("enable_bulk_index_warning", True),
+        to_lower=True,
+    )
+    export(
+        "HUB_INDEX_WARN_THRESHOLD", ai_cfg.get("bulk_index_warning_threshold", 10)
+    )
 
     sys_prompt_file = ai_cfg.get("system_prompt_file", "")
     sys_prompt = ""
