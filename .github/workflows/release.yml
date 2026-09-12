@@ -176,3 +176,31 @@ jobs:
           files: ${{ env.ZIP_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check whether COMMANDS.md changed
+        id: commands_diff
+        run: |
+          if git diff --quiet HEAD~1 HEAD -- COMMANDS.md 2> /dev/null; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # mt-devops-vscode-extension-pack's command palette
+      # ("MT DevOps: Run Command...") is generated from this repo's own
+      # COMMANDS.md but has no checkout of this repo at its own build
+      # time, so it can't just regenerate on every one of its own builds
+      # -- it needs telling when the source actually changed. The
+      # default GITHUB_TOKEN can't write to another repo, so this needs
+      # a real PAT (fine-grained, Contents: Read and write, scoped to
+      # just that one repo) stored as the EXTENSION_PACK_DISPATCH_TOKEN
+      # secret here.
+      - name: Notify mt-devops-vscode-extension-pack
+        if: steps.commands_diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.EXTENSION_PACK_DISPATCH_TOKEN }}
+        run: |
+          gh api repos/MatStacey/mt-devops-vscode-extension-pack/dispatches \
+            -f event_type=framework-commands-updated \
+            -f "client_payload[framework_sha]=${{ github.sha }}" \
+            -f "client_payload[framework_tag]=${{ steps.tag_version.outputs.new_tag }}"
