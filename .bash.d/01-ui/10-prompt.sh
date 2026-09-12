@@ -245,6 +245,9 @@ __cloud_ps1() {
       ai_text="${label_ai}Claude"
       [ "$show_ai_model" = "true" ] && ai_text="${ai_text} (${CLAUDE_VERSION#claude-})"
       [ -z "$CLAUDE_API_KEY" ] && ai_color="${CB_RED}"
+    elif [ "$provider" = "claude-code" ]; then
+      ai_text="${label_ai}Claude Code"
+      [ "$show_ai_model" = "true" ] && [ -n "${CLAUDE_CODE_VERSION:-}" ] && ai_text="${ai_text} (${CLAUDE_CODE_VERSION#claude-})"
     elif [ "$provider" = "local" ]; then
       ai_text="${label_ai}Local"
       [ "$show_ai_model" = "true" ] && ai_text="${ai_text} (${LOCAL_AI_MODEL})"
