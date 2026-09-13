@@ -83,6 +83,105 @@ __mt_hub_detect_test_framework() {
 }
 
 #######################################
+# Repo Hub: Detect Google Cloud Platform usage from a repo's own files.
+# Terraform is the strongest and most specific signal available in a
+# repo's own source -- a "google"/"google-beta" provider block, or any
+# google_* resource type -- so it's checked first and, when present, also
+# yields a human-readable list of the actual GCP products referenced
+# (Cloud Run, GKE, BigQuery, ...) by mapping resource-type prefixes.
+# Falls back to a handful of GCP-specific config files/references
+# (app.yaml, cloudbuild.yaml, gcr.io/pkg.dev/run.googleapis.com
+# mentions) only when there's no Terraform at all, since those are far
+# weaker/noisier signals on their own. Deliberately never tries to
+# extract a project ID -- that's almost always a variable, not a
+# literal, in real Terraform, and guessing wrong would be worse than not
+# showing one.
+# Arguments:
+#   $1 - Repository path
+# Outputs:
+#   Prints a JSON object: {"detected": bool, "source":
+#   "terraform"|"config-files"|"none", "services": [<GCP product names>]}
+#######################################
+__mt_hub_detect_gcp() {
+  local repo_path="$1"
+  local -a tf_files=()
+  while IFS= read -r -d '' f; do tf_files+=("$f"); done < <(
+    find "$repo_path" -name "*.tf" -not -path "*/.terraform/*" -print0 2> /dev/null
+  )
+
+  local detected=false
+  local source="none"
+  local -a services=()
+
+  if [ "${#tf_files[@]}" -gt 0 ]; then
+    if grep -lE 'provider[[:space:]]*"google(-beta)?"' "${tf_files[@]}" > /dev/null 2>&1; then
+      detected=true
+      source="terraform"
+    fi
+
+    local -a resource_types=()
+    while IFS= read -r rtype; do
+      [ -n "$rtype" ] && resource_types+=("$rtype")
+    done < <(grep -hoE 'resource[[:space:]]+"google_[a-z0-9_]+"' "${tf_files[@]}" 2> /dev/null | grep -oE 'google_[a-z0-9_]+' | sort -u)
+
+    if [ "${#resource_types[@]}" -gt 0 ]; then
+      detected=true
+      source="terraform"
+      local rtype
+      for rtype in "${resource_types[@]}"; do
+        case "$rtype" in
+          google_cloud_run_service | google_cloud_run_v2_service | google_cloud_run_v2_job) services+=("Cloud Run") ;;
+          google_container_cluster | google_container_node_pool) services+=("GKE") ;;
+          google_compute_instance | google_compute_instance_template | google_compute_instance_group*) services+=("Compute Engine") ;;
+          google_cloudfunctions_function | google_cloudfunctions2_function) services+=("Cloud Functions") ;;
+          google_sql_database_instance | google_sql_database | google_sql_user) services+=("Cloud SQL") ;;
+          google_bigquery_dataset | google_bigquery_table) services+=("BigQuery") ;;
+          google_pubsub_topic | google_pubsub_subscription) services+=("Pub/Sub") ;;
+          google_storage_bucket) services+=("Cloud Storage") ;;
+          google_app_engine_application) services+=("App Engine") ;;
+          google_firestore_database | google_firestore_index) services+=("Firestore") ;;
+          google_artifact_registry_repository) services+=("Artifact Registry") ;;
+          google_cloudbuild_trigger) services+=("Cloud Build") ;;
+          google_secret_manager_secret*) services+=("Secret Manager") ;;
+          google_kms_crypto_key | google_kms_key_ring) services+=("Cloud KMS") ;;
+          google_dataflow_job) services+=("Dataflow") ;;
+          google_composer_environment) services+=("Cloud Composer") ;;
+          google_spanner_instance | google_spanner_database) services+=("Cloud Spanner") ;;
+          google_bigtable_instance) services+=("Bigtable") ;;
+        esac
+      done
+    fi
+  fi
+
+  if [ "$detected" = false ]; then
+    if [ -f "$repo_path/app.yaml" ] || [ -f "$repo_path/app.yml" ]; then
+      detected=true
+      source="config-files"
+      services+=("App Engine")
+    fi
+    if [ -f "$repo_path/cloudbuild.yaml" ] || [ -f "$repo_path/.cloudbuild.yaml" ] || [ -f "$repo_path/cloudbuild.yml" ]; then
+      detected=true
+      source="config-files"
+      services+=("Cloud Build")
+    fi
+    if grep -qrlE 'gcr\.io|-docker\.pkg\.dev|run\.googleapis\.com|google-github-actions' "$repo_path" \
+      --exclude-dir={.git,node_modules,.terraform,vendor} \
+      --include="Dockerfile" --include="docker-compose*.yml" --include="*.yaml" --include="*.yml" 2> /dev/null; then
+      detected=true
+      source="config-files"
+    fi
+  fi
+
+  local services_json="[]"
+  if [ "${#services[@]}" -gt 0 ]; then
+    services_json=$(printf '%s\n' "${services[@]}" | sort -u | jq -R . | jq -s .)
+  fi
+
+  jq -n --argjson detected "$detected" --arg source "$source" --argjson services "$services_json" \
+    '{detected: $detected, source: $source, services: $services}'
+}
+
+#######################################
 # Repo Hub: Detect a repo's primary language/stack by the most common file
 # extension among its top-level files
 # Arguments:
@@ -317,9 +416,13 @@ __mt_hub_load_existing_keys() {
 #   $7 - CI/CD provider
 #   $8 - Test framework
 #   $9 - Environments (AI-derived JSON array of {name, type}, "[]" if none)
+#   $10 - GCP detection (JSON object from __mt_hub_detect_gcp, defaults to
+#         "not detected" if omitted)
 #######################################
 __mt_hub_write_cache_entry() {
   local cache_file="$1" repo_path="$2" category="$3" description="$4" stack="$5" build="$6" cicd="$7" testing="$8" environments="${9:-[]}"
+  local gcp="${10:-}"
+  [ -z "$gcp" ] && gcp='{"detected": false, "source": "none", "services": []}'
   local lock_file="${cache_file}.lock"
 
   (
@@ -334,8 +437,9 @@ __mt_hub_write_cache_entry() {
       --arg ci "$cicd" \
       --arg t "$testing" \
       --argjson e "$environments" \
+      --argjson g "$gcp" \
       --argjson ts "$(date +%s)" \
-      '.[$r] = {"category": $c, "description": $d, "stack": $s, "build": $b, "cicd": $ci, "testing": $t, "environments": $e, "last_indexed": $ts}' \
+      '.[$r] = {"category": $c, "description": $d, "stack": $s, "build": $b, "cicd": $ci, "testing": $t, "environments": $e, "gcp": $g, "last_indexed": $ts}' \
       "$cache_file" > "$tmp_cache" && mv "$tmp_cache" "$cache_file"
   ) 200> "$lock_file"
 }
@@ -356,17 +460,18 @@ __mt_hub_index_one_repo() {
 
   echo -e "${CB_YELLOW}⚙️  Indexing $repo_name...${C_RESET}"
 
-  local cicd build testing stack
+  local cicd build testing stack gcp
   cicd=$(__mt_hub_detect_cicd "$repo_path")
   build=$(__mt_hub_detect_build_tool "$repo_path")
   testing=$(__mt_hub_detect_test_framework "$repo_path")
   stack=$(__mt_hub_detect_stack "$repo_path")
   stack=$(__mt_hub_reconcile_stack "$build" "$stack")
+  gcp=$(__mt_hub_detect_gcp "$repo_path")
 
   local ai_description="" ai_category="" ai_environments="[]"
   __mt_hub_summarize_repo "$repo_path" "$provider"
 
-  __mt_hub_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing" "$ai_environments"
+  __mt_hub_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing" "$ai_environments" "$gcp"
 
   echo -e "${CB_GREEN}✅ Indexed $repo_name${C_RESET}"
 }
@@ -552,6 +657,12 @@ __mt_hub_preview() {
   test_fw=$(echo "$meta" | jq -r '.testing')
   local last_indexed
   last_indexed=$(echo "$meta" | jq -r '.last_indexed // empty')
+  local gcp_detected
+  gcp_detected=$(echo "$meta" | jq -r '.gcp.detected // false')
+  local gcp_services
+  gcp_services=$(echo "$meta" | jq -r '(.gcp.services // []) | join(", ")')
+  local environments_summary
+  environments_summary=$(echo "$meta" | jq -r '(.environments // []) | map("\(.name) (\(.type))") | join(", ")')
 
   echo -e "${CB_MAGENTA}▶ OVERVIEW${C_RESET}"
   echo -e "${C_RESET}${desc}${C_RESET}\n"
@@ -562,6 +673,12 @@ __mt_hub_preview() {
   echo -e " ${CB_CYAN}Build Tools :${C_RESET} ${build}"
   echo -e " ${CB_CYAN}CI/CD       :${C_RESET} ${cicd}"
   echo -e " ${CB_CYAN}Testing     :${C_RESET} ${test_fw}"
+  if [ "$gcp_detected" = "true" ]; then
+    echo -e " ${CB_CYAN}GCP         :${C_RESET} ${gcp_services:-Detected}"
+  fi
+  if [ -n "$environments_summary" ]; then
+    echo -e " ${CB_CYAN}Environments:${C_RESET} ${environments_summary}"
+  fi
   if [ -n "$last_indexed" ]; then
     local last_indexed_human
     last_indexed_human=$(date -d "@$last_indexed" '+%Y-%m-%d %H:%M' 2> /dev/null || date -r "$last_indexed" '+%Y-%m-%d %H:%M' 2> /dev/null || echo "$last_indexed")
@@ -574,10 +691,14 @@ __mt_hub_preview() {
 
 #######################################
 # Repo Hub: Search the indexed .vcs_hub.json cache -- repo name,
-# description, category, and stack -- for a term (case-insensitive
-# substring match), and print matching repos. Pure read of already-
-# cached data, no AI/network calls; a repo never indexed simply won't
-# match anything, same as it not appearing in the Repo Hub tree at all.
+# description, category, stack, and GCP detection -- for a term
+# (case-insensitive substring match), and print matching repos. The bare
+# term "gcp" matches every repo with any GCP usage detected at all
+# (.gcp.detected), regardless of which specific service(s); a term like
+# "cloud run" or "bigquery" matches only repos referencing that product.
+# Pure read of already-cached data, no AI/network calls; a repo never
+# indexed simply won't match anything, same as it not appearing in the
+# Repo Hub tree at all.
 # Arguments:
 #   $1 - Path to the JSON cache file
 #   $2 - Search term
@@ -592,8 +713,10 @@ __mt_hub_search() {
         (.key | ascii_downcase | contains($t)) or
         ((.value.description // "") | ascii_downcase | contains($t)) or
         ((.value.category // "") | ascii_downcase | contains($t)) or
-        ((.value.stack // "") | ascii_downcase | contains($t))
-      ) | {path: .key, category: .value.category, description: .value.description, stack: .value.stack}]
+        ((.value.stack // "") | ascii_downcase | contains($t)) or
+        (($t == "gcp") and (.value.gcp.detected // false)) or
+        (((.value.gcp.services // []) | join(" ")) | ascii_downcase | contains($t))
+      ) | {path: .key, category: .value.category, description: .value.description, stack: .value.stack, gcp: .value.gcp}]
     ' "$cache_file"
     return 0
   fi
@@ -604,7 +727,9 @@ __mt_hub_search() {
       (.key | ascii_downcase | contains($t)) or
       ((.value.description // "") | ascii_downcase | contains($t)) or
       ((.value.category // "") | ascii_downcase | contains($t)) or
-      ((.value.stack // "") | ascii_downcase | contains($t))
+      ((.value.stack // "") | ascii_downcase | contains($t)) or
+      (($t == "gcp") and (.value.gcp.detected // false)) or
+      (((.value.gcp.services // []) | join(" ")) | ascii_downcase | contains($t))
     ) | [.key, (.value.category // "Unknown"), (.value.description // "No description available.")] | @tsv
   ' "$cache_file")
 
