@@ -175,13 +175,13 @@ __mt_hub_reconcile_stack() {
 #   prompt on different runs. The prompt below already states the full
 #   schema explicitly, so no system prompt is needed here at all.
 # Globals (written, expected pre-declared local by the caller):
-#   ai_description, ai_category
+#   ai_description, ai_category, ai_environments
 #######################################
 __mt_hub_summarize_repo() {
   local repo_path="$1" provider="${2:-${DEFAULT_AI:-gemini}}"
   # shellcheck disable=SC2034  # read via dynamic scope by __ai_query_* in 60-ai.sh
   local AI_SYSTEM_PROMPT=""
-  local ai_prompt="Analyze this repository structure and README. Return ONLY a valid JSON object matching exactly this schema: {\"description\": \"A highly concise 1-sentence description of what this project does\", \"category\": \"Application\" | \"Infrastructure\" | \"CI/CD\" | \"Tooling\" | \"Library\" | \"Dotfiles\" | \"Other\"}"
+  local ai_prompt="Analyze this repository structure and README. Return ONLY a valid JSON object matching exactly this schema: {\"description\": \"A highly concise 1-sentence description of what this project does\", \"category\": \"Application\" | \"Infrastructure\" | \"CI/CD\" | \"Tooling\" | \"Library\" | \"Dotfiles\" | \"Other\", \"environments\": [{\"name\": \"<a deploy/runtime environment this repo targets, e.g. a docker-compose service, k8s namespace, .env file, CI/CD deploy stage, or terraform workspace name>\", \"type\": \"dev\" | \"staging\" | \"prod\" | \"test\" | \"other\"}]}. Return an empty \"environments\" array if the repo has no identifiable deploy/runtime environments (most libraries/tooling repos won't)."
 
   local ctx_file
   ctx_file=$(mktemp)
@@ -195,6 +195,7 @@ __mt_hub_summarize_repo() {
 
   ai_description="No description available."
   ai_category="Unknown"
+  ai_environments="[]"
   [ -z "$ai_res" ] && return 0
 
   local clean_json
@@ -207,6 +208,8 @@ __mt_hub_summarize_repo() {
 
   ai_description=$(echo "$clean_json" | jq -r '.description // "No description available."')
   ai_category=$(echo "$clean_json" | jq -r '.category // "Unknown"')
+  ai_environments=$(echo "$clean_json" | jq -c '.environments // []')
+  echo "$ai_environments" | jq -e . > /dev/null 2>&1 || ai_environments="[]"
 }
 
 #######################################
@@ -313,9 +316,10 @@ __mt_hub_load_existing_keys() {
 #   $6 - Build tool
 #   $7 - CI/CD provider
 #   $8 - Test framework
+#   $9 - Environments (AI-derived JSON array of {name, type}, "[]" if none)
 #######################################
 __mt_hub_write_cache_entry() {
-  local cache_file="$1" repo_path="$2" category="$3" description="$4" stack="$5" build="$6" cicd="$7" testing="$8"
+  local cache_file="$1" repo_path="$2" category="$3" description="$4" stack="$5" build="$6" cicd="$7" testing="$8" environments="${9:-[]}"
   local lock_file="${cache_file}.lock"
 
   (
@@ -329,8 +333,9 @@ __mt_hub_write_cache_entry() {
       --arg b "$build" \
       --arg ci "$cicd" \
       --arg t "$testing" \
+      --argjson e "$environments" \
       --argjson ts "$(date +%s)" \
-      '.[$r] = {"category": $c, "description": $d, "stack": $s, "build": $b, "cicd": $ci, "testing": $t, "last_indexed": $ts}' \
+      '.[$r] = {"category": $c, "description": $d, "stack": $s, "build": $b, "cicd": $ci, "testing": $t, "environments": $e, "last_indexed": $ts}' \
       "$cache_file" > "$tmp_cache" && mv "$tmp_cache" "$cache_file"
   ) 200> "$lock_file"
 }
@@ -358,10 +363,10 @@ __mt_hub_index_one_repo() {
   stack=$(__mt_hub_detect_stack "$repo_path")
   stack=$(__mt_hub_reconcile_stack "$build" "$stack")
 
-  local ai_description="" ai_category=""
+  local ai_description="" ai_category="" ai_environments="[]"
   __mt_hub_summarize_repo "$repo_path" "$provider"
 
-  __mt_hub_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing"
+  __mt_hub_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing" "$ai_environments"
 
   echo -e "${CB_GREEN}✅ Indexed $repo_name${C_RESET}"
 }

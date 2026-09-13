@@ -160,10 +160,11 @@ ALIASEOF
 
 #######################################
 # System: Display history of executed framework commands
-# Usage: mt-cmd-history [-i|--interactive] [-n count]
+# Usage: mt-cmd-history [-i|--interactive] [-n count] [-j|--json]
 # Options:
 #   -i, --interactive  Select a past framework command via fzf to re-run
 #   -n, --lines <num>  Number of entries to show (default: 20)
+#   -j, --json         Print entries as a JSON array ({command}, oldest-last) instead of the numbered list
 #######################################
 mt-cmd-history() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -173,6 +174,7 @@ mt-cmd-history() {
 
   local interactive=false
   local limit=20
+  local json_mode=false
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -181,6 +183,7 @@ mt-cmd-history() {
         limit="$2"
         shift
         ;;
+      -j | --json) json_mode=true ;;
       *)
         echo -e "${CB_RED}🚨 Unknown option: $1${C_RESET}"
         return 1
@@ -223,7 +226,17 @@ mt-cmd-history() {
   rm -f "$tmp_cmds"
 
   if [ ! -s "$tmp_hist" ]; then
-    echo -e "${CB_YELLOW}⚠️ No recorded framework commands found in shell history.${C_RESET}"
+    if [ "$json_mode" = true ]; then
+      echo "[]"
+    else
+      echo -e "${CB_YELLOW}⚠️ No recorded framework commands found in shell history.${C_RESET}"
+    fi
+    rm -f "$tmp_hist"
+    return 0
+  fi
+
+  if [ "$json_mode" = true ]; then
+    jq -R -n -c '[inputs | select(length > 0) | {command: .}]' "$tmp_hist"
     rm -f "$tmp_hist"
     return 0
   fi
