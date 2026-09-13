@@ -217,11 +217,15 @@ git-ai-push-all() {
 }
 
 #######################################
-# Git: Preflight safety checks for AI file generation (.gitignore, README)
+# Git: Repo/root/context-size guards shared by every AI file generation path
+# (.gitignore, README) -- split out from __git_ai_preflight_check so the
+# --update diff-review path can reuse these checks without also getting its
+# unconditional "overwrite?" prompt, which doesn't apply when a diff is
+# about to be shown instead.
 # Arguments:
-#   $1 - Target filename (e.g., .gitignore, README.md)
+#   $1 - Target filename (e.g., .gitignore, README.md), used in messages only
 #######################################
-__git_ai_preflight_check() {
+__git_ai_preflight_repo_checks() {
   local target_file="$1"
 
   if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
@@ -247,6 +251,19 @@ __git_ai_preflight_check() {
     }
   fi
 
+  return 0
+}
+
+#######################################
+# Git: Preflight safety checks for AI file generation (.gitignore, README)
+# Arguments:
+#   $1 - Target filename (e.g., .gitignore, README.md)
+#######################################
+__git_ai_preflight_check() {
+  local target_file="$1"
+
+  __git_ai_preflight_repo_checks "$target_file" || return 1
+
   if [ -f "$target_file" ]; then
     echo -e "${CB_YELLOW}⚠️  A $target_file file already exists.${C_RESET}" >&2
     read -p "Do you want to overwrite it? [y/N] " -n 1 -r < /dev/tty
@@ -261,7 +278,129 @@ __git_ai_preflight_check() {
 }
 
 #######################################
+# Git: Shared implementation behind mt-ai-readme/mt-ai-gitignore -- both are
+# identical logic (generate via AI, optionally diff-review an update against
+# an existing file) parameterized by target filename/prompt-key/ai -t type.
+# Pending regenerated content lives at .git/mt-ai-pending-<target> so it's
+# repo-scoped and self-cleaning, never colliding across repos and never
+# needing a cache-dir hash.
+# Arguments:
+#   $1 - Target filename (e.g., .gitignore, README.md)
+#   $2 - Prompt key for __get_prompt
+#   $3 - ai -t type (e.g. project-readme, project-gitignore)
+#   $@ (from $4) - The calling function's own "$@"
+# Options (via $4+):
+#   -u, --update            Regenerate against an existing file into a
+#                            pending file for review, instead of failing
+#                            without one; no effect if the target is new
+#   -f, --force             With --update, skip the confirmation prompt and
+#                            apply the regenerated content immediately
+#   -j, --json              With --update, print {status, target, pending}
+#                            instead of showing a diff/prompt -- used by
+#                            tooling that reviews the diff itself
+#   --apply-pending         Move a previously generated pending file over
+#                            the target, with no new AI call
+#   --discard-pending       Delete a previously generated pending file
+#######################################
+__git_ai_generate_or_update() {
+  local target_file="$1" prompt_key="$2" ai_type="$3"
+  shift 3
+
+  local update_mode=false force=false json_mode=false action=""
+  for arg in "$@"; do
+    case "$arg" in
+      -u | --update) update_mode=true ;;
+      -f | --force) force=true ;;
+      -j | --json) json_mode=true ;;
+      --apply-pending) action="apply" ;;
+      --discard-pending) action="discard" ;;
+    esac
+  done
+
+  local git_dir
+  git_dir=$(git rev-parse --git-dir 2> /dev/null)
+  if [ -z "$git_dir" ]; then
+    echo -e "${CB_RED}🚨 Error: Not inside a Git repository.${C_RESET}" >&2
+    return 1
+  fi
+  local pending_file="${git_dir}/mt-ai-pending-${target_file}"
+
+  if [ "$action" = "apply" ]; then
+    [ -f "$pending_file" ] || {
+      echo -e "${CB_RED}🚨 No pending ${target_file} update found.${C_RESET}" >&2
+      return 1
+    }
+    mv "$pending_file" "$target_file"
+    echo -e "${CB_GREEN}✅ Applied generated ${target_file}.${C_RESET}"
+    return 0
+  fi
+
+  if [ "$action" = "discard" ]; then
+    rm -f "$pending_file"
+    return 0
+  fi
+
+  # Regenerating against an existing file: write to the pending path instead
+  # of overwriting directly, so the caller can review it first.
+  if [ "$update_mode" = true ] && [ -f "$target_file" ]; then
+    __git_ai_preflight_repo_checks "$target_file" || return 1
+
+    local prompt
+    prompt=$(__get_prompt "$prompt_key")
+
+    echo -e "${CB_BLUE}🤖 Regenerating ${target_file}...${C_RESET}"
+    ai -e -o "$pending_file" -t "$ai_type" "$prompt"
+
+    if [ "$json_mode" = true ]; then
+      jq -n --arg status "pending" --arg target "$(realpath "$target_file")" --arg pending "$(realpath "$pending_file")" \
+        '{status: $status, target: $target, pending: $pending}'
+      return 0
+    fi
+
+    git diff --no-index --color=always -- "$target_file" "$pending_file"
+
+    if [ "$force" = false ]; then
+      read -p "Apply these changes? [y/N] " -n 1 -r < /dev/tty
+      echo > /dev/tty
+      [[ ! $REPLY =~ ^[Yy]$ ]] && {
+        rm -f "$pending_file"
+        echo "🛑 Discarded." >&2
+        return 0
+      }
+    fi
+
+    mv "$pending_file" "$target_file"
+    echo -e "${CB_GREEN}✅ Applied generated ${target_file}.${C_RESET}"
+    return 0
+  fi
+
+  # No existing file to diff against (fresh generation), or --update wasn't
+  # requested -- same direct generate-and-save path as before this feature.
+  __git_ai_preflight_check "$target_file" || return 0
+
+  local prompt
+  prompt=$(__get_prompt "$prompt_key")
+
+  echo -e "${CB_BLUE}🤖 Generating ${target_file}...${C_RESET}"
+  ai -e -o "$target_file" -t "$ai_type" "$prompt"
+
+  if [ "$json_mode" = true ]; then
+    jq -n --arg status "generated" --arg target "$(realpath "$target_file")" '{status: $status, target: $target, pending: null}'
+  fi
+}
+
+#######################################
 # AI: Generate a comprehensive .gitignore for the active repository
+# Usage: mt-ai-gitignore [-u|--update] [-f|--force] [-j|--json]
+#        mt-ai-gitignore --apply-pending|--discard-pending
+# Options:
+#   -u, --update        Regenerate against an existing .gitignore, showing a
+#                        diff before applying (see -f/-j)
+#   -f, --force         With --update, skip the confirmation prompt
+#   -j, --json          With --update, print {status, target, pending} JSON
+#                        instead of showing a diff/prompt
+#   --apply-pending      Apply a previously generated pending .gitignore
+#   --discard-pending    Discard a previously generated pending .gitignore
 #######################################
 mt-ai-gitignore() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -269,17 +408,21 @@ mt-ai-gitignore() {
     return 0
   fi
 
-  __git_ai_preflight_check ".gitignore" || return 0
-
-  local prompt
-  prompt=$(__get_prompt "git_gitignore")
-
-  echo -e "${CB_BLUE}🤖 Analyzing project structure to generate .gitignore...${C_RESET}"
-  ai -e -o ".gitignore" -t "project-gitignore" "$prompt"
+  __git_ai_generate_or_update ".gitignore" "git_gitignore" "project-gitignore" "$@"
 }
 
 #######################################
 # AI: Generate a comprehensive README.md for the active repository
+# Usage: mt-ai-readme [-u|--update] [-f|--force] [-j|--json]
+#        mt-ai-readme --apply-pending|--discard-pending
+# Options:
+#   -u, --update        Regenerate against an existing README.md, showing a
+#                        diff before applying (see -f/-j)
+#   -f, --force         With --update, skip the confirmation prompt
+#   -j, --json          With --update, print {status, target, pending} JSON
+#                        instead of showing a diff/prompt
+#   --apply-pending      Apply a previously generated pending README.md
+#   --discard-pending    Discard a previously generated pending README.md
 #######################################
 mt-ai-readme() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -287,13 +430,7 @@ mt-ai-readme() {
     return 0
   fi
 
-  __git_ai_preflight_check "README.md" || return 0
-
-  local prompt
-  prompt=$(__get_prompt "git_readme")
-
-  echo -e "${CB_BLUE}🤖 Analyzing codebase to generate README.md...${C_RESET}"
-  ai -e -o "README.md" -t "project-readme" "$prompt"
+  __git_ai_generate_or_update "README.md" "git_readme" "project-readme" "$@"
 }
 
 #######################################

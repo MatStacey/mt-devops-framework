@@ -664,16 +664,42 @@ __ai_find_command_source() {
 }
 
 #######################################
-# AI: Explain a terminal command in detail, grounding the explanation in
-# its actual local implementation when one is found under ~/.bash.d
+# AI: Explain a terminal command in detail, grounding the explanation in its
+# actual local implementation when one is found under ~/.bash.d -- or, with
+# -f, explain arbitrary source code (a whole file, or a snippet/selection
+# already written to a temp file by the caller) instead of a command
 # Usage: ai-explain "<command>"
+#        ai-explain -f|--file <file>
 # Arguments:
-#   $1 - Command string to explain
+#   $1 - Command string to explain (default mode)
+# Options:
+#   -f, --file <file>   Explain this file's code instead of looking up a
+#                        command implementation
 #######################################
 ai-explain() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
+  fi
+
+  if [[ "$1" == "-f" || "$1" == "--file" ]]; then
+    local code_file="$2"
+    if [ -z "$code_file" ] || [ ! -f "$code_file" ]; then
+      echo "Usage: ai-explain -f <file>" >&2
+      return 1
+    fi
+
+    ai \
+      -t "code-explanation" \
+      -f "$code_file" \
+      "Explain what this code does.
+
+Cover:
+- purpose and overall logic flow
+- key functions/classes and what they do
+- edge cases handled (or not handled)
+- any bugs or risks you notice"
+    return
   fi
 
   if [ -z "$1" ]; then
