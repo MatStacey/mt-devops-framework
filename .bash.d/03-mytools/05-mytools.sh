@@ -42,7 +42,12 @@ __rebuild_mytools_cache() {
 
     local current_cat="" current_type=""
 
-    while IFS=$'\t' read -r type cat name desc; do
+    # The TSV has a 5th column (source FILENAME, used elsewhere for flag
+    # completion) that this listing never displays -- naming it here
+    # (rather than leaving read to fold it onto $desc, its default
+    # behavior when a line has more fields than named variables) is what
+    # actually keeps every file path off this output.
+    while IFS=$'\t' read -r type cat name desc _source_file; do
       [ -z "$name" ] && continue
 
       if [ "$type" != "$current_type" ]; then
@@ -832,7 +837,11 @@ HDR
     echo "" >> "$out_file"
 
     local current_cat=""
-    while IFS=$'\t' read -r type cat name desc; do
+    # Same 5-column-TSV/4-variable-read mismatch as __rebuild_mytools_cache
+    # above -- without naming the 5th (FILENAME) column here, read folds it
+    # onto the end of $desc, leaking a source path into the "> $desc" line
+    # below.
+    while IFS=$'\t' read -r type cat name desc _source_file; do
       [ "$type" != "func" ] && continue
 
       if [ "$cat" != "$current_cat" ]; then
