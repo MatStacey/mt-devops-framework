@@ -40,6 +40,16 @@ __check_updates() {
           count=0
         fi
       else
+        # `apt list --upgradable` only reflects whatever's already cached in
+        # /var/lib/apt/lists -- without a periodic refresh (e.g. no systemd
+        # apt-daily timer, common on WSL) that index can go stale for a long
+        # time, silently under-reporting real upgrades until something else
+        # (sys-update/sys-install) finally runs a real `apt update`. `sudo -n`
+        # refreshes it here too when possible, but never prompts or blocks
+        # this background job -- if passwordless sudo isn't set up, it just
+        # fails silently and this falls back to the previous (stale-index)
+        # behavior rather than hanging or leaking a password prompt.
+        sudo -n apt-get update -qq > /dev/null 2>&1
         count=$(apt list --upgradable 2> /dev/null | grep -c -v 'Listing...')
       fi
 
