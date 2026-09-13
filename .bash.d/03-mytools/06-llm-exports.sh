@@ -24,9 +24,11 @@ __mt_export_calc_output_name() {
 # LLM: Resolve the active export schema and build the filtered file list
 # Globals (read, set by mt-export):
 #   schemas_dir, schema_query, target_dir, user_exclude -- comma-separated
-#   folder names (see mt-export's --exclude) matched anywhere in a
-#   file's path, on top of whatever the schema's own exclude_patterns
-#   and EXPORT_BLOCKLIST already filter out
+#   folder/file path segments (see mt-export's --exclude) matched anywhere
+#   in a file's path, exclude_ext -- comma-separated file extensions (see
+#   mt-export's --exclude-ext) matched only at the end of a file's name,
+#   on top of whatever the schema's own exclude_patterns and
+#   EXPORT_BLOCKLIST already filter out
 # Globals (written):
 #   schema_file, s_name, s_inc, s_exc, all_files, file_list
 #######################################
@@ -75,6 +77,26 @@ __mt_export_build_file_lists() {
     grep -E -vi "(${combined_exc})" "$file_list" > "${file_list}.filtered"
     mv "${file_list}.filtered" "$file_list"
   fi
+
+  if [ -n "$exclude_ext" ]; then
+    local -a exts=()
+    IFS=',' read -ra exts <<< "$exclude_ext"
+    local ext
+    local -a ext_patterns=()
+    for ext in "${exts[@]}"; do
+      ext="${ext#.}"
+      [ -n "$ext" ] && ext_patterns+=("\\.${ext}\$")
+    done
+    if [ "${#ext_patterns[@]}" -gt 0 ]; then
+      local ext_regex
+      ext_regex=$(
+        IFS='|'
+        echo "${ext_patterns[*]}"
+      )
+      grep -E -vi "(${ext_regex})" "$file_list" > "${file_list}.filtered"
+      mv "${file_list}.filtered" "$file_list"
+    fi
+  fi
 }
 
 #######################################
@@ -108,6 +130,42 @@ __mt_export_print_plan() {
   echo -e " ${CB_YELLOW}📄 Total Files   :${C_RESET} $total_files"
   echo -e " ${CB_YELLOW}🗂️  Extensions   :${C_RESET} $ext_list"
   echo -e "${CB_BLUE}----------------------------------------------------------${C_RESET}"
+}
+
+#######################################
+# LLM: Print the export plan as a single JSON object instead of the
+# colorized summary -- headless equivalent of __mt_export_print_plan, for
+# a caller (the VS Code extension's export wizard) that wants the same
+# numbers without a terminal to render them in. Never writes the export
+# itself; the caller re-invokes mt-export without -p/--plan once the
+# user confirms.
+# Globals (read, set by mt-export):
+#   file_list, target_dir, dest_dir, base_out_name, schema_query, s_name, out_ext
+#######################################
+__mt_export_print_plan_json() {
+  local total_files
+  total_files=$(wc -l < "$file_list")
+  local total_bytes=0
+  if [ "$total_files" -gt 0 ]; then
+    total_bytes=$(tr < "$file_list" '\n' '\0' | xargs -0 wc -c 2> /dev/null | tail -n 1 | awk '{print $1}')
+  fi
+  [ -z "$total_bytes" ] && total_bytes=0
+
+  local extensions_json
+  extensions_json=$(awk -F. '{if (NF>1) print $NF}' "$file_list" | sort -u | jq -R . | jq -s .)
+  [ -z "$extensions_json" ] && extensions_json="[]"
+
+  jq -n \
+    --arg target_dir "$(realpath "$target_dir")" \
+    --arg export_dir "$dest_dir" \
+    --arg output_file "${base_out_name}.${out_ext}" \
+    --arg schema "$schema_query" \
+    --arg schema_name "$s_name" \
+    --arg format "$out_ext" \
+    --argjson total_files "$total_files" \
+    --argjson total_bytes "$total_bytes" \
+    --argjson extensions "$extensions_json" \
+    '{status: "ok", target_dir: $target_dir, export_dir: $export_dir, output_file: $output_file, schema: $schema, schema_name: $schema_name, format: $format, total_files: $total_files, total_bytes: $total_bytes, extensions: $extensions}'
 }
 
 #######################################
@@ -251,7 +309,12 @@ __mt_export_plan_mode() {
 # LLM: Enforce file-count safety limits before running a full export
 # Usage: __mt_export_check_file_count_guards; then check $? (1 = abort)
 # Globals (read, set by mt-export):
-#   file_list, all_files, target_dir, schema_query, plan_mode, interactive_mode
+#   file_list, all_files, target_dir, schema_query, plan_mode,
+#   interactive_mode, json_mode -- a json_mode caller has no /dev/tty to
+#   prompt on, so it skips the warn-threshold confirmation and proceeds
+#   automatically (the GUI/script driving it is expected to have shown
+#   its own plan and gotten explicit confirmation already); the hard
+#   max_files killswitch below still applies unconditionally either way
 # Returns:
 #   0 to proceed, 1 if the export should be aborted
 #######################################
@@ -270,7 +333,7 @@ __mt_export_check_file_count_guards() {
     echo -e "${CB_RED}🚨 KILLSWITCH: $total_files files detected. Export aborted to prevent system lockup and LLM overload.${C_RESET}"
     rm -f "$file_list" "$all_files"
     return 1
-  elif [ "$total_files" -gt "$warn_files" ] && [ "$plan_mode" = false ] && [ "$interactive_mode" = false ]; then
+  elif [ "$total_files" -gt "$warn_files" ] && [ "$plan_mode" = false ] && [ "$interactive_mode" = false ] && [ "$json_mode" = false ]; then
     echo -e "${CB_YELLOW}⚠️ Warning: $total_files files detected. This may exceed AI context limits.${C_RESET}"
     read -r -p "Proceed anyway? [y/N] " -n 1 < /dev/tty
     echo
@@ -315,7 +378,8 @@ __mt_export_write_context_file() {
 #######################################
 # LLM: Write the final export artifact (zip or plain copy) and open its folder
 # Globals (read, set by mt-export):
-#   zip_out, dest_dir, base_out_name, out_ext, tmp_file, file_list, all_files, quiet_mode, target_dir
+#   zip_out, dest_dir, base_out_name, out_ext, tmp_file, file_list, all_files,
+#   quiet_mode, target_dir, json_mode
 #######################################
 __mt_export_finalize() {
   local final_out="${dest_dir}/${base_out_name}.${out_ext}"
@@ -324,31 +388,52 @@ __mt_export_finalize() {
   else
     cp "$tmp_file" "$final_out"
   fi
-  echo -e "${CB_GREEN}✅ Export saved to $final_out${C_RESET}"
-  echo -e "${CB_YELLOW}📂 Target Dir    :${C_RESET} $(realpath "$target_dir")"
+
+  if [ "$json_mode" = true ]; then
+    local total_files total_bytes
+    total_files=$(wc -l < "$file_list")
+    total_bytes=$(wc -c < "$final_out" 2> /dev/null || echo 0)
+    jq -n --arg output_file "$final_out" --argjson total_files "$total_files" --argjson total_bytes "$total_bytes" \
+      '{status: "ok", output_file: $output_file, total_files: $total_files, total_bytes: $total_bytes}'
+  else
+    echo -e "${CB_GREEN}✅ Export saved to $final_out${C_RESET}"
+    echo -e "${CB_YELLOW}📂 Target Dir    :${C_RESET} $(realpath "$target_dir")"
+  fi
 
   rm -f "$tmp_file" "$file_list" "$all_files"
 
-  if [ "$quiet_mode" = false ] && type __open_path_gui > /dev/null 2>&1; then
+  # A json_mode caller (the extension's export wizard) shows its own
+  # "View Exports" affordance -- popping the OS file browser open here
+  # too would just be a surprise window on top of the webview.
+  if [ "$quiet_mode" = false ] && [ "$json_mode" = false ] && type __open_path_gui > /dev/null 2>&1; then
     __open_path_gui "$dest_dir" 2> /dev/null || true
   fi
 }
 
 #######################################
 # LLM: Export codebase to text/zip for LLM context window using dynamic schemas
-# Usage: mt-export [-d dir] [-s schema] [-e folder[,folder...]] [-z] [-q] [-p] [-v] [-i]
+# Usage: mt-export [-d dir] [-s schema] [-e folder[,folder...]] [-x ext[,ext...]] [-z] [-q] [-p] [-v] [-i] [-j]
 # Options:
 #   -d, --dir <path>     Target directory to export (default: current directory)
-#   -s, --schema <name>  Export schema to apply (default, terraform, shell, python, springboot)
-#   -e, --exclude <folder>[,<folder>...]  Extra folder name(s) to exclude, on top of
+#   -s, --schema <name>  Export schema to apply (default, terraform, shell, python, springboot, cloudrun)
+#   -e, --exclude <folder>[,<folder>...]  Extra folder/file path(s) to exclude, on top of
 #                        the schema's own exclude_patterns and EXPORT_BLOCKLIST
 #                        (repeatable, and/or comma-separated; matched anywhere in
 #                        a file's path, e.g. -e vendor,test-fixtures)
+#   -x, --exclude-ext <ext>[,<ext>...]  Extra file extension(s) to exclude (e.g. log,tmp,map),
+#                        matched only at the end of a file's name -- unlike -e, this
+#                        excludes an extension everywhere it appears, not one specific path
 #   -z, --zip            Compress output into a .zip file
 #   -q, --quiet          Do not automatically open the output directory
 #   -p, --plan           Dry-run: show estimated size and included files, prompt to proceed
 #   -v, --verbose        Show detailed terraform-style plan of inclusions/exclusions
 #   -i, --interactive    Open an interactive menu to adjust export files, format, schema, and exclusions
+#   -j, --json           Headless JSON output, for a caller with no /dev/tty to prompt on
+#                        (e.g. the VS Code extension's export wizard). Combined with
+#                        --plan, prints one JSON plan object and exits without writing
+#                        anything -- no prompts, not even the file-count warning.
+#                        Without --plan, runs the export for real and prints a JSON
+#                        result object instead of the colorized summary.
 #######################################
 mt-export() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -359,11 +444,13 @@ mt-export() {
   local target_dir="."
   local schema_query="default"
   local user_exclude=""
+  local exclude_ext=""
   local zip_out=false
   local quiet_mode=false
   local plan_mode=false
   local verbose_mode=false
   local interactive_mode=false
+  local json_mode=false
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -379,11 +466,16 @@ mt-export() {
         user_exclude="${user_exclude:+$user_exclude,}$2"
         shift
         ;;
+      -x | --exclude-ext)
+        exclude_ext="${exclude_ext:+$exclude_ext,}$2"
+        shift
+        ;;
       -z | --zip) zip_out=true ;;
       -q | --quiet) quiet_mode=true ;;
       -p | --plan) plan_mode=true ;;
       -v | --verbose) verbose_mode=true ;;
       -i | --interactive) interactive_mode=true ;;
+      -j | --json) json_mode=true ;;
       *) target_dir="$1" ;;
     esac
     shift
@@ -424,13 +516,18 @@ mt-export() {
     __mt_export_interactive_menu
     [ "$__mt_export_aborted" = true ] && return 0
   elif [ "$plan_mode" = true ]; then
+    if [ "$json_mode" = true ]; then
+      __mt_export_print_plan_json
+      rm -f "$tmp_file" "$file_list" "$all_files"
+      return 0
+    fi
     __mt_export_plan_mode
     [ "$__mt_export_aborted" = true ] && return 0
   fi
 
   __mt_export_check_file_count_guards || return 1
 
-  if [ "$plan_mode" = false ] && [ "$interactive_mode" = false ]; then
+  if [ "$plan_mode" = false ] && [ "$interactive_mode" = false ] && [ "$json_mode" = false ]; then
     echo -e "${CB_BLUE}📦 Running: $s_name${C_RESET}"
   fi
 
