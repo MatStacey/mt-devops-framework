@@ -139,7 +139,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | Command | Description |
 |---|---|
 | `ai` | AI: Query configured LLM with prompt and optional context |
-| `ai-explain` | AI: Explain a terminal command in detail, grounding the explanation in |
+| `ai-explain` | AI: Explain a terminal command in detail, grounding the explanation in its |
 | `mt-ai-debug` | AI: Debug and explain the last failed terminal command |
 | `mt-ai-models` | AI: Print the live model catalog for one or both cloud providers, |
 | `mt-ai-quota` | AI: Check API quota and rate limits for the active AI provider |
