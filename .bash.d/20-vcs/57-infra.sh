@@ -279,4 +279,11 @@ __mt_hub_infra_show() {
     fi
     echo -e " ${CB_CYAN}${label}:${C_RESET} $items"
   done
+
+  local gcp_scan
+  gcp_scan=$(echo "$infra" | jq -r '.gcp_scan // empty')
+  if [ -n "$gcp_scan" ] && [ "$gcp_scan" != "null" ]; then
+    echo ""
+    __mt_hub_gcp_scan_show "$gcp_scan"
+  fi
 }
