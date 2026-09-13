@@ -285,6 +285,11 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `mt-bulk-update` | Git: Bulk-update every local repository under VCS_ROOT -- fetches each |
 
+### Git: Dependency Vulnerability Audit
+| Command | Description |
+|---|---|
+| `mt-audit-deps` | Repo: Run a dependency vulnerability audit for the current directory's |
+
 ### Google Style Code Formatting
 | Command | Description |
 |---|---|
