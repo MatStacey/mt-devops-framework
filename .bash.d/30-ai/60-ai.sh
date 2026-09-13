@@ -352,13 +352,30 @@ __ai_query_claude_code() {
 
   echo "⏳ Querying Claude Code (${final_model:-default model})..." >&2
 
-  local response is_error content
-  response=$(claude "${claude_cli_args[@]}" 2>&1)
+  # `< /dev/null`: without an explicit stdin, `claude -p` waits ~3s then
+  # prints a "Warning: no stdin data received..." line to stderr before
+  # its real --output-format json payload on stdout -- explicitly closing
+  # stdin (the CLI's own suggested fix) skips that wait and the warning
+  # entirely. Even so, stdout/stderr are captured separately (never
+  # merged via 2>&1 into the same variable) as defense in depth: `jq`
+  # requires its whole input to be valid JSON, so any stray diagnostic
+  # line landing ahead of the payload -- this one or a future one --
+  # would silently break `is_error`/`content` parsing below and fall
+  # through to "Unknown"/"No description available." at every caller,
+  # exactly as happened here before this fix.
+  local response stderr_output is_error content
+  local stderr_file
+  stderr_file=$(mktemp)
+  response=$(claude "${claude_cli_args[@]}" < /dev/null 2> "$stderr_file")
+  stderr_output=$(cat "$stderr_file")
+  rm -f "$stderr_file"
+
   is_error=$(echo "$response" | jq -r '.is_error' 2> /dev/null)
   content=$(echo "$response" | jq -r '.result // empty' 2> /dev/null)
 
   if [ "$is_error" != "false" ] || [ -z "$content" ]; then
     echo -e "\n${CB_RED}🚨 Error: Claude Code query failed.${C_RESET}" >&2
+    [ -n "$stderr_output" ] && echo "$stderr_output" >&2
     echo "$response" >&2
     return 100
   fi
