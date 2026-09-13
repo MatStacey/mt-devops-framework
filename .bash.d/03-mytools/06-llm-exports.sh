@@ -27,8 +27,11 @@ __mt_export_calc_output_name() {
 #   folder/file path segments (see mt-export's --exclude) matched anywhere
 #   in a file's path, exclude_ext -- comma-separated file extensions (see
 #   mt-export's --exclude-ext) matched only at the end of a file's name,
-#   on top of whatever the schema's own exclude_patterns and
-#   EXPORT_BLOCKLIST already filter out
+#   on top of whatever the schema's own exclude_patterns,
+#   EXPORT_BLOCKLIST (filename-based secret patterns), and
+#   EXPORT_IGNORE_DIRS (llm_exports.dir_ignore_glob -- vendored/build
+#   directories excluded unconditionally, e.g. node_modules/.venv) already
+#   filter out
 # Globals (written):
 #   schema_file, s_name, s_inc, s_exc, all_files, file_list
 #######################################
@@ -54,6 +57,31 @@ __mt_export_build_file_lists() {
 
   local combined_exc="$s_exc"
   [ "$combined_exc" = "null" ] || [ "$combined_exc" = '""' ] && combined_exc=""
+
+  # EXPORT_IGNORE_DIRS (llm_exports.dir_ignore_glob in config.yaml, e.g.
+  # ".git|node_modules|.venv|.terraform|target") was documented and
+  # exported by config_manager.py but never actually consumed here --
+  # every real export silently included vendored/build directories in
+  # full. Applied unconditionally, same as EXPORT_BLOCKLIST above, since
+  # config.yaml already documents this as the framework's own default
+  # ignore list, not an opt-in.
+  if [ -n "$EXPORT_IGNORE_DIRS" ]; then
+    local -a ignore_dirs=()
+    IFS='|' read -ra ignore_dirs <<< "$EXPORT_IGNORE_DIRS"
+    local dir_glob
+    local -a ignore_patterns=()
+    for dir_glob in "${ignore_dirs[@]}"; do
+      [ -n "$dir_glob" ] && ignore_patterns+=("(^|/)${dir_glob//\*/.*}(/|$)")
+    done
+    if [ "${#ignore_patterns[@]}" -gt 0 ]; then
+      local ignore_regex
+      ignore_regex=$(
+        IFS='|'
+        echo "${ignore_patterns[*]}"
+      )
+      combined_exc="${combined_exc:+$combined_exc|}$ignore_regex"
+    fi
+  fi
 
   if [ -n "$user_exclude" ]; then
     local -a exclude_dirs=()
