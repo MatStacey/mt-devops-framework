@@ -123,6 +123,22 @@ __mt_bulk_update_render_table() {
 }
 
 #######################################
+# Git: Render mt-bulk-update's collected per-repo results as a JSON array,
+# same fields/order as the colored table -- for the VS Code sidebar's
+# per-repo/category/bulk "Pull if behind" actions.
+# Arguments:
+#   $1 - Path to the pipe-delimited results file
+#######################################
+__mt_bulk_update_render_json() {
+  local results_file="$1"
+  sort -t'|' -k1,1 "$results_file" |
+    jq -R -n -c '
+      [inputs | select(length > 0) | split("|") |
+        {repo: .[0], branch: .[1], status: .[2], pushed: .[3], ahead: (.[4] | tonumber), behind: (.[5] | tonumber)}]
+    '
+}
+
+#######################################
 # Git: Walk VCS_ROOT, apply the given filters, and pull-update every
 # matching repo's default branch -- the worker mt-bulk-update runs
 # either inline or, via __mt_bg_run, as a background job.
@@ -131,11 +147,12 @@ __mt_bulk_update_render_table() {
 #   $2 - Provider filter ("" or exact name)
 #   $3 - Workspace filter ("" or exact name)
 #   $4 - Project filter ("" or exact repo folder name)
+#   $5 - "true" to print the results as JSON instead of the colored table
 # Globals:
 #   VCS_ROOT
 #######################################
 __mt_bulk_update_run() {
-  local scope="$1" provider="$2" workspace="$3" project="$4"
+  local scope="$1" provider="$2" workspace="$3" project="$4" json_mode="${5:-false}"
   local vcs_root="${VCS_ROOT:-$HOME/vcs}"
 
   if [ ! -d "$vcs_root" ]; then
@@ -143,7 +160,7 @@ __mt_bulk_update_run() {
     return 1
   fi
 
-  echo -e "${CB_BLUE}🔄 Bulk-updating repositories under ${vcs_root} (pull-only, never pushes)...${C_RESET}"
+  [ "$json_mode" = true ] || echo -e "${CB_BLUE}🔄 Bulk-updating repositories under ${vcs_root} (pull-only, never pushes)...${C_RESET}"
 
   local results_file
   results_file=$(mktemp)
@@ -155,18 +172,57 @@ __mt_bulk_update_run() {
     ((++total))
     __mt_vcs_matches_filter "$repo_path" "$scope" "$provider" "$workspace" "$project" || continue
     ((++matched))
-    echo -e "${C_DIM}  Checking ${repo_path#"$vcs_root"/}...${C_RESET}"
+    [ "$json_mode" = true ] || echo -e "${C_DIM}  Checking ${repo_path#"$vcs_root"/}...${C_RESET}"
     __mt_bulk_update_repo "$repo_path" "$results_file"
   done < <(__mt_vcs_find_repos "$vcs_root")
 
   if [ "$matched" -eq 0 ]; then
-    echo -e "${CB_YELLOW}⚠️  No repositories matched the given filters (${total} scanned).${C_RESET}"
+    if [ "$json_mode" = true ]; then
+      echo "[]"
+    else
+      echo -e "${CB_YELLOW}⚠️  No repositories matched the given filters (${total} scanned).${C_RESET}"
+    fi
     rm -f "$results_file"
     return 0
   fi
 
-  echo
-  __mt_bulk_update_render_table "$results_file"
+  if [ "$json_mode" = true ]; then
+    __mt_bulk_update_render_json "$results_file"
+  else
+    echo
+    __mt_bulk_update_render_table "$results_file"
+  fi
+  rm -f "$results_file"
+}
+
+#######################################
+# Git: Pull-update a single repo given its absolute path directly,
+# bypassing the scope/provider/workspace/project filter tree entirely --
+# for the VS Code sidebar's per-repo "Pull if behind" action, where the
+# repo is already known by path and none of those filters apply cleanly
+# to targeting exactly one repo (in work scope, -pr/--project matches a
+# whole grouping of many repos, not a single one).
+# Arguments:
+#   $1 - Absolute repo path
+#   $2 - "true" to print the result as JSON instead of the colored table
+#######################################
+__mt_bulk_update_run_single() {
+  local repo_path="$1" json_mode="${2:-false}"
+
+  if [ ! -d "$repo_path" ] || ! git -C "$repo_path" rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 Error: '${repo_path}' is not a git repository.${C_RESET}" >&2
+    return 1
+  fi
+
+  local results_file
+  results_file=$(mktemp)
+  __mt_bulk_update_repo "$repo_path" "$results_file"
+
+  if [ "$json_mode" = true ]; then
+    __mt_bulk_update_render_json "$results_file"
+  else
+    __mt_bulk_update_render_table "$results_file"
+  fi
   rm -f "$results_file"
 }
 
@@ -183,13 +239,16 @@ __mt_bulk_update_run() {
 # current branch has ever been pushed to its remote, and how far ahead/
 # behind it is of the (now-updated) default branch.
 # Usage: mt-bulk-update [-s work|personal] [-p provider] [-w workspace]
-#                       [-pr project] [-b|--bg|--background]
+#                       [-pr project] [-b|--bg|--background] [-j|--json]
+#        mt-bulk-update --repo <path> [-j|--json]
 # Options:
 #   -s, --scope <work|personal>   Only update repos under this scope
 #   -p, --provider <name>         Only update repos under this provider (work scope only, e.g. bitbucket)
 #   -w, --workspace <name>        Only update repos under this workspace (work scope only, e.g. rentokilinitial)
 #   -pr, --project <name>         Only update repos under this project (work scope; e.g. cloudconnect groups many repos) or this exact repo (personal scope)
-#   -b, --bg, --background        Run as a background job -- see 'mt-jobs' to monitor/view its log
+#   --repo <path>                 Update exactly this repo by absolute path, bypassing every other filter
+#   -b, --bg, --background        Run as a background job -- see 'mt-jobs' to monitor/view its log (ignored with --repo/--json)
+#   -j, --json                    Print results as a JSON array instead of the colored table
 #   -h, --help                    Show this help
 # Globals:
 #   VCS_ROOT
@@ -200,7 +259,7 @@ mt-bulk-update() {
     return 0
   fi
 
-  local scope="" provider="" workspace="" project="" run_bg=false
+  local scope="" provider="" workspace="" project="" repo_path="" run_bg=false json_mode=false
 
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -224,23 +283,33 @@ mt-bulk-update() {
         project="$2"
         shift 2
         ;;
+      --repo)
+        repo_path="$2"
+        shift 2
+        ;;
       -b | --bg | --background)
         run_bg=true
         shift
         ;;
+      -j | --json)
+        json_mode=true
+        shift
+        ;;
       *)
-        echo "Usage: mt-bulk-update [-s work|personal] [-p provider] [-w workspace] [-pr project] [-b|--background]" >&2
+        echo "Usage: mt-bulk-update [-s work|personal] [-p provider] [-w workspace] [-pr project] [-b|--background] [-j|--json] | --repo <path> [-j|--json]" >&2
         return 1
         ;;
     esac
   done
 
-  if [ "$run_bg" = true ]; then
+  if [ -n "$repo_path" ]; then
+    __mt_bulk_update_run_single "$repo_path" "$json_mode"
+  elif [ "$run_bg" = true ]; then
     local log_out
     log_out="$LOG_DIR/bulk_update_$(date +%s).log"
     local cmd_str="__mt_bulk_update_run \"$scope\" \"$provider\" \"$workspace\" \"$project\""
     __mt_bg_run "mt-bulk-update" "$log_out" "$cmd_str"
   else
-    __mt_bulk_update_run "$scope" "$provider" "$workspace" "$project"
+    __mt_bulk_update_run "$scope" "$provider" "$workspace" "$project" "$json_mode"
   fi
 }
