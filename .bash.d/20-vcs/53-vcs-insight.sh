@@ -573,6 +573,52 @@ __mt_hub_preview() {
 }
 
 #######################################
+# Repo Hub: Search the indexed .vcs_hub.json cache -- repo name,
+# description, category, and stack -- for a term (case-insensitive
+# substring match), and print matching repos. Pure read of already-
+# cached data, no AI/network calls; a repo never indexed simply won't
+# match anything, same as it not appearing in the Repo Hub tree at all.
+# Arguments:
+#   $1 - Path to the JSON cache file
+#   $2 - Search term
+#   $3 - "true" to print matches as a JSON array instead of a table
+#######################################
+__mt_hub_search() {
+  local cache_file="$1" term="$2" json_mode="$3"
+
+  if [ "$json_mode" = true ]; then
+    jq --arg t "${term,,}" '
+      [to_entries[] | select(
+        (.key | ascii_downcase | contains($t)) or
+        ((.value.description // "") | ascii_downcase | contains($t)) or
+        ((.value.category // "") | ascii_downcase | contains($t)) or
+        ((.value.stack // "") | ascii_downcase | contains($t))
+      ) | {path: .key, category: .value.category, description: .value.description, stack: .value.stack}]
+    ' "$cache_file"
+    return 0
+  fi
+
+  local matches
+  matches=$(jq -r --arg t "${term,,}" '
+    to_entries[] | select(
+      (.key | ascii_downcase | contains($t)) or
+      ((.value.description // "") | ascii_downcase | contains($t)) or
+      ((.value.category // "") | ascii_downcase | contains($t)) or
+      ((.value.stack // "") | ascii_downcase | contains($t))
+    ) | [.key, (.value.category // "Unknown"), (.value.description // "No description available.")] | @tsv
+  ' "$cache_file")
+
+  if [ -z "$matches" ]; then
+    echo -e "${CB_YELLOW}⚠️  No indexed repos match \"${term}\".${C_RESET}"
+    return 0
+  fi
+
+  while IFS=$'\t' read -r repo_path category description; do
+    echo -e "${CB_CYAN}${repo_path}${C_RESET} ${C_DIM}[${category}]${C_RESET} - ${description}"
+  done <<< "$matches"
+}
+
+#######################################
 # System: Interactive AI-powered Repository Dashboard. An unfiltered
 # --index run also prunes cache entries for repos no longer found on
 # disk (moved, renamed, or deleted) before indexing.
@@ -595,6 +641,10 @@ __mt_hub_preview() {
 #                              without changing your actual default provider
 #   --preview <repo>           Show cached metadata for one repo (by absolute path or
 #                              bare repo name) and exit
+#   --search <term>            Search the indexed cache (name, description, category,
+#                              stack) for a term and print matches, then exit
+#   -j, --json                 With --search, print matches as a JSON array instead
+#                              of a table
 #   -h, --help                 Show this help menu
 #######################################
 mt-hub() {
@@ -609,6 +659,8 @@ mt-hub() {
   local filter_type=""
   local filter_repo=""
   local provider_override=""
+  local search_term=""
+  local json_mode=false
 
   # Argument parsing
   while [[ "$#" -gt 0 ]]; do
@@ -637,6 +689,11 @@ mt-hub() {
         __mt_hub_preview "$2" "$cache_file"
         return 0
         ;;
+      --search)
+        search_term="$2"
+        shift
+        ;;
+      -j | --json) json_mode=true ;;
       -h | --help)
         mt-help "${FUNCNAME[0]}"
         return 0
@@ -648,6 +705,11 @@ mt-hub() {
     esac
     shift
   done
+
+  if [ -n "$search_term" ]; then
+    __mt_hub_search "$cache_file" "$search_term" "$json_mode"
+    return 0
+  fi
 
   if [ "$do_index" = true ]; then
     if [ "$run_bg" = true ]; then
