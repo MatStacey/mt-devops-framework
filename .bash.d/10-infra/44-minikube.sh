@@ -42,9 +42,12 @@ __mk_pick_profile() {
 #######################################
 # Minikube: Dashboard summarizing a local cluster's lifecycle state --
 # profile, driver, and Host/Kubelet/APIServer status.
-# Usage: mk-status [profile]
+# Usage: mk-status [profile] [-j|--json]
 # Arguments:
 #   $1 - (Optional) Profile name. Defaults to "minikube".
+# Options:
+#   -j, --json   Print the same fields as one JSON object instead of the
+#                colorized dashboard
 #######################################
 mk-status() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -53,10 +56,24 @@ mk-status() {
   fi
   __mk_ensure_installed || return 1
 
-  local profile="${1:-minikube}"
+  local profile="minikube"
+  local json_mode=false
+  for arg in "$@"; do
+    case "$arg" in
+      -j | --json) json_mode=true ;;
+      *) profile="$arg" ;;
+    esac
+  done
+
+  # A non-existent profile doesn't make minikube print nothing -- it
+  # exits non-zero and prints a stream of CloudEvents-shaped error
+  # objects on stdout (one per line), which is non-empty and would
+  # otherwise slip past a plain `[ -z ]` check; jq then runs against
+  # each of those lines as a separate input, silently duplicating every
+  # field ("unknown\nunknown"...) instead of showing the "no cluster"
+  # message. The exit code is the only reliable signal here.
   local status_json
-  status_json=$(minikube status -p "$profile" -o json 2> /dev/null)
-  if [ -z "$status_json" ]; then
+  if ! status_json=$(minikube status -p "$profile" -o json 2> /dev/null); then
     echo -e "${CB_YELLOW}⚠️  No minikube cluster found for profile '${profile}'. Run 'mk-start' first.${C_RESET}"
     return 1
   fi
@@ -66,6 +83,13 @@ mk-status() {
   kubelet=$(echo "$status_json" | jq -r '.Kubelet // "unknown"')
   apiserver=$(echo "$status_json" | jq -r '.APIServer // "unknown"')
   driver=$(minikube profile list -o json 2> /dev/null | jq -r --arg p "$profile" '.valid[]? | select(.Name==$p) | .Config.Driver // "unknown"')
+
+  if [ "$json_mode" = true ]; then
+    jq -n --arg profile "$profile" --arg driver "${driver:-unknown}" --arg host "$host" \
+      --arg kubelet "$kubelet" --arg apiserver "$apiserver" \
+      '{profile: $profile, driver: $driver, host: $host, kubelet: $kubelet, apiserver: $apiserver}'
+    return
+  fi
 
   echo -e "${CB_BLUE}==========================================================${C_RESET}"
   echo -e "${CB_BLUE}              MINIKUBE STATUS                              ${C_RESET}"

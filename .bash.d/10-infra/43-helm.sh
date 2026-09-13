@@ -23,7 +23,10 @@ __helm_ensure_ready() {
 # Helm: Dashboard summarizing helm's view of the active context -- CLI
 # version, release count across all namespaces, and configured repo
 # count.
-# Usage: helm-status
+# Usage: helm-status [-j|--json]
+# Options:
+#   -j, --json   Print the same fields as one JSON object instead of the
+#                colorized dashboard
 #######################################
 helm-status() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -31,12 +34,21 @@ helm-status() {
     return 0
   fi
   __helm_ensure_ready || return 1
+  local json_mode=false
+  [[ "$1" == "-j" || "$1" == "--json" ]] && json_mode=true
 
   local ctx version releases repos
   ctx=$(kubectl config current-context 2> /dev/null)
   version=$(helm version --short 2> /dev/null)
   releases=$(helm list -A --short 2> /dev/null | wc -l | tr -d ' ')
   repos=$(helm repo list -o json 2> /dev/null | jq 'length' 2> /dev/null)
+
+  if [ "$json_mode" = true ]; then
+    jq -n --arg context "$ctx" --arg version "${version:-unknown}" \
+      --argjson releases "${releases:-0}" --argjson repos "${repos:-0}" \
+      '{context: $context, version: $version, releases: $releases, repos: $repos}'
+    return
+  fi
 
   echo -e "${CB_BLUE}==========================================================${C_RESET}"
   echo -e "${CB_BLUE}              HELM STATUS                                  ${C_RESET}"
@@ -114,9 +126,11 @@ helm-search() {
 
 #######################################
 # Helm: List releases in a clean table
-# Usage: helm-list [-A]
+# Usage: helm-list [-A] [-j|--json]
 # Options:
-#   -A  Show releases across all namespaces
+#   -A           Show releases across all namespaces
+#   -j, --json   Print releases via helm's own full JSON output (always
+#                all-namespaces, regardless of -A) instead of the table
 #######################################
 helm-list() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -125,7 +139,18 @@ helm-list() {
   fi
   __helm_ensure_ready || return 1
 
-  if [[ "$1" == "-A" ]]; then
+  local all_namespaces=false
+  local json_mode=false
+  for arg in "$@"; do
+    case "$arg" in
+      -A) all_namespaces=true ;;
+      -j | --json) json_mode=true ;;
+    esac
+  done
+
+  if [ "$json_mode" = true ]; then
+    helm list --all-namespaces -o json
+  elif [ "$all_namespaces" = true ]; then
     helm list --all-namespaces
   else
     helm list
@@ -260,7 +285,16 @@ helm-rollback() {
 #######################################
 # Helm: Uninstall a release, always confirmed via the destructive-op
 # guard first -- the one genuinely irreversible action in this file.
-# Usage: helm-uninstall
+# Usage: helm-uninstall [<release> [-n <namespace>]]
+# Arguments:
+#   $1 - (Optional) Release name. Omit to fzf-pick from the current
+#        namespace interactively; given explicitly, skips both the
+#        picker and the fzf dependency entirely (e.g. for a caller that
+#        already knows the exact release, like the VS Code companion's
+#        own confirmation dialog).
+# Options:
+#   -n, --namespace <ns>   Release's namespace, if not the current one
+#                          (only meaningful with an explicit release name)
 #######################################
 helm-uninstall() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -269,11 +303,27 @@ helm-uninstall() {
   fi
   __helm_ensure_ready || return 1
 
-  local release
-  release=$(helm list --short 2> /dev/null | fzf --prompt="⎈  Select Release to Uninstall > " --height=~10 --layout=reverse --border)
+  local release="" namespace=""
+  if [[ -n "$1" && "$1" != "-n" && "$1" != "--namespace" ]]; then
+    release="$1"
+    shift
+  fi
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -n | --namespace)
+        namespace="$2"
+        shift
+        ;;
+    esac
+    shift
+  done
+
   if [ -z "$release" ]; then
-    echo -e "${CB_YELLOW}⚠️  Selection cancelled.${C_RESET}"
-    return 0
+    release=$(helm list --short 2> /dev/null | fzf --prompt="⎈  Select Release to Uninstall > " --height=~10 --layout=reverse --border)
+    if [ -z "$release" ]; then
+      echo -e "${CB_YELLOW}⚠️  Selection cancelled.${C_RESET}"
+      return 0
+    fi
   fi
 
   __k8s_confirm_destructive "About to uninstall release ${release}." || {
@@ -281,7 +331,11 @@ helm-uninstall() {
     return 1
   }
 
-  helm uninstall "$release" && echo -e "${CB_GREEN}✅ Uninstalled ${release}.${C_RESET}"
+  if [ -n "$namespace" ]; then
+    helm uninstall "$release" -n "$namespace" && echo -e "${CB_GREEN}✅ Uninstalled ${release}.${C_RESET}"
+  else
+    helm uninstall "$release" && echo -e "${CB_GREEN}✅ Uninstalled ${release}.${C_RESET}"
+  fi
 }
 
 # Load helm's own bash completion for release/repo/chart names.
