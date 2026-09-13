@@ -83,6 +83,66 @@ __mt_hub_detect_test_framework() {
 }
 
 #######################################
+# Repo Hub: Find a repo's default branch -- origin/HEAD's target when the
+# remote-tracking symbolic ref is set (the accurate answer, since it's
+# resolved from the actual remote, not guessed), falling back to whatever
+# branch is currently checked out (the best available guess on a fresh
+# clone/mirror where origin/HEAD was never fetched).
+# Arguments:
+#   $1 - Repository path
+# Outputs:
+#   Prints the default branch name, or nothing if neither is resolvable
+#   (e.g. a repo with no commits yet)
+#######################################
+__mt_hub_default_branch() {
+  local repo_path="$1"
+  local branch
+  branch=$(git -C "$repo_path" symbolic-ref refs/remotes/origin/HEAD 2> /dev/null | sed 's@^refs/remotes/origin/@@')
+  [ -z "$branch" ] && branch=$(git -C "$repo_path" branch --show-current 2> /dev/null)
+  echo "$branch"
+}
+
+#######################################
+# Repo Hub: Count commits per author on a repo's default branch over a
+# lookback window, for the top-contributors summary shown in the Repo
+# Hub/Repo Report -- name and last-commit date only (no email), ordered
+# highest-commit-count first, capped at 5. A repo with no commits in the
+# window (or no resolvable default branch at all) yields an empty array
+# rather than an error, same as every other index-time heuristic here.
+# Arguments:
+#   $1 - Repository path
+#   $2 - Lookback window in months (see CONTRIBUTOR_LOOKBACK_MONTHS /
+#        git.contributor_lookback_months in config.yaml)
+# Outputs:
+#   Prints a JSON array: [{name, commits, last_commit: <epoch>}, ...]
+#   (up to 5 entries, sorted by commits descending)
+#######################################
+__mt_hub_detect_top_contributors() {
+  local repo_path="$1" lookback_months="${2:-12}"
+  local default_branch
+  default_branch=$(__mt_hub_default_branch "$repo_path")
+  [ -z "$default_branch" ] && {
+    jq -n '[]'
+    return 0
+  }
+
+  local log_output
+  log_output=$(git -C "$repo_path" log "$default_branch" --since="${lookback_months} months ago" --format='%aN|%at' 2> /dev/null)
+  [ -z "$log_output" ] && {
+    jq -n '[]'
+    return 0
+  }
+
+  echo "$log_output" | awk -F'|' '
+    { count[$1]++; if ($2 > last[$1]) last[$1] = $2 }
+    END { for (name in count) print count[name] "\t" last[name] "\t" name }
+  ' | sort -t $'\t' -k1,1 -rn | head -n5 | jq -R -s '
+    split("\n") | map(select(length > 0) | split("\t")) |
+    map({name: .[2], commits: (.[0] | tonumber), last_commit: (.[1] | tonumber)})
+  '
+}
+
+#######################################
 # Repo Hub: Detect Google Cloud Platform usage from a repo's own files.
 # Terraform is the strongest and most specific signal available in a
 # repo's own source -- a "google"/"google-beta" provider block, or any
@@ -418,11 +478,14 @@ __mt_hub_load_existing_keys() {
 #   $9 - Environments (AI-derived JSON array of {name, type}, "[]" if none)
 #   $10 - GCP detection (JSON object from __mt_hub_detect_gcp, defaults to
 #         "not detected" if omitted)
+#   $11 - Top contributors (JSON array from __mt_hub_detect_top_contributors,
+#         defaults to "[]" if omitted)
 #######################################
 __mt_hub_write_cache_entry() {
   local cache_file="$1" repo_path="$2" category="$3" description="$4" stack="$5" build="$6" cicd="$7" testing="$8" environments="${9:-[]}"
   local gcp="${10:-}"
   [ -z "$gcp" ] && gcp='{"detected": false, "source": "none", "services": []}'
+  local top_contributors="${11:-[]}"
   local lock_file="${cache_file}.lock"
 
   (
@@ -438,8 +501,9 @@ __mt_hub_write_cache_entry() {
       --arg t "$testing" \
       --argjson e "$environments" \
       --argjson g "$gcp" \
+      --argjson tc "$top_contributors" \
       --argjson ts "$(date +%s)" \
-      '.[$r] = {"category": $c, "description": $d, "stack": $s, "build": $b, "cicd": $ci, "testing": $t, "environments": $e, "gcp": $g, "last_indexed": $ts}' \
+      '.[$r] = {"category": $c, "description": $d, "stack": $s, "build": $b, "cicd": $ci, "testing": $t, "environments": $e, "gcp": $g, "top_contributors": $tc, "last_indexed": $ts}' \
       "$cache_file" > "$tmp_cache" && mv "$tmp_cache" "$cache_file"
   ) 200> "$lock_file"
 }
@@ -466,18 +530,19 @@ __mt_hub_index_one_repo() {
 
   echo -e "${CB_YELLOW}⚙️  Indexing $repo_name...${C_RESET}"
 
-  local cicd build testing stack gcp
+  local cicd build testing stack gcp top_contributors
   cicd=$(__mt_hub_detect_cicd "$repo_path")
   build=$(__mt_hub_detect_build_tool "$repo_path")
   testing=$(__mt_hub_detect_test_framework "$repo_path")
   stack=$(__mt_hub_detect_stack "$repo_path")
   stack=$(__mt_hub_reconcile_stack "$build" "$stack")
   gcp=$(__mt_hub_detect_gcp "$repo_path")
+  top_contributors=$(__mt_hub_detect_top_contributors "$repo_path" "${CONTRIBUTOR_LOOKBACK_MONTHS:-12}")
 
   local ai_description="" ai_category="" ai_environments="[]"
   __mt_hub_summarize_repo "$repo_path" "$provider"
 
-  __mt_hub_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing" "$ai_environments" "$gcp"
+  __mt_hub_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing" "$ai_environments" "$gcp" "$top_contributors"
 
   if [ "$run_infra" = true ]; then
     local infra_json infra_status
@@ -685,6 +750,8 @@ __mt_hub_preview() {
   gcp_services=$(echo "$meta" | jq -r '(.gcp.services // []) | join(", ")')
   local environments_summary
   environments_summary=$(echo "$meta" | jq -r '(.environments // []) | map("\(.name) (\(.type))") | join(", ")')
+  local top_contributors_summary
+  top_contributors_summary=$(echo "$meta" | jq -r '(.top_contributors // []) | map("\(.name) (\(.commits) commits, last: \(.last_commit | gmtime | strftime("%Y-%m-%d")))") | join(", ")' 2> /dev/null)
 
   echo -e "${CB_MAGENTA}▶ OVERVIEW${C_RESET}"
   echo -e "${C_RESET}${desc}${C_RESET}\n"
@@ -700,6 +767,9 @@ __mt_hub_preview() {
   fi
   if [ -n "$environments_summary" ]; then
     echo -e " ${CB_CYAN}Environments:${C_RESET} ${environments_summary}"
+  fi
+  if [ -n "$top_contributors_summary" ]; then
+    echo -e " ${CB_CYAN}Top Contribs:${C_RESET} ${top_contributors_summary}"
   fi
   if [ -n "$last_indexed" ]; then
     local last_indexed_human
