@@ -208,6 +208,9 @@ def load_env():
     )
     export("BITBUCKET_SERVER", git_cfg.get("bitbucket_server", ""))
     export("BITBUCKET_WORKSPACE", git_cfg.get("bitbucket_workspace", ""))
+    # mt-hub's own top-contributors heuristic (20-vcs/53-vcs-insight.sh) --
+    # how far back its `git log` window looks, in months.
+    export("CONTRIBUTOR_LOOKBACK_MONTHS", git_cfg.get("contributor_lookback_months", 12))
 
     # Paths
     export(

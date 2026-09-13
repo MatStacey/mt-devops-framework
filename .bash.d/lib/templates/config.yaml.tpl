@@ -69,6 +69,10 @@ git:
   # from the URL and has to be configured instead.
   bitbucket_server: ""
   bitbucket_workspace: ""
+  # How many months back mt-hub's own top-contributors heuristic (indexed
+  # into .vcs_hub.json alongside category/description/stack) looks when
+  # counting commits per author on a repo's default branch.
+  contributor_lookback_months: 12
 
 llm_exports:
   enable_auto_cleanup: true
