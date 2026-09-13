@@ -446,15 +446,21 @@ __mt_hub_write_cache_entry() {
 
 #######################################
 # Repo Hub: Run all heuristics and AI summarization for one repo and
-# persist the result into the JSON cache
+# persist the result into the JSON cache. Optionally also runs the
+# Terraform infrastructure overview (see .bash.d/20-vcs/57-infra.sh)
+# immediately after, into its own cache file -- skipped silently (not an
+# error) for a repo with no Terraform at all.
 # Arguments:
 #   $1 - Repository path
 #   $2 - Path to the JSON cache file
 #   $3 - Provider override (gemini, claude, claude-code, local); empty
 #        falls back to DEFAULT_AI
+#   $4 - run_infra (true/false, default false) -- also generate the
+#        Terraform infrastructure overview for this repo
+#   $5 - Path to the infra JSON cache file (required if $4 is true)
 #######################################
 __mt_hub_index_one_repo() {
-  local repo_path="$1" cache_file="$2" provider="$3"
+  local repo_path="$1" cache_file="$2" provider="$3" run_infra="${4:-false}" infra_cache_file="$5"
   local repo_name
   repo_name=$(basename "$repo_path")
 
@@ -472,6 +478,16 @@ __mt_hub_index_one_repo() {
   __mt_hub_summarize_repo "$repo_path" "$provider"
 
   __mt_hub_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing" "$ai_environments" "$gcp"
+
+  if [ "$run_infra" = true ]; then
+    local infra_json infra_status
+    infra_json=$(__mt_hub_infra_analyze_repo "$repo_path")
+    infra_status=$(echo "$infra_json" | jq -r '.status')
+    if [ "$infra_status" = "ok" ]; then
+      __mt_hub_infra_write_cache_entry "$infra_cache_file" "$repo_path" "$infra_json"
+      echo -e "${CB_GREEN}✅ Infrastructure overview generated for $repo_name${C_RESET}"
+    fi
+  fi
 
   echo -e "${CB_GREEN}✅ Indexed $repo_name${C_RESET}"
 }
@@ -529,7 +545,7 @@ __mt_hub_prune_stale_entries() {
 # quota warning and (when run from a real terminal) asks for
 # confirmation before proceeding; a non-interactive run (e.g. -b) just
 # gets the warning printed and continues.
-# Usage: __mt_hub_index <cache_file> <filter_type> <filter_repo> <force_reindex> <provider> <update_missing>
+# Usage: __mt_hub_index <cache_file> <filter_type> <filter_repo> <force_reindex> <provider> <update_missing> [run_infra] [infra_cache_file]
 # Globals:
 #   VCS_ROOT, HUB_INDEX_WARN_ENABLED, HUB_INDEX_WARN_THRESHOLD
 # Arguments:
@@ -541,6 +557,10 @@ __mt_hub_prune_stale_entries() {
 #        falls back to DEFAULT_AI
 #   $6 - update_missing (true/false) -- re-index an already-cached repo
 #        anyway if its entry has a gap (see __mt_hub_load_existing_keys)
+#   $7 - run_infra (true/false, default false) -- also generate each
+#        indexed repo's Terraform infrastructure overview (see
+#        .bash.d/20-vcs/57-infra.sh)
+#   $8 - Path to the infra JSON cache file (required if $7 is true)
 #######################################
 __mt_hub_index() {
   local cache_file="$1"
@@ -549,6 +569,8 @@ __mt_hub_index() {
   local force_reindex="$4"
   local provider="$5"
   local update_missing="$6"
+  local run_infra="${7:-false}"
+  local infra_cache_file="$8"
   local search_dir="${VCS_ROOT:-$HOME/vcs}"
 
   local msg_suffix=""
@@ -594,7 +616,7 @@ __mt_hub_index() {
   for repo_path in "${repos[@]}"; do
     __mt_hub_should_index "$repo_path" "$search_dir" "$filter_type" "$filter_repo" "$force_reindex" "$update_missing" || continue
     processed=$((processed + 1))
-    __mt_hub_index_one_repo "$repo_path" "$cache_file" "$provider"
+    __mt_hub_index_one_repo "$repo_path" "$cache_file" "$provider" "$run_infra" "$infra_cache_file"
   done
 
   if [ "$processed" -eq 0 ]; then
@@ -747,7 +769,7 @@ __mt_hub_search() {
 # System: Interactive AI-powered Repository Dashboard. An unfiltered
 # --index run also prunes cache entries for repos no longer found on
 # disk (moved, renamed, or deleted) before indexing.
-# Usage: mt-hub [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>]] [--preview <repo>]
+# Usage: mt-hub [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>] [--infra]] [--infra [-t <type>] [-r <name>]] [--show-infra <repo>] [--preview <repo>]
 # Options:
 #   --index                    Scan and build the AI metadata cache
 #   -b, --bg, --background     Run the index scan as a background job (with --index)
@@ -764,6 +786,17 @@ __mt_hub_search() {
 #                              (gemini, claude, claude-code, local) -- e.g. to
 #                              save Claude usage by indexing with Gemini instead
 #                              without changing your actual default provider
+#   --infra                    Generate a Terraform infrastructure overview (resources
+#                              grouped by category -- compute/networking/storage/
+#                              database/messaging/IAM/data/other -- plus providers and
+#                              modules used) for every repo matching -t/-r that contains
+#                              Terraform, into a separate cache (.vcs_infra.json). No AI
+#                              call, heuristic only -- safe to combine with --index (runs
+#                              right after each repo's normal indexing step) or use on
+#                              its own against already-indexed repos. Repos with no
+#                              Terraform are silently skipped, not recorded.
+#   --show-infra <repo>        Show the cached infrastructure overview for one repo (by
+#                              absolute path or bare repo name) and exit
 #   --preview <repo>           Show cached metadata for one repo (by absolute path or
 #                              bare repo name) and exit
 #   --search <term>            Search the indexed cache (name, description, category,
@@ -777,6 +810,9 @@ mt-hub() {
   mkdir -p "$(dirname "$cache_file")"
   [ ! -f "$cache_file" ] && echo "{}" > "$cache_file"
 
+  local infra_cache_file="$CACHE_DIR/.vcs_infra.json"
+  [ ! -f "$infra_cache_file" ] && echo "{}" > "$infra_cache_file"
+
   local do_index=false
   local run_bg=false
   local force_index=false
@@ -786,6 +822,8 @@ mt-hub() {
   local provider_override=""
   local search_term=""
   local json_mode=false
+  local run_infra=false
+  local show_infra_repo=""
 
   # Argument parsing
   while [[ "$#" -gt 0 ]]; do
@@ -818,6 +856,11 @@ mt-hub() {
         search_term="$2"
         shift
         ;;
+      --infra) run_infra=true ;;
+      --show-infra)
+        show_infra_repo="$2"
+        shift
+        ;;
       -j | --json) json_mode=true ;;
       -h | --help)
         mt-help "${FUNCNAME[0]}"
@@ -836,19 +879,30 @@ mt-hub() {
     return 0
   fi
 
-  if [ "$do_index" = true ]; then
-    if [ "$run_bg" = true ]; then
-      local log_out
-      log_out="$LOG_DIR/indexer_$(date +%s).log"
-      local cmd_str="__mt_hub_index \"$cache_file\" \"$filter_type\" \"$filter_repo\" \"$force_index\" \"$provider_override\" \"$update_missing\""
-      __mt_bg_run "mt-hub-indexer" "$log_out" "$cmd_str"
-    else
-      __mt_hub_index "$cache_file" "$filter_type" "$filter_repo" "$force_index" "$provider_override" "$update_missing"
-    fi
+  if [ -n "$show_infra_repo" ]; then
+    __mt_hub_infra_show "$show_infra_repo" "$infra_cache_file" "$json_mode"
     return 0
   fi
 
   local search_dir="${VCS_ROOT:-$HOME/vcs}"
+
+  if [ "$do_index" = true ]; then
+    if [ "$run_bg" = true ]; then
+      local log_out
+      log_out="$LOG_DIR/indexer_$(date +%s).log"
+      local cmd_str="__mt_hub_index \"$cache_file\" \"$filter_type\" \"$filter_repo\" \"$force_index\" \"$provider_override\" \"$update_missing\" \"$run_infra\" \"$infra_cache_file\""
+      __mt_bg_run "mt-hub-indexer" "$log_out" "$cmd_str"
+    else
+      __mt_hub_index "$cache_file" "$filter_type" "$filter_repo" "$force_index" "$provider_override" "$update_missing" "$run_infra" "$infra_cache_file"
+    fi
+    return 0
+  fi
+
+  if [ "$run_infra" = true ]; then
+    __mt_hub_infra_run "$search_dir" "$filter_type" "$filter_repo" "$infra_cache_file"
+    return 0
+  fi
+
   local tmp_out
   tmp_out=$(mktemp)
 
