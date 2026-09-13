@@ -839,7 +839,7 @@ __mt_hub_search() {
 # System: Interactive AI-powered Repository Dashboard. An unfiltered
 # --index run also prunes cache entries for repos no longer found on
 # disk (moved, renamed, or deleted) before indexing.
-# Usage: mt-hub [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>] [--infra]] [--infra [-t <type>] [-r <name>]] [--show-infra <repo>] [--preview <repo>]
+# Usage: mt-hub [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>] [--infra]] [--infra [-t <type>] [-r <name>]] [--show-infra <repo>] [--preview <repo>] [--scan-gcp -r <repo> [--gcp-project <id>]]
 # Options:
 #   --index                    Scan and build the AI metadata cache
 #   -b, --bg, --background     Run the index scan as a background job (with --index)
@@ -867,6 +867,15 @@ __mt_hub_search() {
 #                              Terraform are silently skipped, not recorded.
 #   --show-infra <repo>        Show the cached infrastructure overview for one repo (by
 #                              absolute path or bare repo name) and exit
+#   --scan-gcp                 Check every google_* resource in one repo's already-generated
+#                              infrastructure overview (run --infra first) against a live GCP
+#                              project via `gcloud ... list` -- deployed/not-deployed, console
+#                              links, and a red/amber/green sync status (green = all deployed,
+#                              red = none, amber = partial). Existence-based only, not a real
+#                              `terraform plan` drift check. Requires -r/--repo; on-demand
+#                              only, never run automatically by --index/--infra
+#   --gcp-project <id>         GCP project to scan against (with --scan-gcp). Defaults to
+#                              gcloud's own active project (`gcloud config get-value project`)
 #   --preview <repo>           Show cached metadata for one repo (by absolute path or
 #                              bare repo name) and exit
 #   --search <term>            Search the indexed cache (name, description, category,
@@ -894,6 +903,8 @@ mt-hub() {
   local json_mode=false
   local run_infra=false
   local show_infra_repo=""
+  local run_scan_gcp=false
+  local gcp_project_override=""
 
   # Argument parsing
   while [[ "$#" -gt 0 ]]; do
@@ -931,6 +942,11 @@ mt-hub() {
         show_infra_repo="$2"
         shift
         ;;
+      --scan-gcp) run_scan_gcp=true ;;
+      --gcp-project)
+        gcp_project_override="$2"
+        shift
+        ;;
       -j | --json) json_mode=true ;;
       -h | --help)
         mt-help "${FUNCNAME[0]}"
@@ -951,6 +967,51 @@ mt-hub() {
 
   if [ -n "$show_infra_repo" ]; then
     __mt_hub_infra_show "$show_infra_repo" "$infra_cache_file" "$json_mode"
+    return 0
+  fi
+
+  if [ "$run_scan_gcp" = true ]; then
+    if [ -z "$filter_repo" ]; then
+      echo -e "${CB_RED}🚨 --scan-gcp requires -r/--repo <name>.${C_RESET}"
+      return 1
+    fi
+
+    if ! __mt_hub_gcp_available; then
+      echo -e "${CB_RED}🚨 gcloud CLI not found or no active credentialed account. Run 'gcloud auth login' first.${C_RESET}"
+      return 1
+    fi
+
+    local scan_project="$gcp_project_override"
+    [ -z "$scan_project" ] && scan_project=$(gcloud config get-value project 2> /dev/null)
+    if [ -z "$scan_project" ]; then
+      echo -e "${CB_RED}🚨 No GCP project set. Pass --gcp-project <id> or run 'gcloud config set project <id>' first.${C_RESET}"
+      return 1
+    fi
+
+    local infra_entry
+    infra_entry=$(jq -c --arg name "$filter_repo" '
+      [to_entries[] | select((.key | split("/") | last) == $name)] | .[0].value // empty
+    ' "$infra_cache_file" 2> /dev/null)
+    if [ -z "$infra_entry" ] || [ "$infra_entry" == "null" ]; then
+      echo -e "${CB_YELLOW}⚠️  No infrastructure overview found for \"${filter_repo}\". Run 'mt-hub --infra -r ${filter_repo}' first.${C_RESET}"
+      return 1
+    fi
+
+    local resolved_repo_path
+    resolved_repo_path=$(jq -r --arg name "$filter_repo" '
+      to_entries[] | select((.key | split("/") | last) == $name) | .key
+    ' "$infra_cache_file" 2> /dev/null | head -n1)
+
+    echo -e "${CB_BLUE}🔍 Scanning ${filter_repo}'s Terraform resources against GCP project '${scan_project}'...${C_RESET}"
+    local scan_result
+    scan_result=$(__mt_hub_gcp_scan_repo "$infra_entry" "$scan_project")
+    __mt_hub_infra_write_gcp_scan "$infra_cache_file" "$resolved_repo_path" "$scan_result"
+
+    if [ "$json_mode" = true ]; then
+      echo "$scan_result"
+    else
+      __mt_hub_gcp_scan_show "$scan_result"
+    fi
     return 0
   fi
 
