@@ -289,6 +289,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | Command | Description |
 |---|---|
 | `mt-audit-deps` | Repo: Run a dependency vulnerability audit for the current directory's |
+| `mt-deps-outdated` | Repo: Check whether the current directory's project has newer versions |
 
 ### Google Style Code Formatting
 | Command | Description |
@@ -362,11 +363,6 @@ Complex bash functions, framework utilities, and automated workflows.
 | Command | Description |
 |---|---|
 | `mt-speedtest` | Networking: Run an internet speed test via the Ookla Speedtest CLI, |
-
-### <parent> POM itself (easy to miss by hand, since a parent-version bump
-| Command | Description |
-|---|---|
-| `mt-deps-outdated` | Repo: Check whether the current directory's project has newer versions |
 
 ### Path & URL Launchers (Config-Driven)
 | Command | Description |

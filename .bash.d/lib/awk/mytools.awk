@@ -5,9 +5,18 @@ BEGIN {
     doc_desc = ""
 }
 
-# 1. Category Header Tracking
-/^# [-=]{10,}/ {
-    if (prev_line ~ /^# [^=A-Za-z0-9]*[A-Za-z0-9]/ && prev2_line ~ /^# [-=]{10,}/) {
+# 1. Category Header Tracking -- a separator line is "# " followed by
+# nothing but dashes/equals to the end of the line. Anchored at both ends
+# (^...$) rather than the interval form ("{10,}", at least 10 in a row):
+# confirmed against this system's actual /usr/bin/awk (mawk 1.3.4) that
+# its interval-expression support is broken for this pattern -- it
+# matched a docstring line with only 5 dash/equals characters scattered
+# across it, nowhere near 10 consecutive, silently mis-detecting it as a
+# new category header. The anchored form needs no interval syntax at all
+# and is also a more precise match on what a real separator line actually
+# looks like (the *entire* line, not just some run within it).
+/^# [-=]+$/ {
+    if (prev_line ~ /^# [^=A-Za-z0-9]*[A-Za-z0-9]/ && prev2_line ~ /^# [-=]+$/) {
         cat_name = substr(prev_line, 3)
         sub(/^[ \t]+/, "", cat_name)
         sub(/[ \t#]+$/, "", cat_name)
