@@ -95,12 +95,23 @@ def load_env():
     cicd_cfg = d.get("cicd") or {}
     disp_cfg = d.get("display") or {}
     mk_cfg = d.get("minikube") or {}
+    java_cfg = d.get("java") or {}
 
     # CI/CD
     export(
         "CICD_PROVIDER",
         cicd_cfg.get("default_provider", cicd_cfg.get("provider", "github")),
         to_lower=True,
+    )
+
+    # Java/Maven -- ad-hoc plugin versions for mt-audit-deps/mt-deps-outdated
+    export(
+        "DEPENDENCY_CHECK_PLUGIN_VERSION",
+        java_cfg.get("dependency_check_plugin_version", "9.2.0"),
+    )
+    export(
+        "VERSIONS_PLUGIN_VERSION",
+        java_cfg.get("versions_plugin_version", "2.16.2"),
     )
 
     # Core

@@ -98,6 +98,17 @@ server:
 cicd:
   default_provider: github
 
+java:
+  # Pinned plugin versions for mt-audit-deps/mt-deps-outdated's ad-hoc Maven
+  # goal invocations (org.owasp:dependency-check-maven and org.codehaus.mojo:
+  # versions-maven-plugin). Neither plugin is declared in any project's own
+  # pom.xml -- they're invoked directly off the command line against
+  # whatever repo you're standing in -- so there's no natural version to
+  # inherit from the project itself. Bump these as newer plugin releases
+  # come out; see each plugin's own release notes for what's new.
+  dependency_check_plugin_version: "9.2.0"
+  versions_plugin_version: "2.16.2"
+
 minikube:
   driver: docker
   cpus: 2

@@ -293,7 +293,7 @@ Complex bash functions, framework utilities, and automated workflows.
 ### Google Style Code Formatting
 | Command | Description |
 |---|---|
-| `google-fmt` | Formats Python and Shell scripts according to Google Style Guides. |
+| `google-fmt` | Formats Python, Shell, and Java source according to Google Style Guides. |
 
 ### Helm (Kubernetes Package Manager) Tools
 | Command | Description |
@@ -363,6 +363,11 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `mt-speedtest` | Networking: Run an internet speed test via the Ookla Speedtest CLI, |
 
+### <parent> POM itself (easy to miss by hand, since a parent-version bump
+| Command | Description |
+|---|---|
+| `mt-deps-outdated` | Repo: Check whether the current directory's project has newer versions |
+
 ### Path & URL Launchers (Config-Driven)
 | Command | Description |
 |---|---|
@@ -388,6 +393,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-add-claude-key` | AI: Interactively add or update your Claude API key |
 | `mt-add-dockerhub-secret` | System: Interactively add or update your Docker Hub credentials, |
 | `mt-add-gemini-key` | AI: Interactively add or update your Gemini API key |
+| `mt-add-nvd-key` | Repo: Interactively add or update your NVD (National Vulnerability |
 | `mt-secrets` | System: Interactive menu for managing the framework's supported |
 
 ### System Diagnostics ("mt-doctor")

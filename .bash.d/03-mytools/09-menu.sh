@@ -849,7 +849,10 @@ __mt_menu_utilities_dev() {
     "Install pip Requirements (pip-load)" __mt_menu_pip_load \
     "Save pip Requirements (pip-save)" __mt_menu_pip_save \
     "Maven Clean Install (mci)" __mt_menu_mci \
-    "Spring Boot Run (boot-run)" __mt_menu_boot_run
+    "Spring Boot Run (boot-run)" __mt_menu_boot_run \
+    "Dependency Vulnerability Audit (mt-audit-deps)" mt-audit-deps \
+    "Check for Outdated Dependencies (mt-deps-outdated)" mt-deps-outdated \
+    "Add NVD API Key (mt-add-nvd-key)" mt-add-nvd-key
 }
 
 #######################################
