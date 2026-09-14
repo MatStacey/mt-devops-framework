@@ -239,6 +239,7 @@ __install_terraform() {
 
   elif command -v apt-get > /dev/null 2>&1; then
     local codename=""
+    # shellcheck disable=SC1091  # /etc/os-release is dynamic, not a repo file to follow
     [ -f /etc/os-release ] && codename="$(. /etc/os-release && echo "$VERSION_CODENAME")"
     if [ -z "$codename" ]; then
       echo "🚨 Could not detect the OS codename required for HashiCorp's APT repo."
@@ -363,6 +364,56 @@ __install_kubectl() {
 }
 
 #######################################
+# System: Install google-java-format -- Homebrew's own formula on macOS;
+# on Linux (no apt/deb package exists for it) a direct JAR download from
+# its GitHub releases into ~/.local/share, wrapped by a small ~/.local/bin
+# shim script, since the JAR itself isn't directly executable the way a
+# native binary (kubectl, eza) is.
+#######################################
+__install_google_java_format() {
+  echo -e "\n📦 Installing google-java-format..."
+
+  if [ "$OS_FAMILY" = "macos" ]; then
+    if command -v brew > /dev/null 2>&1; then
+      brew install google-java-format
+    else
+      echo "🚨 Homebrew is required to install google-java-format on macOS."
+      return 1
+    fi
+
+  elif command -v java > /dev/null 2>&1 && command -v curl > /dev/null 2>&1; then
+    # Pinned to a known-good release -- bump the version here as newer
+    # releases come out (https://github.com/google/google-java-format/releases).
+    local version="1.19.2"
+    local jar_url="https://github.com/google/google-java-format/releases/download/v${version}/google-java-format-${version}-all-deps.jar"
+    local install_dir="$HOME/.local/share/google-java-format"
+    mkdir -p "$install_dir" "$HOME/.local/bin"
+
+    if ! curl -fsSL -o "${install_dir}/google-java-format.jar" "$jar_url"; then
+      echo "🚨 Failed to download google-java-format."
+      return 1
+    fi
+
+    cat > "$HOME/.local/bin/google-java-format" << 'WRAPPER'
+#!/usr/bin/env bash
+exec java -jar "$HOME/.local/share/google-java-format/google-java-format.jar" "$@"
+WRAPPER
+    chmod +x "$HOME/.local/bin/google-java-format"
+
+  else
+    echo "🚨 Java (a JRE) and curl are required to install google-java-format on Linux."
+    return 1
+  fi
+
+  if command -v google-java-format > /dev/null 2>&1; then
+    echo "✅ google-java-format is available at: $(command -v google-java-format)"
+  else
+    echo "🚨 google-java-format installation failed (is ~/.local/bin on your PATH?)."
+    return 1
+  fi
+}
+
+#######################################
 # System: Check and report missing external dependencies
 #######################################
 __bootstrap_external() {
@@ -374,6 +425,30 @@ __bootstrap_external() {
       speedtest)
         __install_speedtest
         ;;
+      *)
+        echo "⚠️ No installer defined for external dependency: $dep"
+        ;;
+    esac
+  done
+}
+
+#######################################
+# System: Install missing complex dependencies -- each of these needs its
+# own repo/keyring setup (or a direct binary/JAR download) beyond a plain
+# package install, which is exactly what each __install_<tool> function
+# below already does; this just dispatches to the right one per missing
+# tool, the same way __bootstrap_external does for simpler ones. (Was
+# previously just a warning that these needed "manual repo config" and
+# never actually called the installers below -- they'd sit fully written
+# but unreachable from any bootstrap run.)
+#######################################
+__bootstrap_check_complex() {
+  local missing_complex
+  mapfile -t missing_complex < <(__get_missing_deps "${COMPLEX_DEPENDENCIES[@]}")
+
+  local dep
+  for dep in "${missing_complex[@]}"; do
+    case "$dep" in
       eza)
         __install_eza
         ;;
@@ -386,24 +461,14 @@ __bootstrap_external() {
       kubectl)
         __install_kubectl
         ;;
+      google-java-format)
+        __install_google_java_format
+        ;;
       *)
-        echo "⚠️ No installer defined for external dependency: $dep"
+        echo "⚠️ No installer defined for complex dependency: $dep"
         ;;
     esac
   done
-}
-
-#######################################
-# System: Check and report missing complex dependencies
-#######################################
-__bootstrap_check_complex() {
-  local missing_complex
-  mapfile -t missing_complex < <(__get_missing_deps "${COMPLEX_DEPENDENCIES[@]}")
-
-  if [ ${#missing_complex[@]} -gt 0 ]; then
-    echo -e "\n⚠️  The following tools are missing and require manual repo config:"
-    for dep in "${missing_complex[@]}"; do echo "  - $dep"; done
-  fi
 }
 
 #######################################

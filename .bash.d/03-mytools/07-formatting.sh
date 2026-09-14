@@ -4,8 +4,9 @@
 # ------------------------------------------
 
 #######################################
-# Formats Python and Shell scripts according to Google Style Guides.
-# Uses yapf for Python and shfmt for Shell scripts.
+# Formats Python, Shell, and Java source according to Google Style Guides.
+# Uses yapf for Python, shfmt for Shell scripts, and google-java-format
+# for Java.
 # Outputs:
 #   Writes formatting status updates to STDOUT.
 # Returns:
@@ -38,5 +39,21 @@ google-fmt() {
     echo "✅ Shell script formatting complete."
   else
     echo "⚠️ 'shfmt' not found."
+  fi
+
+  echo "🎨 Formatting Java source (Google Java Format)..."
+  if command -v google-java-format > /dev/null 2>&1; then
+    local -a java_files=()
+    while IFS= read -r -d '' f; do java_files+=("$f"); done < <(
+      find . -name "*.java" -not -path "*/target/*" -not -path "*/build/*" -print0 2> /dev/null
+    )
+    if [ "${#java_files[@]}" -gt 0 ]; then
+      google-java-format --replace "${java_files[@]}"
+      echo "✅ Java formatting complete (${#java_files[@]} file(s))."
+    else
+      echo "ℹ️  No .java files found."
+    fi
+  else
+    echo "⚠️ 'google-java-format' not found. Run 'bootstrap' to install it."
   fi
 }

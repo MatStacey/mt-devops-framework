@@ -61,6 +61,7 @@ export COMPLEX_DEPENDENCIES=(
   "gcloud:google-cloud-cli"
   "kubectl:kubectl"
   "eza:eza"
+  "google-java-format:google-java-format"
 )
 
 export EXTERNAL_DEPENDENCIES=(

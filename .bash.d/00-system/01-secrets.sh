@@ -112,6 +112,39 @@ mt-add-gemini-key() {
 }
 
 #######################################
+# Repo: Interactively add or update your NVD (National Vulnerability
+# Database) API key -- optional, but without one mt-audit-deps's Maven
+# branch (OWASP dependency-check) is throttled hard by NVD's public rate
+# limit while it builds its local CVE database on first run, turning a
+# few-minute wait into potentially much longer. Free to request at
+# https://nvd.nist.gov/developers/request-an-api-key.
+# Usage: mt-add-nvd-key
+# Globals:
+#   Writes to ~/secrets/secrets.sh (never touches config.yaml or git)
+#   and exports NVD_API_KEY into the current shell immediately.
+#######################################
+mt-add-nvd-key() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local key
+  read -r -s -p "🔑 Enter your NVD API key (input hidden): " key < /dev/tty
+  echo
+
+  if [ -z "$key" ]; then
+    echo -e "${CB_YELLOW}⚠️  No key entered. Aborted.${C_RESET}"
+    return 1
+  fi
+
+  __mt_write_secret "NVD_API_KEY" "$key"
+  export NVD_API_KEY="$key"
+  python3 "$SECRETS_MANAGER" register "NVD_API_KEY"
+  echo -e "${CB_GREEN}✅ NVD API key saved to ~/secrets/secrets.sh and loaded into this shell.${C_RESET}"
+}
+
+#######################################
 # AI: Interactively add or update your Claude API key
 # Usage: mt-add-claude-key
 # Globals:
