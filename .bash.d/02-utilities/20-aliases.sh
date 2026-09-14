@@ -224,7 +224,7 @@ alias mt-hard-reload='mt-load-config && mt-refresh-caches'
 #######################################
 # MT Devops Framework: Index Personal Git repositories in VCS Home
 #######################################
-alias mtindp='mt-hub --index -t personal'
+alias mtindp='mt-radar --index -t personal'
 
 #######################################
 # Version Control (Git) - Profile Synchronisation: Auto-sync framework with Shellcheck, Backup, AI Commit-Grouping/README Summary, and Auto-Merge

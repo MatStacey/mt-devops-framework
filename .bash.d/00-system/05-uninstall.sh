@@ -52,7 +52,7 @@ __mt_uninstall_bashrc_backup_trustworthy() {
 }
 
 #######################################
-# System: Preserve config.yaml, secrets_metadata.yaml, and .vcs_hub.json
+# System: Preserve config.yaml, secrets_metadata.yaml, and .vcs_radar.json
 # to a single stable (non-timestamped) location outside ~/.bash.d before
 # it's deleted -- a plain reinstall re-scaffolds a bare default
 # config.yaml and has no source to regenerate the other two from, so
@@ -71,7 +71,7 @@ __mt_uninstall_preserve_state() {
 
   [ -f "$CONFIG_FILE" ] && cp -p "$CONFIG_FILE" "$save_dir/"
   [ -f "$CONFIG_DIR/secrets_metadata.yaml" ] && cp -p "$CONFIG_DIR/secrets_metadata.yaml" "$save_dir/"
-  [ -f "$CACHE_DIR/.vcs_hub.json" ] && cp -p "$CACHE_DIR/.vcs_hub.json" "$save_dir/"
+  [ -f "$CACHE_DIR/.vcs_radar.json" ] && cp -p "$CACHE_DIR/.vcs_radar.json" "$save_dir/"
 
   echo "$save_dir"
 }
@@ -129,7 +129,7 @@ __mt_uninstall_confirm() {
 # deletes ~/.bash.d and restores or removes ~/.bashrc, after a full
 # backup and a typed "yes" confirmation (case-insensitive). Along the
 # way, offers two independent choices: whether to preserve config.yaml/
-# secrets_metadata.yaml/.vcs_hub.json outside ~/.bash.d (default: yes --
+# secrets_metadata.yaml/.vcs_radar.json outside ~/.bash.d (default: yes --
 # see __mt_uninstall_preserve_state), and whether to also delete
 # ~/secrets/secrets.sh and the git repo checkout at DOTFILES_DIR/
 # SYNC_REPO_DIR (default: no -- these are API keys and the user's own
@@ -161,7 +161,7 @@ mt-uninstall() {
   echo -e "${CB_RED}            MT DEVOPS FRAMEWORK - UNINSTALL                ${C_RESET}"
   echo -e "${CB_RED}==========================================================${C_RESET}\n"
 
-  echo -e "${CB_CYAN}config.yaml, secrets_metadata.yaml, and .vcs_hub.json won't survive a plain reinstall otherwise.${C_RESET}"
+  echo -e "${CB_CYAN}config.yaml, secrets_metadata.yaml, and .vcs_radar.json won't survive a plain reinstall otherwise.${C_RESET}"
   local preserve_state=false
   __mt_uninstall_confirm "Keep your settings for next time?" "y" && preserve_state=true
   echo
@@ -194,7 +194,7 @@ mt-uninstall() {
     echo -e "  ${CB_RED}🗑️  Delete${C_RESET}  ~/.bashrc (no trustworthy pre-install backup was found to restore)"
   fi
   if [ "$preserve_state" = true ]; then
-    echo -e "  ${CB_GREEN}💾 Preserve${C_RESET} config.yaml, secrets_metadata.yaml, .vcs_hub.json outside ~/.bash.d"
+    echo -e "  ${CB_GREEN}💾 Preserve${C_RESET} config.yaml, secrets_metadata.yaml, .vcs_radar.json outside ~/.bash.d"
   fi
   [ "$wipe_extras" = true ] && [ -f "$HOME/secrets/secrets.sh" ] && echo -e "  ${CB_RED}🗑️  Delete${C_RESET}  ~/secrets/secrets.sh (your API keys)"
   [ "$wipe_repo" = true ] && echo -e "  ${CB_RED}🗑️  Delete${C_RESET}  ${repo_dir} (your git repo checkout -- confirmed clean and fully pushed)"

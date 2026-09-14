@@ -1,4 +1,4 @@
-# mt-hub fzf selection table renderer
+# mt-radar fzf selection table renderer
 # Input: pipe-delimited rows of TYPE|REPOSITORY|BRANCH|PATH
 # Output: TAB-delimited PATH, then the padded, box-drawn display columns --
 # the raw path is prepended as a hidden first field so fzf's --preview and

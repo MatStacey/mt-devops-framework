@@ -1,10 +1,10 @@
 # shellcheck shell=bash
 # ------------------------------------------
-# MT Repo Hub - AI & Heuristic Metadata Dashboard
+# MT Repo Radar - AI & Heuristic Metadata Dashboard
 # ------------------------------------------
 
 #######################################
-# Repo Hub: Find every git repository under a search root -- test -e
+# Repo Radar: Find every git repository under a search root -- test -e
 # (not -d) on ".git" so this also catches worktree checkouts, where
 # ".git" is a plain file ("gitdir: ...") rather than a directory
 # Arguments:
@@ -12,19 +12,19 @@
 # Outputs:
 #   Prints one repository's absolute path per line
 #######################################
-__mt_hub_find_repos() {
+__mt_radar_find_repos() {
   local search_dir="$1"
   find "$search_dir" -type d -exec test -e "{}/.git" \; -prune -print
 }
 
 #######################################
-# Repo Hub: Detect a repo's CI/CD provider from known config files
+# Repo Radar: Detect a repo's CI/CD provider from known config files
 # Arguments:
 #   $1 - Repository path
 # Outputs:
 #   Prints the detected provider name, or "None"
 #######################################
-__mt_hub_detect_cicd() {
+__mt_radar_detect_cicd() {
   local repo_path="$1"
   local cicd="None"
   [ -f "$repo_path/bitbucket-pipelines.yml" ] && cicd="Bitbucket Pipelines"
@@ -36,13 +36,13 @@ __mt_hub_detect_cicd() {
 }
 
 #######################################
-# Repo Hub: Detect a repo's build tool from known manifest files
+# Repo Radar: Detect a repo's build tool from known manifest files
 # Arguments:
 #   $1 - Repository path
 # Outputs:
 #   Prints the detected build tool name, or "None"
 #######################################
-__mt_hub_detect_build_tool() {
+__mt_radar_detect_build_tool() {
   local repo_path="$1"
   local build="None"
   [ -f "$repo_path/pom.xml" ] && build="Maven"
@@ -62,13 +62,13 @@ __mt_hub_detect_build_tool() {
 }
 
 #######################################
-# Repo Hub: Detect a repo's test framework from known conventions
+# Repo Radar: Detect a repo's test framework from known conventions
 # Arguments:
 #   $1 - Repository path
 # Outputs:
 #   Prints the detected test framework name, or "None"
 #######################################
-__mt_hub_detect_test_framework() {
+__mt_radar_detect_test_framework() {
   local repo_path="$1"
   local testing="None"
   if [ -d "$repo_path/tests" ] || [ -d "$repo_path/src/test" ] || [ -d "$repo_path/spec" ]; then
@@ -83,7 +83,7 @@ __mt_hub_detect_test_framework() {
 }
 
 #######################################
-# Repo Hub: Find a repo's default branch -- origin/HEAD's target when the
+# Repo Radar: Find a repo's default branch -- origin/HEAD's target when the
 # remote-tracking symbolic ref is set (the accurate answer, since it's
 # resolved from the actual remote, not guessed), falling back to whatever
 # branch is currently checked out (the best available guess on a fresh
@@ -94,7 +94,7 @@ __mt_hub_detect_test_framework() {
 #   Prints the default branch name, or nothing if neither is resolvable
 #   (e.g. a repo with no commits yet)
 #######################################
-__mt_hub_default_branch() {
+__mt_radar_default_branch() {
   local repo_path="$1"
   local branch
   branch=$(git -C "$repo_path" symbolic-ref refs/remotes/origin/HEAD 2> /dev/null | sed 's@^refs/remotes/origin/@@')
@@ -103,7 +103,7 @@ __mt_hub_default_branch() {
 }
 
 #######################################
-# Repo Hub: Count commits per author on a repo's default branch over a
+# Repo Radar: Count commits per author on a repo's default branch over a
 # lookback window, for the top-contributors summary shown in the Repo
 # Hub/Repo Report -- name and last-commit date only (no email), ordered
 # highest-commit-count first, capped at 5. A repo with no commits in the
@@ -117,10 +117,10 @@ __mt_hub_default_branch() {
 #   Prints a JSON array: [{name, commits, last_commit: <epoch>}, ...]
 #   (up to 5 entries, sorted by commits descending)
 #######################################
-__mt_hub_detect_top_contributors() {
+__mt_radar_detect_top_contributors() {
   local repo_path="$1" lookback_months="${2:-12}"
   local default_branch
-  default_branch=$(__mt_hub_default_branch "$repo_path")
+  default_branch=$(__mt_radar_default_branch "$repo_path")
   [ -z "$default_branch" ] && {
     jq -n '[]'
     return 0
@@ -143,7 +143,7 @@ __mt_hub_detect_top_contributors() {
 }
 
 #######################################
-# Repo Hub: Detect Google Cloud Platform usage from a repo's own files.
+# Repo Radar: Detect Google Cloud Platform usage from a repo's own files.
 # Terraform is the strongest and most specific signal available in a
 # repo's own source -- a "google"/"google-beta" provider block, or any
 # google_* resource type -- so it's checked first and, when present, also
@@ -162,7 +162,7 @@ __mt_hub_detect_top_contributors() {
 #   Prints a JSON object: {"detected": bool, "source":
 #   "terraform"|"config-files"|"none", "services": [<GCP product names>]}
 #######################################
-__mt_hub_detect_gcp() {
+__mt_radar_detect_gcp() {
   local repo_path="$1"
   local -a tf_files=()
   while IFS= read -r -d '' f; do tf_files+=("$f"); done < <(
@@ -242,14 +242,14 @@ __mt_hub_detect_gcp() {
 }
 
 #######################################
-# Repo Hub: Detect a repo's primary language/stack by the most common file
+# Repo Radar: Detect a repo's primary language/stack by the most common file
 # extension among its top-level files
 # Arguments:
 #   $1 - Repository path
 # Outputs:
 #   Prints the detected stack name, or "Unknown"
 #######################################
-__mt_hub_detect_stack() {
+__mt_radar_detect_stack() {
   local repo_path="$1"
   local top_ext
   top_ext=$(find "$repo_path" -maxdepth 3 -type f -not -path "*/\.git/*" -not -path "*/node_modules/*" -not -path "*/venv/*" 2> /dev/null | rev | cut -d. -f1 | rev | grep -E "^(py|java|js|ts|tf|go|sh|cpp|c|html|css|cs|rb|php|rs)$" | sort | uniq -c | sort -rn | head -n1 | awk '{print $2}')
@@ -273,7 +273,7 @@ __mt_hub_detect_stack() {
 }
 
 #######################################
-# Repo Hub: Override the extension-histogram stack guess with a
+# Repo Radar: Override the extension-histogram stack guess with a
 # manifest-derived language when the build tool detected is an
 # unambiguous 1:1 signal for one -- a real manifest file is stronger
 # evidence than a raw file-count histogram, which a large but secondary
@@ -282,12 +282,12 @@ __mt_hub_detect_stack() {
 # either JavaScript or TypeScript and the histogram already disambiguates
 # those correctly.
 # Arguments:
-#   $1 - Detected build tool (from __mt_hub_detect_build_tool)
-#   $2 - Detected stack (from __mt_hub_detect_stack)
+#   $1 - Detected build tool (from __mt_radar_detect_build_tool)
+#   $2 - Detected stack (from __mt_radar_detect_stack)
 # Outputs:
 #   Prints the (possibly overridden) stack name
 #######################################
-__mt_hub_reconcile_stack() {
+__mt_radar_reconcile_stack() {
   local build="$1" stack="$2"
   case "$build" in
     Maven | Gradle) stack="Java" ;;
@@ -302,7 +302,7 @@ __mt_hub_reconcile_stack() {
 }
 
 #######################################
-# Repo Hub: Ask the configured AI to produce a 1-sentence description and
+# Repo Radar: Ask the configured AI to produce a 1-sentence description and
 # category for a repository, based on its README and directory tree.
 # Calls __ai_query_provider directly instead of the public 'ai' command
 # -- 'ai' always pipes its response through __ai_parse_response, which
@@ -336,7 +336,7 @@ __mt_hub_reconcile_stack() {
 # Globals (written, expected pre-declared local by the caller):
 #   ai_description, ai_category, ai_environments
 #######################################
-__mt_hub_summarize_repo() {
+__mt_radar_summarize_repo() {
   local repo_path="$1" provider="${2:-${DEFAULT_AI:-gemini}}"
   # shellcheck disable=SC2034  # read via dynamic scope by __ai_query_* in 60-ai.sh
   local AI_SYSTEM_PROMPT=""
@@ -372,11 +372,11 @@ __mt_hub_summarize_repo() {
 }
 
 #######################################
-# Repo Hub: Decide whether a repo should be indexed given the active
+# Repo Radar: Decide whether a repo should be indexed given the active
 # type/name filters and cache/force-reindex/update-missing state. Takes
 # the set of already-cached repo paths, and the subset of those whose
 # cached entry has a gap, as associative arrays (built once by the
-# caller via __mt_hub_load_existing_keys) rather than re-reading and
+# caller via __mt_radar_load_existing_keys) rather than re-reading and
 # re-parsing the whole cache file with a fresh jq process on every single
 # repo -- the latter is what this used to do, and it's pure repeated work
 # since the answer can't change mid-loop.
@@ -388,20 +388,20 @@ __mt_hub_summarize_repo() {
 #   $4 - Name filter (empty = no filter)
 #   $5 - force_reindex (true/false)
 #   $6 - update_missing (true/false) -- re-index an already-cached repo
-#        anyway if its entry has a gap (see __mt_hub_load_existing_keys)
+#        anyway if its entry has a gap (see __mt_radar_load_existing_keys)
 #   $7 - quiet (true/false, default false) -- suppress the per-repo
 #        skip/re-indexing status lines, for a dry-run pass that only
-#        wants the resulting count (see __mt_hub_index's bulk-indexing
+#        wants the resulting count (see __mt_radar_index's bulk-indexing
 #        warning, which needs this decision without echoing it twice)
 # Globals (read):
-#   __mt_hub_existing_keys -- associative array of cache_file keys,
-#     pre-populated by the caller via __mt_hub_load_existing_keys
-#   __mt_hub_needs_update -- associative array of cache_file keys whose
+#   __mt_radar_existing_keys -- associative array of cache_file keys,
+#     pre-populated by the caller via __mt_radar_load_existing_keys
+#   __mt_radar_needs_update -- associative array of cache_file keys whose
 #     entry has a gap, pre-populated by the same call
 # Returns:
 #   0 if the repo should be indexed, 1 if it should be skipped
 #######################################
-__mt_hub_should_index() {
+__mt_radar_should_index() {
   local repo_path="$1" search_dir="$2" filter_type="$3" filter_repo="$4" force_reindex="$5" update_missing="$6"
   local quiet="${7:-false}"
   local repo_name
@@ -414,8 +414,8 @@ __mt_hub_should_index() {
   [ -n "$filter_type" ] && [ "${repo_type,,}" != "$filter_type" ] && return 1
   [ -n "$filter_repo" ] && [ "$repo_name" != "$filter_repo" ] && return 1
 
-  if [ -n "${__mt_hub_existing_keys[$repo_path]:-}" ] && [ "$force_reindex" != "true" ]; then
-    if [ "$update_missing" = "true" ] && [ -n "${__mt_hub_needs_update[$repo_path]:-}" ]; then
+  if [ -n "${__mt_radar_existing_keys[$repo_path]:-}" ] && [ "$force_reindex" != "true" ]; then
+    if [ "$update_missing" = "true" ] && [ -n "${__mt_radar_needs_update[$repo_path]:-}" ]; then
       [ "$quiet" = "true" ] || echo -e "${C_DIM}🔄 Re-indexing $repo_name (filling in missing data)${C_RESET}"
       return 0
     fi
@@ -426,7 +426,7 @@ __mt_hub_should_index() {
 }
 
 #######################################
-# Repo Hub: Populate two associative arrays from a single read of the
+# Repo Radar: Populate two associative arrays from a single read of the
 # cache file: every already-cached repo path, and the subset of those
 # whose entry has a gap -- category/description never came back from the
 # AI (still sitting at their failure-mode defaults), or the stack
@@ -441,28 +441,28 @@ __mt_hub_should_index() {
 # Arguments:
 #   $1 - Path to the JSON cache file
 # Globals (written, must be declared by the caller as
-#   `declare -A __mt_hub_existing_keys` and
-#   `declare -A __mt_hub_needs_update` before calling this):
-#   __mt_hub_existing_keys, __mt_hub_needs_update
+#   `declare -A __mt_radar_existing_keys` and
+#   `declare -A __mt_radar_needs_update` before calling this):
+#   __mt_radar_existing_keys, __mt_radar_needs_update
 #######################################
-__mt_hub_load_existing_keys() {
+__mt_radar_load_existing_keys() {
   local cache_file="$1"
-  __mt_hub_existing_keys=()
-  __mt_hub_needs_update=()
+  __mt_radar_existing_keys=()
+  __mt_radar_needs_update=()
   [ -f "$cache_file" ] || return 0
 
   local key
   while IFS= read -r key; do
-    [ -n "$key" ] && __mt_hub_existing_keys["$key"]=1
+    [ -n "$key" ] && __mt_radar_existing_keys["$key"]=1
   done < <(jq -r 'keys[]' "$cache_file" 2> /dev/null)
 
   while IFS= read -r key; do
-    [ -n "$key" ] && __mt_hub_needs_update["$key"]=1
+    [ -n "$key" ] && __mt_radar_needs_update["$key"]=1
   done < <(jq -r 'to_entries[] | select(.value.category == "Unknown" or .value.description == "No description available." or .value.stack == "Unknown") | .key' "$cache_file" 2> /dev/null)
 }
 
 #######################################
-# Repo Hub: Write one repo's metadata into the JSON cache under an
+# Repo Radar: Write one repo's metadata into the JSON cache under an
 # exclusive file lock, so a background '--index -b' run and a concurrent
 # foreground run (or two overlapping filtered runs) can't interleave
 # their read-modify-write cycles and silently drop each other's updates.
@@ -476,12 +476,12 @@ __mt_hub_load_existing_keys() {
 #   $7 - CI/CD provider
 #   $8 - Test framework
 #   $9 - Environments (AI-derived JSON array of {name, type}, "[]" if none)
-#   $10 - GCP detection (JSON object from __mt_hub_detect_gcp, defaults to
+#   $10 - GCP detection (JSON object from __mt_radar_detect_gcp, defaults to
 #         "not detected" if omitted)
-#   $11 - Top contributors (JSON array from __mt_hub_detect_top_contributors,
+#   $11 - Top contributors (JSON array from __mt_radar_detect_top_contributors,
 #         defaults to "[]" if omitted)
 #######################################
-__mt_hub_write_cache_entry() {
+__mt_radar_write_cache_entry() {
   local cache_file="$1" repo_path="$2" category="$3" description="$4" stack="$5" build="$6" cicd="$7" testing="$8" environments="${9:-[]}"
   local gcp="${10:-}"
   [ -z "$gcp" ] && gcp='{"detected": false, "source": "none", "services": []}'
@@ -509,7 +509,7 @@ __mt_hub_write_cache_entry() {
 }
 
 #######################################
-# Repo Hub: Run all heuristics and AI summarization for one repo and
+# Repo Radar: Run all heuristics and AI summarization for one repo and
 # persist the result into the JSON cache. Optionally also runs the
 # Terraform infrastructure overview (see .bash.d/20-vcs/57-infra.sh)
 # immediately after, into its own cache file -- skipped silently (not an
@@ -523,7 +523,7 @@ __mt_hub_write_cache_entry() {
 #        Terraform infrastructure overview for this repo
 #   $5 - Path to the infra JSON cache file (required if $4 is true)
 #######################################
-__mt_hub_index_one_repo() {
+__mt_radar_index_one_repo() {
   local repo_path="$1" cache_file="$2" provider="$3" run_infra="${4:-false}" infra_cache_file="$5"
   local repo_name
   repo_name=$(basename "$repo_path")
@@ -531,25 +531,25 @@ __mt_hub_index_one_repo() {
   echo -e "${CB_YELLOW}⚙️  Indexing $repo_name...${C_RESET}"
 
   local cicd build testing stack gcp top_contributors
-  cicd=$(__mt_hub_detect_cicd "$repo_path")
-  build=$(__mt_hub_detect_build_tool "$repo_path")
-  testing=$(__mt_hub_detect_test_framework "$repo_path")
-  stack=$(__mt_hub_detect_stack "$repo_path")
-  stack=$(__mt_hub_reconcile_stack "$build" "$stack")
-  gcp=$(__mt_hub_detect_gcp "$repo_path")
-  top_contributors=$(__mt_hub_detect_top_contributors "$repo_path" "${CONTRIBUTOR_LOOKBACK_MONTHS:-12}")
+  cicd=$(__mt_radar_detect_cicd "$repo_path")
+  build=$(__mt_radar_detect_build_tool "$repo_path")
+  testing=$(__mt_radar_detect_test_framework "$repo_path")
+  stack=$(__mt_radar_detect_stack "$repo_path")
+  stack=$(__mt_radar_reconcile_stack "$build" "$stack")
+  gcp=$(__mt_radar_detect_gcp "$repo_path")
+  top_contributors=$(__mt_radar_detect_top_contributors "$repo_path" "${CONTRIBUTOR_LOOKBACK_MONTHS:-12}")
 
   local ai_description="" ai_category="" ai_environments="[]"
-  __mt_hub_summarize_repo "$repo_path" "$provider"
+  __mt_radar_summarize_repo "$repo_path" "$provider"
 
-  __mt_hub_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing" "$ai_environments" "$gcp" "$top_contributors"
+  __mt_radar_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing" "$ai_environments" "$gcp" "$top_contributors"
 
   if [ "$run_infra" = true ]; then
     local infra_json infra_status
-    infra_json=$(__mt_hub_infra_analyze_repo "$repo_path")
+    infra_json=$(__mt_radar_infra_analyze_repo "$repo_path")
     infra_status=$(echo "$infra_json" | jq -r '.status')
     if [ "$infra_status" = "ok" ]; then
-      __mt_hub_infra_write_cache_entry "$infra_cache_file" "$repo_path" "$infra_json"
+      __mt_radar_infra_write_cache_entry "$infra_cache_file" "$repo_path" "$infra_json"
       echo -e "${CB_GREEN}✅ Infrastructure overview generated for $repo_name${C_RESET}"
     fi
   fi
@@ -558,7 +558,7 @@ __mt_hub_index_one_repo() {
 }
 
 #######################################
-# Repo Hub: Remove cache entries for repos no longer found on disk (moved,
+# Repo Radar: Remove cache entries for repos no longer found on disk (moved,
 # renamed, or deleted). Only called from an unfiltered index run ('-t'/'-r'
 # not given) -- a filtered scan only sees a subset of repos, so pruning
 # against that subset would wrongly delete every entry outside the
@@ -570,7 +570,7 @@ __mt_hub_index_one_repo() {
 #   $1   - Path to the JSON cache file
 #   $@   - Every currently-live repo path from this run's full scan
 #######################################
-__mt_hub_prune_stale_entries() {
+__mt_radar_prune_stale_entries() {
   local cache_file="$1"
   shift
   [ -f "$cache_file" ] || return 0
@@ -598,21 +598,21 @@ __mt_hub_prune_stale_entries() {
 }
 
 #######################################
-# Repo Hub: Index every discovered repository under VCS_ROOT into the
+# Repo Radar: Index every discovered repository under VCS_ROOT into the
 # heuristic/AI metadata cache. Prunes stale entries first (unfiltered
-# runs only -- see __mt_hub_prune_stale_entries), then loads the set of
+# runs only -- see __mt_radar_prune_stale_entries), then loads the set of
 # already-cached keys once for the whole run rather than re-reading the
 # cache file per repo. Before actually indexing anything, dry-runs
-# __mt_hub_should_index over every candidate (quietly, so its normal
+# __mt_radar_should_index over every candidate (quietly, so its normal
 # skip/re-index messages aren't printed twice) to count how many repos
 # will actually call the AI provider -- if that exceeds
-# HUB_INDEX_WARN_THRESHOLD and the warning isn't disabled, prints a
+# RADAR_INDEX_WARN_THRESHOLD and the warning isn't disabled, prints a
 # quota warning and (when run from a real terminal) asks for
 # confirmation before proceeding; a non-interactive run (e.g. -b) just
 # gets the warning printed and continues.
-# Usage: __mt_hub_index <cache_file> <filter_type> <filter_repo> <force_reindex> <provider> <update_missing> [run_infra] [infra_cache_file]
+# Usage: __mt_radar_index <cache_file> <filter_type> <filter_repo> <force_reindex> <provider> <update_missing> [run_infra] [infra_cache_file]
 # Globals:
-#   VCS_ROOT, HUB_INDEX_WARN_ENABLED, HUB_INDEX_WARN_THRESHOLD
+#   VCS_ROOT, RADAR_INDEX_WARN_ENABLED, RADAR_INDEX_WARN_THRESHOLD
 # Arguments:
 #   $1 - Path to the JSON cache file
 #   $2 - Type filter (empty = no filter)
@@ -621,13 +621,13 @@ __mt_hub_prune_stale_entries() {
 #   $5 - Provider override (gemini, claude, claude-code, local); empty
 #        falls back to DEFAULT_AI
 #   $6 - update_missing (true/false) -- re-index an already-cached repo
-#        anyway if its entry has a gap (see __mt_hub_load_existing_keys)
+#        anyway if its entry has a gap (see __mt_radar_load_existing_keys)
 #   $7 - run_infra (true/false, default false) -- also generate each
 #        indexed repo's Terraform infrastructure overview (see
 #        .bash.d/20-vcs/57-infra.sh)
 #   $8 - Path to the infra JSON cache file (required if $7 is true)
 #######################################
-__mt_hub_index() {
+__mt_radar_index() {
   local cache_file="$1"
   local filter_type="${2,,}"
   local filter_repo="$3"
@@ -646,26 +646,26 @@ __mt_hub_index() {
 
   local repos=()
   local repo_path
-  while IFS= read -r repo_path; do repos+=("$repo_path"); done < <(__mt_hub_find_repos "$search_dir")
+  while IFS= read -r repo_path; do repos+=("$repo_path"); done < <(__mt_radar_find_repos "$search_dir")
 
   if [ -z "$filter_type" ] && [ -z "$filter_repo" ]; then
-    __mt_hub_prune_stale_entries "$cache_file" "${repos[@]}"
+    __mt_radar_prune_stale_entries "$cache_file" "${repos[@]}"
   fi
 
-  local -A __mt_hub_existing_keys
-  local -A __mt_hub_needs_update
-  __mt_hub_load_existing_keys "$cache_file"
+  local -A __mt_radar_existing_keys
+  local -A __mt_radar_needs_update
+  __mt_radar_load_existing_keys "$cache_file"
 
   local pending=0
   for repo_path in "${repos[@]}"; do
-    __mt_hub_should_index "$repo_path" "$search_dir" "$filter_type" "$filter_repo" "$force_reindex" "$update_missing" true &&
+    __mt_radar_should_index "$repo_path" "$search_dir" "$filter_type" "$filter_repo" "$force_reindex" "$update_missing" true &&
       pending=$((pending + 1))
   done
 
-  if [ "${HUB_INDEX_WARN_ENABLED:-true}" = "true" ] && [ "$pending" -gt "${HUB_INDEX_WARN_THRESHOLD:-10}" ]; then
-    echo -e "${CB_YELLOW}⚠️  This will run AI summarization on ${pending} repositories -- mt-hub indexing is an AI feature, and a run this size can use a considerable amount of your provider's quota.${C_RESET}"
-    echo -e "${C_DIM}   Consider indexing individual repositories instead: mt-hub --index -r <name> (or -t <type> to narrow to one folder).${C_RESET}"
-    echo -e "${C_DIM}   Disable this warning, or change its threshold (currently ${HUB_INDEX_WARN_THRESHOLD:-10}), via 'ai.enable_bulk_index_warning'/'ai.bulk_index_warning_threshold' in config.yaml (mt-toggle-hub-index-warning / mt-set-hub-index-warning-threshold).${C_RESET}"
+  if [ "${RADAR_INDEX_WARN_ENABLED:-true}" = "true" ] && [ "$pending" -gt "${RADAR_INDEX_WARN_THRESHOLD:-10}" ]; then
+    echo -e "${CB_YELLOW}⚠️  This will run AI summarization on ${pending} repositories -- mt-radar indexing is an AI feature, and a run this size can use a considerable amount of your provider's quota.${C_RESET}"
+    echo -e "${C_DIM}   Consider indexing individual repositories instead: mt-radar --index -r <name> (or -t <type> to narrow to one folder).${C_RESET}"
+    echo -e "${C_DIM}   Disable this warning, or change its threshold (currently ${RADAR_INDEX_WARN_THRESHOLD:-10}), via 'ai.enable_bulk_index_warning'/'ai.bulk_index_warning_threshold' in config.yaml (mt-toggle-radar-index-warning / mt-set-radar-index-warning-threshold).${C_RESET}"
     if [ -t 0 ]; then
       local reply
       read -r -p "Proceed with indexing ${pending} repositories? [y/N] " -n 1 reply < /dev/tty
@@ -679,22 +679,22 @@ __mt_hub_index() {
 
   local processed=0
   for repo_path in "${repos[@]}"; do
-    __mt_hub_should_index "$repo_path" "$search_dir" "$filter_type" "$filter_repo" "$force_reindex" "$update_missing" || continue
+    __mt_radar_should_index "$repo_path" "$search_dir" "$filter_type" "$filter_repo" "$force_reindex" "$update_missing" || continue
     processed=$((processed + 1))
-    __mt_hub_index_one_repo "$repo_path" "$cache_file" "$provider" "$run_infra" "$infra_cache_file"
+    __mt_radar_index_one_repo "$repo_path" "$cache_file" "$provider" "$run_infra" "$infra_cache_file"
   done
 
   if [ "$processed" -eq 0 ]; then
     mt-log WARN "No repositories matched your filter criteria."
   else
-    echo -e "\n${CB_GREEN}🎉 Indexing complete! Run 'mt-hub' to view the dashboard.${C_RESET}"
+    echo -e "\n${CB_GREEN}🎉 Indexing complete! Run 'mt-radar' to view the dashboard.${C_RESET}"
   fi
 }
 
 #######################################
-# Repo Hub: Print one repo's cached metadata plus its 3 most recent
+# Repo Radar: Print one repo's cached metadata plus its 3 most recent
 # commits -- used both as fzf's live preview pane (called with the
-# hidden absolute-path field) and directly via `mt-hub --preview <repo>`.
+# hidden absolute-path field) and directly via `mt-radar --preview <repo>`.
 # Accepts either form: an exact cache key (an absolute path) or a bare
 # repo name, resolved by matching cache keys' basenames.
 # Arguments:
@@ -702,7 +702,7 @@ __mt_hub_index() {
 #        repo name
 #   $2 - Path to the JSON cache file
 #######################################
-__mt_hub_preview() {
+__mt_radar_preview() {
   local repo="$1"
   local cache_file="$2"
 
@@ -726,7 +726,7 @@ __mt_hub_preview() {
 
   if [ -z "$meta" ] || [ "$meta" == "null" ]; then
     echo -e "${CB_YELLOW}⚠️ No metadata found.${C_RESET}\n"
-    echo -e "Run ${CB_GREEN}mt-hub --index${C_RESET} to generate AI insights and heuristics for this repository."
+    echo -e "Run ${CB_GREEN}mt-radar --index${C_RESET} to generate AI insights and heuristics for this repository."
     return 0
   fi
 
@@ -782,7 +782,7 @@ __mt_hub_preview() {
 }
 
 #######################################
-# Repo Hub: Search the indexed .vcs_hub.json cache -- repo name,
+# Repo Radar: Search the indexed .vcs_radar.json cache -- repo name,
 # description, category, stack, and GCP detection -- for a term
 # (case-insensitive substring match), and print matching repos. The bare
 # term "gcp" matches every repo with any GCP usage detected at all
@@ -790,13 +790,13 @@ __mt_hub_preview() {
 # "cloud run" or "bigquery" matches only repos referencing that product.
 # Pure read of already-cached data, no AI/network calls; a repo never
 # indexed simply won't match anything, same as it not appearing in the
-# Repo Hub tree at all.
+# Repo Radar tree at all.
 # Arguments:
 #   $1 - Path to the JSON cache file
 #   $2 - Search term
 #   $3 - "true" to print matches as a JSON array instead of a table
 #######################################
-__mt_hub_search() {
+__mt_radar_search() {
   local cache_file="$1" term="$2" json_mode="$3"
 
   if [ "$json_mode" = true ]; then
@@ -839,7 +839,7 @@ __mt_hub_search() {
 # System: Interactive AI-powered Repository Dashboard. An unfiltered
 # --index run also prunes cache entries for repos no longer found on
 # disk (moved, renamed, or deleted) before indexing.
-# Usage: mt-hub [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>] [--infra]] [--infra [-t <type>] [-r <name>]] [--show-infra <repo>] [--preview <repo>] [--scan-gcp -r <repo> [--gcp-project <id>]]
+# Usage: mt-radar [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>] [--infra]] [--infra [-t <type>] [-r <name>]] [--show-infra <repo>] [--preview <repo>] [--scan-gcp -r <repo> [--gcp-project <id>]]
 # Options:
 #   --index                    Scan and build the AI metadata cache
 #   -b, --bg, --background     Run the index scan as a background job (with --index)
@@ -884,9 +884,20 @@ __mt_hub_search() {
 #                              of a table
 #   -h, --help                 Show this help menu
 #######################################
-mt-hub() {
-  local cache_file="$CACHE_DIR/.vcs_hub.json"
+mt-radar() {
+  local cache_file="$CACHE_DIR/.vcs_radar.json"
   mkdir -p "$(dirname "$cache_file")"
+  # One-time migration from this command's pre-rename name (mt-hub) --
+  # non-destructive and idempotent, same pattern as the XDG config-file
+  # migration: only copies when the new path doesn't exist yet and the
+  # old one does, so a user's already-indexed repo metadata (including
+  # AI-generated summaries, real cost to regenerate) survives the rename
+  # instead of silently starting over. The old file is left in place
+  # rather than deleted -- cheap insurance if this ever needs re-running.
+  if [ ! -f "$cache_file" ] && [ -f "$CACHE_DIR/.vcs_hub.json" ]; then
+    cp -p "$CACHE_DIR/.vcs_hub.json" "$cache_file"
+    mt-log INFO "Migrated .vcs_hub.json to .vcs_radar.json (mt-hub was renamed to mt-radar)."
+  fi
   [ ! -f "$cache_file" ] && echo "{}" > "$cache_file"
 
   local infra_cache_file="$CACHE_DIR/.vcs_infra.json"
@@ -930,7 +941,7 @@ mt-hub() {
         shift
         ;;
       --preview)
-        __mt_hub_preview "$2" "$cache_file"
+        __mt_radar_preview "$2" "$cache_file"
         return 0
         ;;
       --search)
@@ -961,12 +972,12 @@ mt-hub() {
   done
 
   if [ -n "$search_term" ]; then
-    __mt_hub_search "$cache_file" "$search_term" "$json_mode"
+    __mt_radar_search "$cache_file" "$search_term" "$json_mode"
     return 0
   fi
 
   if [ -n "$show_infra_repo" ]; then
-    __mt_hub_infra_show "$show_infra_repo" "$infra_cache_file" "$json_mode"
+    __mt_radar_infra_show "$show_infra_repo" "$infra_cache_file" "$json_mode"
     return 0
   fi
 
@@ -976,7 +987,7 @@ mt-hub() {
       return 1
     fi
 
-    if ! __mt_hub_gcp_available; then
+    if ! __mt_radar_gcp_available; then
       echo -e "${CB_RED}🚨 gcloud CLI not found or no active credentialed account. Run 'gcloud auth login' first.${C_RESET}"
       return 1
     fi
@@ -993,7 +1004,7 @@ mt-hub() {
       [to_entries[] | select((.key | split("/") | last) == $name)] | .[0].value // empty
     ' "$infra_cache_file" 2> /dev/null)
     if [ -z "$infra_entry" ] || [ "$infra_entry" == "null" ]; then
-      echo -e "${CB_YELLOW}⚠️  No infrastructure overview found for \"${filter_repo}\". Run 'mt-hub --infra -r ${filter_repo}' first.${C_RESET}"
+      echo -e "${CB_YELLOW}⚠️  No infrastructure overview found for \"${filter_repo}\". Run 'mt-radar --infra -r ${filter_repo}' first.${C_RESET}"
       return 1
     fi
 
@@ -1004,13 +1015,13 @@ mt-hub() {
 
     echo -e "${CB_BLUE}🔍 Scanning ${filter_repo}'s Terraform resources against GCP project '${scan_project}'...${C_RESET}"
     local scan_result
-    scan_result=$(__mt_hub_gcp_scan_repo "$infra_entry" "$scan_project")
-    __mt_hub_infra_write_gcp_scan "$infra_cache_file" "$resolved_repo_path" "$scan_result"
+    scan_result=$(__mt_radar_gcp_scan_repo "$infra_entry" "$scan_project")
+    __mt_radar_infra_write_gcp_scan "$infra_cache_file" "$resolved_repo_path" "$scan_result"
 
     if [ "$json_mode" = true ]; then
       echo "$scan_result"
     else
-      __mt_hub_gcp_scan_show "$scan_result"
+      __mt_radar_gcp_scan_show "$scan_result"
     fi
     return 0
   fi
@@ -1021,16 +1032,16 @@ mt-hub() {
     if [ "$run_bg" = true ]; then
       local log_out
       log_out="$LOG_DIR/indexer_$(date +%s).log"
-      local cmd_str="__mt_hub_index \"$cache_file\" \"$filter_type\" \"$filter_repo\" \"$force_index\" \"$provider_override\" \"$update_missing\" \"$run_infra\" \"$infra_cache_file\""
-      __mt_bg_run "mt-hub-indexer" "$log_out" "$cmd_str"
+      local cmd_str="__mt_radar_index \"$cache_file\" \"$filter_type\" \"$filter_repo\" \"$force_index\" \"$provider_override\" \"$update_missing\" \"$run_infra\" \"$infra_cache_file\""
+      __mt_bg_run "mt-radar-indexer" "$log_out" "$cmd_str"
     else
-      __mt_hub_index "$cache_file" "$filter_type" "$filter_repo" "$force_index" "$provider_override" "$update_missing" "$run_infra" "$infra_cache_file"
+      __mt_radar_index "$cache_file" "$filter_type" "$filter_repo" "$force_index" "$provider_override" "$update_missing" "$run_infra" "$infra_cache_file"
     fi
     return 0
   fi
 
   if [ "$run_infra" = true ]; then
-    __mt_hub_infra_run "$search_dir" "$filter_type" "$filter_repo" "$infra_cache_file"
+    __mt_radar_infra_run "$search_dir" "$filter_type" "$filter_repo" "$infra_cache_file"
     return 0
   fi
 
@@ -1054,15 +1065,15 @@ mt-hub() {
     [ -z "$branch" ] && branch="No commits"
 
     echo "${repo_type}|${repo_name}|${branch}|${repo_path}" >> "$tmp_out"
-  done < <(__mt_hub_find_repos "$search_dir")
+  done < <(__mt_radar_find_repos "$search_dir")
 
   sort -t'|' -k1,1 -k2,2 "$tmp_out" -o "$tmp_out"
 
-  # See vcs_hub_table.awk for why the raw path rides along as a hidden
+  # See vcs_radar_table.awk for why the raw path rides along as a hidden
   # tab-delimited first field, recovered below via fzf's {1}.
-  local awk_script="$HOME/.bash.d/lib/awk/vcs_hub_table.awk"
+  local awk_script="$HOME/.bash.d/lib/awk/vcs_radar_table.awk"
   local selected
-  selected=$(awk -f "$awk_script" "$tmp_out" | fzf --ansi --delimiter=$'\t' --with-nth=2 --prompt="VCS Hub > " --header="TYPE            │ REPOSITORY                          │ BRANCH               " --preview="bash -c 'source ~/.bash.d/01-ui/01-colors.sh; source ~/.bash.d/20-vcs/53-vcs-insight.sh; __mt_hub_preview \"{1}\" \"$cache_file\"'")
+  selected=$(awk -f "$awk_script" "$tmp_out" | fzf --ansi --delimiter=$'\t' --with-nth=2 --prompt="VCS Radar > " --header="TYPE            │ REPOSITORY                          │ BRANCH               " --preview="bash -c 'source ~/.bash.d/01-ui/01-colors.sh; source ~/.bash.d/20-vcs/53-vcs-insight.sh; __mt_radar_preview \"{1}\" \"$cache_file\"'")
 
   rm -f "$tmp_out"
 
@@ -1072,4 +1083,18 @@ mt-hub() {
     echo -e "${CB_GREEN}📂 Navigating to: $target_path${C_RESET}"
     cd "$target_path" || true
   fi
+}
+
+#######################################
+# Repo Radar: Deprecated name for mt-radar, kept as a thin forwarding
+# shim so anyone with mt-hub memorized, scripted, or aliased elsewhere
+# doesn't hit a hard break -- prints a one-line notice (to stderr, so it
+# never pollutes -j/--json output piped elsewhere) then forwards every
+# argument through unchanged. No fixed removal date; drop it once this
+# has been out long enough that muscle memory has caught up.
+# Usage: mt-hub [any mt-radar argument]
+#######################################
+mt-hub() {
+  echo -e "${CB_YELLOW}⚠️  mt-hub has been renamed to mt-radar -- update your muscle memory (this alias will be removed eventually).${C_RESET}" >&2
+  mt-radar "$@"
 }

@@ -485,7 +485,7 @@ __ai_extract_json_array() {
 # return its raw text response -- no save-to-file/category
 # post-processing. Shared by 'ai' (which pipes this through
 # __ai_parse_response afterwards) and any caller that needs the model's
-# literal text back untouched (e.g. mt-hub's repo summarizer), since
+# literal text back untouched (e.g. mt-radar's repo summarizer), since
 # routing through the public 'ai' command itself would collide with its
 # save-generated-code branch whenever the caller's own prompt asks for a
 # JSON schema that happens to include a non-"chat" "category" field --

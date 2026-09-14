@@ -273,41 +273,41 @@ mt-toggle-ai() {
 }
 
 #######################################
-# Config: Toggle mt-hub --index's bulk-indexing quota warning (true/false)
-# -- see HUB_INDEX_WARN_ENABLED/HUB_INDEX_WARN_THRESHOLD
+# Config: Toggle mt-radar --index's bulk-indexing quota warning (true/false)
+# -- see RADAR_INDEX_WARN_ENABLED/RADAR_INDEX_WARN_THRESHOLD
 #######################################
-mt-toggle-hub-index-warning() {
+mt-toggle-radar-index-warning() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
   local new_val="true"
-  [ "${HUB_INDEX_WARN_ENABLED:-true}" = "true" ] && new_val="false"
+  [ "${RADAR_INDEX_WARN_ENABLED:-true}" = "true" ] && new_val="false"
   python3 "$CONFIG_MANAGER" update "ai" "enable_bulk_index_warning" "$new_val"
-  export HUB_INDEX_WARN_ENABLED="$new_val"
-  echo "✅ mt-hub bulk-indexing quota warning set to $new_val."
+  export RADAR_INDEX_WARN_ENABLED="$new_val"
+  echo "✅ mt-radar bulk-indexing quota warning set to $new_val."
 }
 
 #######################################
-# Config: Set how many repos mt-hub --index can be about to actually
+# Config: Set how many repos mt-radar --index can be about to actually
 # index (post cache/gap filtering) before its bulk-indexing quota
 # warning kicks in
-# Usage: mt-set-hub-index-warning-threshold <n>
+# Usage: mt-set-radar-index-warning-threshold <n>
 # Arguments:
 #   $1 - Positive integer repo count
 #######################################
-mt-set-hub-index-warning-threshold() {
+mt-set-radar-index-warning-threshold() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
   if ! [[ "$1" =~ ^[0-9]+$ ]] || [ "$1" -lt 1 ]; then
-    echo "Usage: mt-set-hub-index-warning-threshold <positive integer>"
+    echo "Usage: mt-set-radar-index-warning-threshold <positive integer>"
     return 1
   fi
   python3 "$CONFIG_MANAGER" update "ai" "bulk_index_warning_threshold" "$1"
-  export HUB_INDEX_WARN_THRESHOLD="$1"
-  echo "✅ mt-hub bulk-indexing quota warning threshold set to $1 repos."
+  export RADAR_INDEX_WARN_THRESHOLD="$1"
+  echo "✅ mt-radar bulk-indexing quota warning threshold set to $1 repos."
 }
 
 #######################################

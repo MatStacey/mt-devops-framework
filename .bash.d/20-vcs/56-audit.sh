@@ -11,8 +11,8 @@
 # dependency-check for a Maven pom.xml. Anything else reports as
 # unsupported rather than guessing wrong, since there's no single audit
 # tool that covers every build ecosystem the way
-# __mt_hub_detect_build_tool's file-presence checks do for detection
-# alone. On-demand only (not part of mt-hub --index) since a real audit
+# __mt_radar_detect_build_tool's file-presence checks do for detection
+# alone. On-demand only (not part of mt-radar --index) since a real audit
 # hits a registry/database and can take real time -- from a few seconds
 # (npm/pip) up to several minutes on a cold cache (Maven's OWASP
 # dependency-check, which builds a local CVE database on first run) --

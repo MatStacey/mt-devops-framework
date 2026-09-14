@@ -34,7 +34,7 @@ ai:
   # listed, so this no longer needs to be a recurring-self-audit item --
   # it only matters here for what a brand-new install starts pinned to.
   model_check_ttl_sec: 86400
-  # mt-hub --index calls the AI provider once per un-cached/gapped repo,
+  # mt-radar --index calls the AI provider once per un-cached/gapped repo,
   # which can add up fast across a whole VCS_ROOT scan -- this warns (and
   # asks for confirmation, when run from a real terminal) before an
   # indexing run that would actually call AI on more than the threshold
@@ -69,8 +69,8 @@ git:
   # from the URL and has to be configured instead.
   bitbucket_server: ""
   bitbucket_workspace: ""
-  # How many months back mt-hub's own top-contributors heuristic (indexed
-  # into .vcs_hub.json alongside category/description/stack) looks when
+  # How many months back mt-radar's own top-contributors heuristic (indexed
+  # into .vcs_radar.json alongside category/description/stack) looks when
   # counting commits per author on a repo's default branch.
   contributor_lookback_months: 12
 

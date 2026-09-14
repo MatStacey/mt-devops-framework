@@ -1,11 +1,11 @@
 # shellcheck shell=bash
 # ------------------------------------------
-# Repo Hub: Infrastructure Overview (Terraform)
+# Repo Radar: Infrastructure Overview (Terraform)
 # ------------------------------------------
 # ~/.bash.d/20-vcs/57-infra.sh
 
 #######################################
-# Repo Hub: Classify a Terraform resource type into a broad, provider-
+# Repo Radar: Classify a Terraform resource type into a broad, provider-
 # agnostic infrastructure category, by substring on the resource type
 # name (bash glob patterns via `case`, not regex -- Terraform resource
 # type names are already provider_service_thing, e.g. google_sql_
@@ -22,7 +22,7 @@
 #   Prints one of: iam, messaging, data, database, storage, networking,
 #   compute, other
 #######################################
-__mt_hub_infra_categorize_resource() {
+__mt_radar_infra_categorize_resource() {
   local rtype="$1"
   case "$rtype" in
     *iam* | *service_account* | *kms* | *secretmanager* | *secret_manager* | *certificate* | *ssl_cert*)
@@ -53,7 +53,7 @@ __mt_hub_infra_categorize_resource() {
 }
 
 #######################################
-# Repo Hub: Analyze a repo's own Terraform (recursively, including local
+# Repo Radar: Analyze a repo's own Terraform (recursively, including local
 # modules vendored in-repo -- an externally-sourced module's internals
 # aren't visible here, only that it's used) and build a structured
 # overview of the infrastructure it *deploys*: only `resource` blocks are
@@ -72,7 +72,7 @@ __mt_hub_infra_categorize_resource() {
 #    tf_file_count, providers: [...], modules: [{name}],
 #    resources: {<category>: [{type, name}]}, resource_count}
 #######################################
-__mt_hub_infra_analyze_repo() {
+__mt_radar_infra_analyze_repo() {
   local repo_path="$1"
   local -a tf_files=()
   while IFS= read -r -d '' f; do tf_files+=("$f"); done < <(
@@ -105,7 +105,7 @@ __mt_hub_infra_analyze_repo() {
   local rtype rname category
   while IFS=$'\t' read -r rtype rname; do
     [ -z "$rtype" ] && continue
-    category=$(__mt_hub_infra_categorize_resource "$rtype")
+    category=$(__mt_radar_infra_categorize_resource "$rtype")
     printf '%s\t%s\t%s\n' "$category" "$rtype" "$rname" >> "$resource_tsv"
   done < <(
     grep -hoE 'resource[[:space:]]+"[a-zA-Z0-9_]+"[[:space:]]+"[a-zA-Z0-9_-]+"' "${tf_files[@]}" 2> /dev/null |
@@ -138,17 +138,17 @@ __mt_hub_infra_analyze_repo() {
 }
 
 #######################################
-# Repo Hub: Write one repo's infrastructure overview into its own JSON
-# cache (.vcs_infra.json -- separate from .vcs_hub.json so the main
+# Repo Radar: Write one repo's infrastructure overview into its own JSON
+# cache (.vcs_infra.json -- separate from .vcs_radar.json so the main
 # dashboard cache stays small and fast to rewrite on every index run,
 # even though this data is generated far less often), under the same
-# exclusive-lock pattern as __mt_hub_write_cache_entry.
+# exclusive-lock pattern as __mt_radar_write_cache_entry.
 # Arguments:
 #   $1 - Path to the infra JSON cache file
 #   $2 - Repository path (becomes the cache key)
-#   $3 - Infra overview JSON (from __mt_hub_infra_analyze_repo)
+#   $3 - Infra overview JSON (from __mt_radar_infra_analyze_repo)
 #######################################
-__mt_hub_infra_write_cache_entry() {
+__mt_radar_infra_write_cache_entry() {
   local cache_file="$1" repo_path="$2" infra_json="$3"
   local lock_file="${cache_file}.lock"
 
@@ -161,9 +161,9 @@ __mt_hub_infra_write_cache_entry() {
 }
 
 #######################################
-# Repo Hub: Standalone infrastructure analysis over every repo matching
+# Repo Radar: Standalone infrastructure analysis over every repo matching
 # the type/name filters (or every repo, unfiltered) -- unlike
-# __mt_hub_index, this never calls an AI provider and is cheap enough to
+# __mt_radar_index, this never calls an AI provider and is cheap enough to
 # just always re-run and overwrite, so there's no cache/force/update-
 # missing bookkeeping to thread through here. Repos with no Terraform at
 # all are silently skipped (not written to the cache) rather than
@@ -175,7 +175,7 @@ __mt_hub_infra_write_cache_entry() {
 #   $3 - Name filter (empty = no filter)
 #   $4 - Path to the infra JSON cache file
 #######################################
-__mt_hub_infra_run() {
+__mt_radar_infra_run() {
   local search_dir="$1" filter_type="${2,,}" filter_repo="$3" cache_file="$4"
   mkdir -p "$(dirname "$cache_file")"
   [ -f "$cache_file" ] || echo "{}" > "$cache_file"
@@ -199,7 +199,7 @@ __mt_hub_infra_run() {
     [ -n "$filter_repo" ] && [ "$repo_name" != "$filter_repo" ] && continue
 
     local infra_json status
-    infra_json=$(__mt_hub_infra_analyze_repo "$repo_path")
+    infra_json=$(__mt_radar_infra_analyze_repo "$repo_path")
     status=$(echo "$infra_json" | jq -r '.status')
 
     if [ "$status" != "ok" ]; then
@@ -207,10 +207,10 @@ __mt_hub_infra_run() {
       continue
     fi
 
-    __mt_hub_infra_write_cache_entry "$cache_file" "$repo_path" "$infra_json"
+    __mt_radar_infra_write_cache_entry "$cache_file" "$repo_path" "$infra_json"
     echo -e "${CB_GREEN}✅ Infrastructure overview generated: ${repo_name}${C_RESET}"
     analyzed=$((analyzed + 1))
-  done < <(__mt_hub_find_repos "$search_dir")
+  done < <(__mt_radar_find_repos "$search_dir")
 
   if [ "$analyzed" -eq 0 ] && [ "$skipped" -eq 0 ]; then
     mt-log WARN "No repositories matched your filter criteria."
@@ -220,8 +220,8 @@ __mt_hub_infra_run() {
 }
 
 #######################################
-# Repo Hub: Print one repo's cached infrastructure overview (by absolute
-# path or bare repo name, same resolution as __mt_hub_preview), as a
+# Repo Radar: Print one repo's cached infrastructure overview (by absolute
+# path or bare repo name, same resolution as __mt_radar_preview), as a
 # colorized summary or (with json_mode) the raw cached JSON object.
 # Arguments:
 #   $1 - Repo identifier: an absolute path (exact cache key) or a bare
@@ -229,7 +229,7 @@ __mt_hub_infra_run() {
 #   $2 - Path to the infra JSON cache file
 #   $3 - "true" to print the raw JSON instead of a colorized summary
 #######################################
-__mt_hub_infra_show() {
+__mt_radar_infra_show() {
   local repo="$1" cache_file="$2" json_mode="$3"
   [ -f "$cache_file" ] || echo "{}" > "$cache_file"
 
@@ -249,7 +249,7 @@ __mt_hub_infra_show() {
       jq -n '{status: "not-analyzed"}'
     else
       echo -e "${CB_YELLOW}⚠️  No infrastructure overview found for \"${repo}\".${C_RESET}"
-      echo -e "Run ${CB_GREEN}mt-hub --infra -r <repo>${C_RESET} to generate one (requires Terraform in the repo)."
+      echo -e "Run ${CB_GREEN}mt-radar --infra -r <repo>${C_RESET} to generate one (requires Terraform in the repo)."
     fi
     return 0
   fi
@@ -284,6 +284,6 @@ __mt_hub_infra_show() {
   gcp_scan=$(echo "$infra" | jq -r '.gcp_scan // empty')
   if [ -n "$gcp_scan" ] && [ "$gcp_scan" != "null" ]; then
     echo ""
-    __mt_hub_gcp_scan_show "$gcp_scan"
+    __mt_radar_gcp_scan_show "$gcp_scan"
   fi
 }
