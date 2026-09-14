@@ -165,7 +165,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-set-cicd` | Config: Set default CI/CD provider |
 | `mt-set-default-ai` | Config: Set default AI model provider |
 | `mt-set-default-ide` | Config: Set default terminal IDE launcher |
-| `mt-set-hub-index-warning-threshold` | Config: Set how many repos mt-hub --index can be about to actually |
+| `mt-set-radar-index-warning-threshold` | Config: Set how many repos mt-radar --index can be about to actually |
 | `mt-set-theme` | Config: Set terminal color theme |
 | `mt-setup` | Config: Launch the interactive Master Setup Wizard Menu |
 | `mt-setup-ai` | Config: Interactive AI Setup Menu (deprecated alias) |
@@ -178,7 +178,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-toggle-ai` | Config: Toggle global AI prompt and workflow integration (true/false) |
 | `mt-toggle-display` | Config: Show/hide individual prompt segments (Git, GCP, AI provider, |
 | `mt-toggle-format-on-push` | Config: Toggle global format-on-push behavior (true/false) |
-| `mt-toggle-hub-index-warning` | Config: Toggle mt-hub --index's bulk-indexing quota warning (true/false) |
+| `mt-toggle-radar-index-warning` | Config: Toggle mt-radar --index's bulk-indexing quota warning (true/false) |
 | `mt-toggle-update-confirm` | Config: Toggle whether mt-get-update pauses to confirm before overwriting |
 | `mt-wizard-ai` | Config: Interactive AI Setup Menu |
 | `mt-wizard-cicd` | Config: Interactive CI/CD Setup Menu |
@@ -334,10 +334,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mk-stop` | Minikube: Stop a local cluster without destroying it -- state is |
 | `mk-tunnel` | Minikube: Open a network tunnel so LoadBalancer-type services get a |
 
-### MT Repo Hub - AI & Heuristic Metadata Dashboard
+### MT Repo Radar - AI & Heuristic Metadata Dashboard
 | Command | Description |
 |---|---|
-| `mt-hub` | System: Interactive AI-powered Repository Dashboard. An unfiltered |
+| `mt-hub` | Repo Radar: Deprecated name for mt-radar, kept as a thin forwarding |
+| `mt-radar` | System: Interactive AI-powered Repository Dashboard. An unfiltered |
 
 ### MyTools Documentation & Runner
 | Command | Description |

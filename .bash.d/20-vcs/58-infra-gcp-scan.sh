@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # ------------------------------------------
-# Repo Hub: Live GCP Deployment Scanning
+# Repo Radar: Live GCP Deployment Scanning
 # ------------------------------------------
 # ~/.bash.d/20-vcs/58-infra-gcp-scan.sh
 #
@@ -12,25 +12,25 @@
 # not "does its live config match the Terraform source" (that needs a real
 # `terraform plan` against the actual backend/state, with credentials and
 # execution risk this on-demand, read-only heuristic is not meant to carry).
-# On-demand only (`mt-hub --scan-gcp`), never wired into `--index`/`--infra`,
+# On-demand only (`mt-radar --scan-gcp`), never wired into `--index`/`--infra`,
 # since it makes live authenticated API calls and can be slow/rate-limited --
 # same "on-demand only" precedent as mt-audit-deps.
 
 #######################################
-# Repo Hub: Check whether the gcloud CLI is installed and has at least one
+# Repo Radar: Check whether the gcloud CLI is installed and has at least one
 # credentialed account, without making any network call.
 # Outputs:
 #   None
 # Returns:
 #   0 if gcloud is usable, 1 otherwise
 #######################################
-__mt_hub_gcp_available() {
+__mt_radar_gcp_available() {
   command -v gcloud > /dev/null 2>&1 || return 1
   gcloud auth list --filter=status:ACTIVE --format="value(account)" 2> /dev/null | grep -q . || return 1
 }
 
 #######################################
-# Repo Hub: Check whether one Terraform-declared google_* resource actually
+# Repo Radar: Check whether one Terraform-declared google_* resource actually
 # exists in a live GCP project, dispatching the `gcloud ... list` call by
 # resource type. Every call is scoped with an explicit --project (never the
 # ambient `gcloud config` project) and --quiet (never an interactive
@@ -50,7 +50,7 @@ __mt_hub_gcp_available() {
 #   region: string|null, console_url: string|null, live_url: string|null,
 #   reason: string|null}
 #######################################
-__mt_hub_gcp_check_resource() {
+__mt_radar_gcp_check_resource() {
   local rtype="$1" rname="$2" project="$3"
   local deployed=false region="null" console_url="null" live_url="null" reason="null" supported=true
   local raw
@@ -161,8 +161,8 @@ __mt_hub_gcp_check_resource() {
 }
 
 #######################################
-# Repo Hub: Scan every google_* resource in an already-analyzed Terraform
-# infrastructure overview (see __mt_hub_infra_analyze_repo) against a live
+# Repo Radar: Scan every google_* resource in an already-analyzed Terraform
+# infrastructure overview (see __mt_radar_infra_analyze_repo) against a live
 # GCP project, and compute a red/amber/green sync status from the results:
 # green = every checked resource is deployed, red = none are, amber =
 # some but not all, unknown = nothing was checkable (no google_* resources,
@@ -170,15 +170,15 @@ __mt_hub_gcp_check_resource() {
 # completeness signal, not a config/state drift check -- see this file's
 # header comment.
 # Arguments:
-#   $1 - Infra overview JSON (from __mt_hub_infra_analyze_repo /
+#   $1 - Infra overview JSON (from __mt_radar_infra_analyze_repo /
 #        .vcs_infra.json's cached entry)
 #   $2 - GCP project ID to check against
 # Outputs:
 #   Prints a JSON object: {scanned_at, project, sync_status:
 #   "green"|"amber"|"red"|"unknown", checked_count, deployed_count,
-#   unsupported_count, resources: [<__mt_hub_gcp_check_resource results>]}
+#   unsupported_count, resources: [<__mt_radar_gcp_check_resource results>]}
 #######################################
-__mt_hub_gcp_scan_repo() {
+__mt_radar_gcp_scan_repo() {
   local infra_json="$1" project="$2"
 
   local -a google_resources=()
@@ -195,7 +195,7 @@ __mt_hub_gcp_scan_repo() {
   for entry in "${google_resources[@]}"; do
     rtype="${entry%%$'\t'*}"
     rname="${entry#*$'\t'}"
-    result=$(__mt_hub_gcp_check_resource "$rtype" "$rname" "$project")
+    result=$(__mt_radar_gcp_check_resource "$rtype" "$rname" "$project")
     jq --argjson r "$result" '. + [$r]' "$results_tmp" > "${results_tmp}.next" && mv "${results_tmp}.next" "$results_tmp"
   done
 
@@ -227,7 +227,7 @@ __mt_hub_gcp_scan_repo() {
 }
 
 #######################################
-# Repo Hub: Print a GCP scan result (from __mt_hub_gcp_scan_repo) as a
+# Repo Radar: Print a GCP scan result (from __mt_radar_gcp_scan_repo) as a
 # colorized summary -- one line per checked/unsupported resource, plus the
 # overall red/amber/green sync status.
 # Arguments:
@@ -235,7 +235,7 @@ __mt_hub_gcp_scan_repo() {
 # Outputs:
 #   Colorized summary to stdout
 #######################################
-__mt_hub_gcp_scan_show() {
+__mt_radar_gcp_scan_show() {
   local scan_json="$1"
   local sync_status project checked deployed unsupported
   sync_status=$(echo "$scan_json" | jq -r '.sync_status')
@@ -289,17 +289,17 @@ __mt_hub_gcp_scan_show() {
 }
 
 #######################################
-# Repo Hub: Merge a GCP scan result into a repo's existing .vcs_infra.json
+# Repo Radar: Merge a GCP scan result into a repo's existing .vcs_infra.json
 # entry (as a "gcp_scan" field), preserving every other field already
-# there -- unlike __mt_hub_infra_write_cache_entry, this must not replace
+# there -- unlike __mt_radar_infra_write_cache_entry, this must not replace
 # the whole entry, since the Terraform overview it was computed from lives
 # in the same cache record.
 # Arguments:
 #   $1 - Path to the infra JSON cache file
 #   $2 - Repository path (the existing cache key)
-#   $3 - GCP scan JSON (from __mt_hub_gcp_scan_repo)
+#   $3 - GCP scan JSON (from __mt_radar_gcp_scan_repo)
 #######################################
-__mt_hub_infra_write_gcp_scan() {
+__mt_radar_infra_write_gcp_scan() {
   local cache_file="$1" repo_path="$2" scan_json="$3"
   local lock_file="${cache_file}.lock"
 

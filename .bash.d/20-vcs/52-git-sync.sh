@@ -1212,7 +1212,7 @@ mt-migrate-symlink() {
   local drift
   drift=$(diff -rq \
     --exclude='config.yaml' --exclude='.env.cache' --exclude='*_token.sh' \
-    --exclude='secrets_metadata.yaml' --exclude='.vcs_hub.json' --exclude='.syncignore' \
+    --exclude='secrets_metadata.yaml' --exclude='.vcs_radar.json' --exclude='.syncignore' \
     --exclude='data' --exclude='40-private' --exclude='private' \
     "$HOME/.bash.d" "$repo_dir/.bash.d" 2> /dev/null)
   if [ -n "$drift" ]; then

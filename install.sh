@@ -28,8 +28,8 @@ mkdir -p "$TARGET_BASHD"
 # other real secrets live entirely outside .bash.d, in
 # ~/vcs/secrets/secrets.sh, so they are never touched by this sync at all.
 #
-# data/cache/.vcs_hub.json is also excluded: it's the accumulated result
-# of `mt-hub --index` scanning the user's repos (including AI-generated
+# data/cache/.vcs_radar.json is also excluded: it's the accumulated result
+# of `mt-radar --index` scanning the user's repos (including AI-generated
 # summaries), not framework state -- unlike the other caches under
 # data/cache/, it isn't cheaply auto-regenerated, so an update should
 # never silently discard it.
@@ -54,7 +54,7 @@ rsync -a --delete \
   --exclude 'config/.env.cache' \
   --exclude 'config/*_token.sh' \
   --exclude 'config/secrets_metadata.yaml' \
-  --exclude 'data/cache/.vcs_hub.json' \
+  --exclude 'data/cache/.vcs_radar.json' \
   --exclude '*private*.sh' \
   --exclude '*.local.sh' \
   --exclude '*.local' \
