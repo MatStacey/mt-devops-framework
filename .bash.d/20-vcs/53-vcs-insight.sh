@@ -242,6 +242,76 @@ __mt_radar_detect_gcp() {
 }
 
 #######################################
+# Repo Radar: Deterministically detect per-environment GCP projects from a
+# repo's own Terraform layout, for the common "one subfolder per
+# environment" convention (terraform/environments/<dev|stage|prod|...>,
+# terraform/envs/..., or a bare environments/.../envs/... at the repo
+# root) -- each subfolder's name is the environment, and its own .tf
+# files are searched for a literal `project`/`project_name` assignment
+# (a plain quoted string only; a `= var.x`/`= local.x` reference is
+# skipped rather than resolved, same "never guess a project ID" caution
+# as __mt_radar_detect_gcp, just scoped to a literal already sitting
+# right there in that environment's own files instead of the whole
+# repo). This is deliberately narrower and more literal than
+# __mt_radar_detect_gcp's own repo-wide services detection -- it only
+# ever fires for this specific per-environment-folder layout, and
+# produces no result at all (not a guess) for anything else, e.g. a
+# single shared root module driven by workspaces or -var-file instead.
+# Arguments:
+#   $1 - Repository path
+# Outputs:
+#   Prints a JSON array (possibly empty) of {"name": "<TYPE>: GCP -
+#   <project-id>" (or "<TYPE>: <folder-name>" when no literal project ID
+#   was found), "type": "dev"|"staging"|"prod"|"test"|"other"}, one
+#   entry per environment subfolder, de-duplicated by (type, name).
+#######################################
+__mt_radar_detect_environments() {
+  local repo_path="$1"
+  local env_root=""
+  local candidate
+  for candidate in "terraform/environments" "terraform/envs" "environments" "envs"; do
+    [ -d "$repo_path/$candidate" ] && {
+      env_root="$repo_path/$candidate"
+      break
+    }
+  done
+  [ -z "$env_root" ] && {
+    echo "[]"
+    return 0
+  }
+
+  local results="[]"
+  local env_dir env_name env_type project_id label type_upper
+  for env_dir in "$env_root"/*/; do
+    [ -d "$env_dir" ] || continue
+    env_name=$(basename "$env_dir")
+    case "$env_name" in
+      *dev*) env_type="dev" ;;
+      *stag*) env_type="staging" ;;
+      *prod*) env_type="prod" ;;
+      *test* | *qa*) env_type="test" ;;
+      *) env_type="other" ;;
+    esac
+
+    # Literal quoted strings only -- "project"/"project_name" set to a
+    # var/local reference is intentionally left unresolved (see docstring).
+    project_id=$(grep -rhoE '\b(project|project_name)[[:space:]]*=[[:space:]]*"[a-zA-Z0-9._-]+"' \
+      "$env_dir" --include="*.tf" 2> /dev/null |
+      head -n1 | sed -E 's/.*=[[:space:]]*"([^"]+)"/\1/')
+
+    type_upper=$(echo "$env_type" | tr '[:lower:]' '[:upper:]')
+    if [ -n "$project_id" ]; then
+      label="${type_upper}: GCP - ${project_id}"
+    else
+      label="${type_upper}: ${env_name}"
+    fi
+    results=$(echo "$results" | jq --arg n "$label" --arg t "$env_type" '. + [{name: $n, type: $t}]')
+  done
+
+  echo "$results" | jq 'unique_by(.name)'
+}
+
+#######################################
 # Repo Radar: Detect a repo's primary language/stack by the most common file
 # extension among its top-level files
 # Arguments:
@@ -530,7 +600,7 @@ __mt_radar_index_one_repo() {
 
   echo -e "${CB_YELLOW}⚙️  Indexing $repo_name...${C_RESET}"
 
-  local cicd build testing stack gcp top_contributors
+  local cicd build testing stack gcp top_contributors tf_environments
   cicd=$(__mt_radar_detect_cicd "$repo_path")
   build=$(__mt_radar_detect_build_tool "$repo_path")
   testing=$(__mt_radar_detect_test_framework "$repo_path")
@@ -538,9 +608,16 @@ __mt_radar_index_one_repo() {
   stack=$(__mt_radar_reconcile_stack "$build" "$stack")
   gcp=$(__mt_radar_detect_gcp "$repo_path")
   top_contributors=$(__mt_radar_detect_top_contributors "$repo_path" "${CONTRIBUTOR_LOOKBACK_MONTHS:-12}")
+  tf_environments=$(__mt_radar_detect_environments "$repo_path")
 
   local ai_description="" ai_category="" ai_environments="[]"
   __mt_radar_summarize_repo "$repo_path" "$provider"
+
+  # Prefer the deterministic per-environment Terraform-folder detection
+  # over the AI's free-text guess whenever it found anything -- see
+  # __mt_radar_detect_environments's own docstring for why this is more
+  # trustworthy than an AI-inferred environment name/project ID.
+  [ "$(echo "$tf_environments" | jq 'length')" -gt 0 ] && ai_environments="$tf_environments"
 
   __mt_radar_write_cache_entry "$cache_file" "$repo_path" "$ai_category" "$ai_description" "$stack" "$build" "$cicd" "$testing" "$ai_environments" "$gcp" "$top_contributors"
 
@@ -1015,7 +1092,7 @@ mt-radar() {
 
     echo -e "${CB_BLUE}🔍 Scanning ${filter_repo}'s Terraform resources against GCP project '${scan_project}'...${C_RESET}"
     local scan_result
-    scan_result=$(__mt_radar_gcp_scan_repo "$infra_entry" "$scan_project")
+    scan_result=$(__mt_radar_gcp_scan_repo "$infra_entry" "$scan_project" "$filter_repo")
     __mt_radar_infra_write_gcp_scan "$infra_cache_file" "$resolved_repo_path" "$scan_result"
 
     if [ "$json_mode" = true ]; then

@@ -39,81 +39,130 @@ __mt_radar_gcp_available() {
 # Arguments:
 #   $1 - Terraform resource type (e.g. "google_cloud_run_v2_service")
 #   $2 - Terraform resource name (the Terraform resource label, used as the
-#        expected live resource name -- real deployments name the resource
-#        after this label far more often than not, but a repo that renames
-#        resources via a `name = "..."` override will show a false negative
-#        here; there's no way to resolve that without evaluating the
-#        Terraform itself)
+#        first-choice expected live resource name -- real deployments name
+#        the resource after this label far more often than not)
 #   $3 - GCP project ID to check against
+#   $4 - Fallback candidate name (optional) -- tried only if $2 doesn't
+#        match anything live, e.g. the repo's own basename. Real-world
+#        Terraform overwhelmingly deploys resources named after the repo
+#        itself (`name = var.service_name`, set from a repo-named CI
+#        variable/tfvars, not the Terraform resource label), which this
+#        catches without evaluating the Terraform itself -- something
+#        __mt_radar_detect_gcp's own docstring already rules out doing
+#        for the same reason (a variable, not a literal, is what's
+#        actually there far more often than not).
 # Outputs:
 #   Prints a JSON object: {type, name, supported: bool, deployed: bool,
 #   region: string|null, console_url: string|null, live_url: string|null,
+#   matched_name: string|null (the live name that actually matched, only
+#   when it differs from $2 -- i.e. it matched via the $4 fallback),
 #   reason: string|null}
 #######################################
 __mt_radar_gcp_check_resource() {
-  local rtype="$1" rname="$2" project="$3"
+  local rtype="$1" rname="$2" project="$3" fallback_name="${4:-}"
   local deployed=false region="null" console_url="null" live_url="null" reason="null" supported=true
+  local matched_name="null"
   local raw
+
+  # Try the Terraform label first, then the fallback candidate (if given
+  # and different) only when the label didn't match anything live.
+  local -a candidates=("$rname")
+  [ -n "$fallback_name" ] && [ "$fallback_name" != "$rname" ] && candidates+=("$fallback_name")
 
   # Every branch below captures stdout only (stderr discarded) and checks
   # the real exit code for success/failure -- gcloud often emits benign
   # warnings on stderr (e.g. deprecation notices) alongside perfectly valid
   # JSON on stdout, so merging the two streams would misparse a successful,
   # empty result as an API error.
-  local rc
+  local rc candidate found=false
   case "$rtype" in
     google_cloud_run_service | google_cloud_run_v2_service | google_cloud_run_v2_job)
-      raw=$(gcloud run services list --project="$project" --filter="metadata.name=$rname" --format=json --quiet 2> /dev/null)
-      rc=$?
-      if [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ]; then
+      for candidate in "${candidates[@]}"; do
+        raw=$(gcloud run services list --project="$project" --filter="metadata.name=$candidate" --format=json --quiet 2> /dev/null)
+        rc=$?
+        [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ] && {
+          found=true
+          break
+        }
+      done
+      if [ "$found" = true ]; then
         deployed=true
+        [ "$candidate" != "$rname" ] && matched_name="\"$candidate\""
         region=$(echo "$raw" | jq -r '.[0].metadata.labels."cloud.googleapis.com/location" // .[0].region // empty')
         live_url=$(echo "$raw" | jq -r '.[0].status.url // empty')
-        console_url="https://console.cloud.google.com/run/detail/${region}/${rname}/metrics?project=${project}"
+        console_url="https://console.cloud.google.com/run/detail/${region}/${candidate}/metrics?project=${project}"
       elif [ "$rc" -ne 0 ]; then
         reason="api-error"
       fi
       ;;
     google_container_cluster | google_container_node_pool)
-      raw=$(gcloud container clusters list --project="$project" --filter="name=$rname" --format=json --quiet 2> /dev/null)
-      rc=$?
-      if [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ]; then
+      for candidate in "${candidates[@]}"; do
+        raw=$(gcloud container clusters list --project="$project" --filter="name=$candidate" --format=json --quiet 2> /dev/null)
+        rc=$?
+        [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ] && {
+          found=true
+          break
+        }
+      done
+      if [ "$found" = true ]; then
         deployed=true
+        [ "$candidate" != "$rname" ] && matched_name="\"$candidate\""
         region=$(echo "$raw" | jq -r '.[0].location // empty')
-        console_url="https://console.cloud.google.com/kubernetes/clusters/details/${region}/${rname}/details?project=${project}"
+        console_url="https://console.cloud.google.com/kubernetes/clusters/details/${region}/${candidate}/details?project=${project}"
       elif [ "$rc" -ne 0 ]; then
         reason="api-error"
       fi
       ;;
     google_compute_instance | google_compute_instance_template | google_compute_instance_group*)
-      raw=$(gcloud compute instances list --project="$project" --filter="name=$rname" --format=json --quiet 2> /dev/null)
-      rc=$?
-      if [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ]; then
+      for candidate in "${candidates[@]}"; do
+        raw=$(gcloud compute instances list --project="$project" --filter="name=$candidate" --format=json --quiet 2> /dev/null)
+        rc=$?
+        [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ] && {
+          found=true
+          break
+        }
+      done
+      if [ "$found" = true ]; then
         deployed=true
+        [ "$candidate" != "$rname" ] && matched_name="\"$candidate\""
         region=$(echo "$raw" | jq -r '.[0].zone // empty' | sed -E 's#.*/##')
-        console_url="https://console.cloud.google.com/compute/instancesDetail/zones/${region}/instances/${rname}?project=${project}"
+        console_url="https://console.cloud.google.com/compute/instancesDetail/zones/${region}/instances/${candidate}?project=${project}"
       elif [ "$rc" -ne 0 ]; then
         reason="api-error"
       fi
       ;;
     google_sql_database_instance)
-      raw=$(gcloud sql instances list --project="$project" --filter="name=$rname" --format=json --quiet 2> /dev/null)
-      rc=$?
-      if [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ]; then
+      for candidate in "${candidates[@]}"; do
+        raw=$(gcloud sql instances list --project="$project" --filter="name=$candidate" --format=json --quiet 2> /dev/null)
+        rc=$?
+        [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ] && {
+          found=true
+          break
+        }
+      done
+      if [ "$found" = true ]; then
         deployed=true
+        [ "$candidate" != "$rname" ] && matched_name="\"$candidate\""
         region=$(echo "$raw" | jq -r '.[0].region // empty')
-        console_url="https://console.cloud.google.com/sql/instances/${rname}/overview?project=${project}"
+        console_url="https://console.cloud.google.com/sql/instances/${candidate}/overview?project=${project}"
       elif [ "$rc" -ne 0 ]; then
         reason="api-error"
       fi
       ;;
     google_storage_bucket)
-      raw=$(gcloud storage buckets describe "gs://${rname}" --project="$project" --format=json --quiet 2> /dev/null)
-      rc=$?
-      if [ "$rc" -eq 0 ] && [ -n "$(echo "$raw" | jq -r '.name // empty' 2> /dev/null)" ]; then
+      for candidate in "${candidates[@]}"; do
+        raw=$(gcloud storage buckets describe "gs://${candidate}" --project="$project" --format=json --quiet 2> /dev/null)
+        rc=$?
+        [ "$rc" -eq 0 ] && [ -n "$(echo "$raw" | jq -r '.name // empty' 2> /dev/null)" ] && {
+          found=true
+          break
+        }
+      done
+      if [ "$found" = true ]; then
         deployed=true
-        console_url="https://console.cloud.google.com/storage/browser/${rname}?project=${project}"
-        live_url="https://storage.googleapis.com/${rname}"
+        [ "$candidate" != "$rname" ] && matched_name="\"$candidate\""
+        console_url="https://console.cloud.google.com/storage/browser/${candidate}?project=${project}"
+        live_url="https://storage.googleapis.com/${candidate}"
       elif [ "$rc" -ne 0 ]; then
         reason="not-found-or-no-access"
       fi
@@ -125,10 +174,17 @@ __mt_radar_gcp_check_resource() {
       # existing GCP-region config value -- reused rather than adding a
       # second region setting), not that it's currently streaming.
       local dataflow_region="${DOCKER_GAR_REGION:-europe-west2}"
-      raw=$(gcloud dataflow jobs list --project="$project" --region="$dataflow_region" --filter="name:$rname" --format=json --quiet 2> /dev/null)
-      rc=$?
-      if [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ]; then
+      for candidate in "${candidates[@]}"; do
+        raw=$(gcloud dataflow jobs list --project="$project" --region="$dataflow_region" --filter="name:$candidate" --format=json --quiet 2> /dev/null)
+        rc=$?
+        [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ] && {
+          found=true
+          break
+        }
+      done
+      if [ "$found" = true ]; then
         deployed=true
+        [ "$candidate" != "$rname" ] && matched_name="\"$candidate\""
         region="$dataflow_region"
         local job_id
         job_id=$(echo "$raw" | jq -r '.[0].id // empty')
@@ -156,8 +212,9 @@ __mt_radar_gcp_check_resource() {
     --argjson region "$region" \
     --argjson console_url "$console_url" \
     --argjson live_url "$live_url" \
+    --argjson matched_name "$matched_name" \
     --argjson reason "$reason" \
-    '{type: $t, name: $n, supported: $supported, deployed: $deployed, region: $region, console_url: $console_url, live_url: $live_url, reason: $reason}'
+    '{type: $t, name: $n, supported: $supported, deployed: $deployed, region: $region, console_url: $console_url, live_url: $live_url, matched_name: $matched_name, reason: $reason}'
 }
 
 #######################################
@@ -173,13 +230,17 @@ __mt_radar_gcp_check_resource() {
 #   $1 - Infra overview JSON (from __mt_radar_infra_analyze_repo /
 #        .vcs_infra.json's cached entry)
 #   $2 - GCP project ID to check against
+#   $3 - Repo name (optional) -- passed through to __mt_radar_gcp_check_resource
+#        as its fallback candidate name, for the very common case of a
+#        resource named after the repo (`name = var.service_name`) rather
+#        than its Terraform resource label.
 # Outputs:
 #   Prints a JSON object: {scanned_at, project, sync_status:
 #   "green"|"amber"|"red"|"unknown", checked_count, deployed_count,
 #   unsupported_count, resources: [<__mt_radar_gcp_check_resource results>]}
 #######################################
 __mt_radar_gcp_scan_repo() {
-  local infra_json="$1" project="$2"
+  local infra_json="$1" project="$2" repo_name="${3:-}"
 
   local -a google_resources=()
   while IFS=$'\t' read -r rtype rname; do
@@ -195,7 +256,7 @@ __mt_radar_gcp_scan_repo() {
   for entry in "${google_resources[@]}"; do
     rtype="${entry%%$'\t'*}"
     rname="${entry#*$'\t'}"
-    result=$(__mt_radar_gcp_check_resource "$rtype" "$rname" "$project")
+    result=$(__mt_radar_gcp_check_resource "$rtype" "$rname" "$project" "$repo_name")
     jq --argjson r "$result" '. + [$r]' "$results_tmp" > "${results_tmp}.next" && mv "${results_tmp}.next" "$results_tmp"
   done
 
@@ -272,12 +333,13 @@ __mt_radar_gcp_scan_show() {
 
   echo ""
   local line
-  while IFS=$'\t' read -r rtype rname deployed_flag console_url reason; do
+  while IFS=$'\t' read -r rtype rname deployed_flag console_url matched_name reason; do
     [ -z "$rtype" ] && continue
     if [ "$reason" = "unsupported-resource-type" ]; then
       echo -e " ${C_DIM}⚪ ${rtype}.${rname} -- unsupported${C_RESET}"
     elif [ "$deployed_flag" = "true" ]; then
       line=" ${CB_GREEN}✅ ${rtype}.${rname}${C_RESET}"
+      [ "$matched_name" != "null" ] && line="${line} ${C_DIM}(deployed as \"${matched_name}\", not the Terraform label)${C_RESET}"
       [ "$console_url" != "null" ] && line="${line} -- ${console_url}"
       echo -e "$line"
     else
@@ -285,7 +347,7 @@ __mt_radar_gcp_scan_show() {
       [ "$reason" != "null" ] && line="${line} (${reason})"
       echo -e "$line"
     fi
-  done < <(echo "$scan_json" | jq -r '.resources[] | [.type, .name, (.deployed|tostring), (.console_url // "null"), (.reason // "null")] | @tsv')
+  done < <(echo "$scan_json" | jq -r '.resources[] | [.type, .name, (.deployed|tostring), (.console_url // "null"), (.matched_name // "null"), (.reason // "null")] | @tsv')
 }
 
 #######################################
