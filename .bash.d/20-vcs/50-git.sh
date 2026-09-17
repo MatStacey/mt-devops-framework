@@ -1138,3 +1138,129 @@ mt-repos() {
   echo ""
   rm -f "$tmp_out"
 }
+
+#######################################
+# Git: Run a git subcommand across every repo matching mt-repos' own
+# scope/provider/workspace/project filters (see __mt_vcs_matches_filter)
+# -- a targeted tracked-file check ('ls-files -- path'), a one-line
+# HEAD summary ('log -1 --format=%H'), or any other read query, without
+# a manual loop over mt-repos' own output. Read-only by convention: this
+# doesn't guard against a destructive git subcommand -- it's exactly as
+# dangerous as running that subcommand yourself in each matched repo.
+# Usage: mt-repos-run [-s work|personal] [-p provider] [-w workspace]
+#                     [-pr project] -- <git-subcommand> [args...]
+# Options:
+#   -s, --scope <work|personal>   Only run in repos under this scope
+#   -p, --provider <name>         Only run in repos under this provider (work scope only)
+#   -w, --workspace <name>        Only run in repos under this workspace (work scope only)
+#   -pr, --project <name>         Only run in repos under this project (work scope) or this exact repo (personal scope)
+#   -h, --help                    Show this help
+# Globals:
+#   VCS_ROOT
+#######################################
+mt-repos-run() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local scope="" provider="" workspace="" project=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -s | --scope)
+        scope="${2,,}"
+        if [[ "$scope" != "work" && "$scope" != "personal" ]]; then
+          echo "mt-repos-run: --scope must be 'work' or 'personal'" >&2
+          return 1
+        fi
+        shift 2
+        ;;
+      -p | --provider)
+        provider="$2"
+        shift 2
+        ;;
+      -w | --workspace)
+        workspace="$2"
+        shift 2
+        ;;
+      -pr | --project)
+        project="$2"
+        shift 2
+        ;;
+      --)
+        shift
+        break
+        ;;
+      *)
+        echo "Usage: mt-repos-run [-s work|personal] [-p provider] [-w workspace] [-pr project] -- <git-subcommand> [args...]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [ "$#" -eq 0 ]; then
+    echo "Usage: mt-repos-run [-s work|personal] [-p provider] [-w workspace] [-pr project] -- <git-subcommand> [args...]" >&2
+    return 1
+  fi
+
+  local search_dir="${VCS_ROOT:-$HOME/vcs}"
+  if [ ! -d "$search_dir" ]; then
+    echo -e "${CB_RED}🚨 Error: VCS root directory '$search_dir' not found.${C_RESET}"
+    return 1
+  fi
+
+  local repo_path matched=0
+  while IFS= read -r repo_path; do
+    [ -z "$repo_path" ] && continue
+    __mt_vcs_matches_filter "$repo_path" "$scope" "$provider" "$workspace" "$project" || continue
+    ((++matched))
+    echo -e "${CB_CYAN}▶ $(basename "$repo_path")${C_RESET}"
+    git -C "$repo_path" "$@"
+    echo
+  done < <(__mt_vcs_find_repos "$search_dir")
+
+  if [ "$matched" -eq 0 ]; then
+    echo -e "${CB_YELLOW}⚠️  No repositories matched the given filters.${C_RESET}"
+  fi
+}
+
+#######################################
+# Git: Quick orientation for starting a code review -- current branch
+# and uncommitted-file status plus a clean file tree, so there's no
+# need to fall back to raw 'git status' and 'find'/tree-clean's own eza
+# call separately before reading through a repo's structure.
+# Usage: git-review-start [-d <depth>]
+# Options:
+#   -d, --depth <n>   Tree depth passed to eza --tree (default: 3)
+#######################################
+git-review-start() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local depth=3
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -d | --depth)
+        depth="$2"
+        shift 2
+        ;;
+      *)
+        echo "Usage: git-review-start [-d <depth>]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 Not inside a git repository.${C_RESET}"
+    return 1
+  fi
+
+  echo -e "${CB_BLUE}🌿 Branch & Status${C_RESET}"
+  git status --short --branch
+
+  echo -e "\n${CB_BLUE}🌳 File Tree (depth ${depth})${C_RESET}"
+  eza --tree --level "$depth" -I ".git|node_modules|__pycache__|.terraform|venv|.venv|.mt_cache*|target"
+}

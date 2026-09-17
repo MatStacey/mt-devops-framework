@@ -1200,6 +1200,59 @@ docker-ls() {
 }
 
 #######################################
+# Docker: List each Compose service's container_name, restart policy,
+# and whether it declares a healthcheck at all -- a quick inventory
+# before deciding what needs an external monitor (Uptime Kuma,
+# Prometheus, ...) versus what already self-reports via Docker's own
+# health status. Reads the Compose file's YAML directly (not 'docker
+# compose config'), so it works without a running project.
+# Usage: docker-compose-inspect [-f <compose-file>]
+# Options:
+#   -f, --file <path>   Compose file to inspect (default: ./docker-compose.yml)
+#######################################
+docker-compose-inspect() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local compose_file="./docker-compose.yml"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -f | --file)
+        compose_file="$2"
+        shift 2
+        ;;
+      *)
+        echo "Usage: docker-compose-inspect [-f <compose-file>]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if ! command -v yq > /dev/null 2>&1; then
+    echo -e "${CB_RED}❌ yq is required by docker-compose-inspect but was not found.${C_RESET}"
+    return 1
+  fi
+
+  if [ ! -f "$compose_file" ]; then
+    echo -e "${CB_RED}❌ Compose file not found: $compose_file${C_RESET}"
+    return 1
+  fi
+
+  printf "${CB_BLUE}%-20s %-20s %-16s %-12s${C_RESET}\n" "SERVICE" "CONTAINER_NAME" "RESTART" "HEALTHCHECK"
+  echo "-----------------------------------------------------------------"
+
+  local service container restart has_health health_disp
+  while IFS='|' read -r service container restart has_health; do
+    [ -z "$service" ] && continue
+    health_disp="none"
+    [ "$has_health" = "true" ] && health_disp="yes"
+    printf "%-20s %-20s %-16s %-12s\n" "$service" "$container" "$restart" "$health_disp"
+  done < <(yq -r '.services | to_entries[] | "\(.key)|\(.value.container_name // .key)|\(.value.restart // "no")|\((.value.healthcheck != null))"' "$compose_file")
+}
+
+#######################################
 # Docker: Interactive fuzzy-finder to exec into a running container
 # Usage: docker-shell
 #######################################
