@@ -159,16 +159,33 @@ gcl-config() {
 }
 
 #######################################
-# GCP: List org policies for active project
+# GCP: List org policies for a project
+# Usage: gcl-org-policies [-p <project>]
+# Options:
+#   -p, --project <id>   Project to inspect (default: the active gcloud project)
 #######################################
 gcl-org-policies() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
-  local project_id
-  project_id=$(gcl-get-project)
-  [ -n "$project_id" ] && gcloud alpha resource-manager org-policies list --project="$project_id"
+
+  local project_id=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -p | --project)
+        project_id="$2"
+        shift 2
+        ;;
+      *)
+        echo "Usage: gcl-org-policies [-p <project>]" >&2
+        return 1
+        ;;
+    esac
+  done
+  [ -z "$project_id" ] && project_id=$(gcl-get-project)
+
+  [ -n "$project_id" ] && gcloud alpha resource-manager org-policies list --project="$project_id" --quiet
 }
 
 #######################################
