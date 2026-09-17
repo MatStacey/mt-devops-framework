@@ -213,12 +213,16 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `docker-containers` | Docker: Interactive container management console -- fzf-pick any |
 | `docker-daemon` | Docker: Start, stop, restart, or check the status of the Docker daemon |
-| `docker-ls` | Docker: List all running containers in a clean table format |
+| `docker-group-start` | Docker: Start every container in a single Compose project -- 'docker |
+| `docker-group-stop` | Docker: Stop every container in a single Compose project in place -- |
+| `docker-ls` | Docker: List containers in a clean table format |
 | `docker-nuke` | Docker: Aggressive cleanup of all unused containers, images, and volumes |
 | `docker-reboot` | Docker: Recreate a single Compose project |
 | `docker-reboot-all` | Docker: Recreate every running Docker Compose project on this host -- |
 | `docker-sandbox` | Docker: Spin up a temporary, throwaway container sandbox |
 | `docker-shell` | Docker: Interactive fuzzy-finder to exec into a running container |
+| `docker-start-all` | Docker: Start every known Docker Compose project on this host, |
+| `docker-stop-all` | Docker: Stop every running Docker Compose project on this host in |
 | `docker-tail` | Docker: Concurrently tail logs from multiple selected containers |
 | `docker-update` | Docker: Check a Compose project for image updates and optionally |
 

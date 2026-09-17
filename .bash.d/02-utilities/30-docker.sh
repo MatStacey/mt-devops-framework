@@ -370,6 +370,45 @@ __docker_update_local_digest() {
 }
 
 #######################################
+# Docker: Resolve a container name/ID or a Compose project name to its
+# Compose project name and config file -- shared by docker-reboot,
+# docker-group-stop, and docker-group-start, all of which accept either
+# form of target the same way.
+#
+# Scans 'docker ps -a' (every known container, not just running ones)
+# rather than 'docker ps' when resolving a bare project name, so a
+# project that's currently fully stopped can still be found -- e.g. by
+# docker-group-start, whose whole purpose is starting one back up.
+# Arguments:
+#   $1 - Container name/ID, or Compose project name
+#   $2 - Name of the caller's variable to receive the project name
+#   $3 - Name of the caller's variable to receive the compose file path
+# Returns:
+#   0 on success, 1 if the target can't be resolved to a Compose project
+#######################################
+__docker_resolve_project() {
+  local target="$1" project_var="$2" compose_var="$3"
+
+  if docker inspect "$target" > /dev/null 2>&1; then
+    __docker_reboot_compose_metadata "$target" "$project_var" "$compose_var"
+    return $?
+  fi
+
+  local container
+  container=$(docker ps -a --format "{{.Names}}" | while read -r c; do
+    local p
+    # f is required by __docker_reboot_compose_metadata's 3-arg signature; only $p is checked here
+    # shellcheck disable=SC2034
+    local f
+    __docker_reboot_compose_metadata "$c" p f || continue
+    [[ "$p" == "$target" ]] && echo "$c" && break
+  done)
+
+  [[ -n "$container" ]] || return 1
+  __docker_reboot_compose_metadata "$container" "$project_var" "$compose_var"
+}
+
+#######################################
 # Docker: Recreate a single Compose project
 #
 # Usage:
@@ -399,33 +438,10 @@ docker-reboot() {
     return 1
   fi
 
-  local project=""
-  local compose_file=""
-
-  # Resolve container name to compose metadata
-  if docker inspect "$target" > /dev/null 2>&1; then
-    if ! __docker_reboot_compose_metadata "$target" project compose_file; then
-      echo -e "${CB_RED}❌ Unable to resolve Compose project for: $target${C_RESET}"
-      return 1
-    fi
-  else
-    # Allow project name directly
-    local container
-    container=$(docker ps --format "{{.Names}}" | while read -r c; do
-      local p
-      # f is required by __docker_reboot_compose_metadata's 3-arg signature; only $p is checked here
-      # shellcheck disable=SC2034
-      local f
-      __docker_reboot_compose_metadata "$c" p f || continue
-      [[ "$p" == "$target" ]] && echo "$c" && break
-    done)
-
-    if [[ -z "$container" ]]; then
-      echo -e "${CB_RED}❌ Compose project not found: $target${C_RESET}"
-      return 1
-    fi
-
-    __docker_reboot_compose_metadata "$container" project compose_file
+  local project="" compose_file=""
+  if ! __docker_resolve_project "$target" project compose_file; then
+    echo -e "${CB_RED}❌ Unable to resolve Compose project for: $target${C_RESET}"
+    return 1
   fi
 
   echo "🔄 Restarting Docker Compose project: ${project}"
@@ -451,6 +467,104 @@ docker-reboot() {
   local failure_reason
   if __docker_reboot_wait_for_project "$compose_file" failure_reason; then
     echo -e "${CB_GREEN}✅ Project recreated: ${project}${C_RESET}"
+    return 0
+  fi
+
+  echo -e "${CB_YELLOW}⚠️  Project did not become healthy: ${project} (${failure_reason})${C_RESET}"
+  return 1
+}
+
+#######################################
+# Docker: Stop every container in a single Compose project in place --
+# 'docker compose stop', not the down+up recreate docker-reboot does, so
+# containers/networks/volumes are left intact for a later
+# docker-group-start to resume.
+# Usage: docker-group-stop <container|project> [--verbose]
+#######################################
+docker-group-stop() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  __docker_ensure_running || return 1
+
+  local target="$1"
+  local verbose=false
+  [[ "$2" == "--verbose" ]] && verbose=true
+
+  if [[ -z "$target" ]]; then
+    echo "Usage: docker-group-stop <container|project> [--verbose]"
+    return 1
+  fi
+
+  local project="" compose_file=""
+  if ! __docker_resolve_project "$target" project compose_file; then
+    echo -e "${CB_RED}❌ Unable to resolve Compose project for: $target${C_RESET}"
+    return 1
+  fi
+
+  echo "🛑 Stopping Docker Compose project: ${project}"
+
+  local stop_succeeded=true
+  if $verbose; then
+    docker compose -f "$compose_file" stop || stop_succeeded=false
+  else
+    docker compose -f "$compose_file" stop > /dev/null 2>&1 || stop_succeeded=false
+  fi
+
+  if $stop_succeeded; then
+    echo -e "${CB_GREEN}✅ Project stopped: ${project}${C_RESET}"
+    return 0
+  fi
+
+  echo -e "${CB_RED}❌ Failed to stop project: ${project}${C_RESET}"
+  return 1
+}
+
+#######################################
+# Docker: Start every container in a single Compose project -- 'docker
+# compose up -d', which both creates a never-started project and
+# resumes a stopped one, then waits for the same readiness
+# __docker_reboot_wait_for_project uses for docker-reboot.
+# Usage: docker-group-start <container|project> [--verbose]
+#######################################
+docker-group-start() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  __docker_ensure_running || return 1
+
+  local target="$1"
+  local verbose=false
+  [[ "$2" == "--verbose" ]] && verbose=true
+
+  if [[ -z "$target" ]]; then
+    echo "Usage: docker-group-start <container|project> [--verbose]"
+    return 1
+  fi
+
+  local project="" compose_file=""
+  if ! __docker_resolve_project "$target" project compose_file; then
+    echo -e "${CB_RED}❌ Unable to resolve Compose project for: $target${C_RESET}"
+    return 1
+  fi
+
+  echo "🚀 Starting Docker Compose project: ${project}"
+
+  if $verbose; then
+    docker compose -f "$compose_file" up -d
+  else
+    docker compose -f "$compose_file" up -d > /dev/null 2>&1
+  fi
+
+  echo "⏳ Waiting for recovery..."
+
+  local failure_reason
+  if __docker_reboot_wait_for_project "$compose_file" failure_reason; then
+    echo -e "${CB_GREEN}✅ Project started: ${project}${C_RESET}"
     return 0
   fi
 
@@ -790,14 +904,117 @@ docker-update() {
 }
 
 #######################################
+# Docker: Shared engine behind docker-reboot-all/docker-stop-all/
+# docker-start-all -- discovers Compose projects, applies -x/
+# DOCKER_BLOCKLIST exclusions, and queues one background job per
+# project running the given per-project command. A container excluded
+# via -x or DOCKER_BLOCKLIST takes its entire project out of the run,
+# since a Compose project can't be partially acted on. Containers not
+# managed by Compose are reported and skipped, since there's no project
+# to act on them as part of.
+# Arguments:
+#   $1 - Per-project command to run (docker-reboot / docker-group-stop /
+#        docker-group-start)
+#   $2 - Container scan mode: "running" (docker ps) or "all" (docker ps
+#        -a) -- "all" is what lets docker-start-all find a project with
+#        no currently-running containers at all
+#   $3 - Manual excludes, comma-separated (may be empty)
+#   $4 - "true"/"false" -- pass --verbose to the per-project command
+#   $5 - Job name/log filename prefix (e.g. "docker-reboot")
+#   $6 - Action verb for the queueing message (e.g. "restart")
+# Globals:
+#   DOCKER_BLOCKLIST, LOG_DIR
+#######################################
+__docker_queue_all_projects() {
+  local per_project_cmd="$1" scan_mode="$2" manual_excludes="$3" verbose="$4" job_prefix="$5" action_verb="$6"
+
+  local full_excludes="${DOCKER_BLOCKLIST:-}"
+  [ -n "$manual_excludes" ] && full_excludes="${full_excludes:+${full_excludes},}${manual_excludes}"
+
+  local exclude_pattern=""
+  [ -n "$full_excludes" ] && exclude_pattern=$(echo "$full_excludes" | sed 's/,/|/g; s/ //g')
+
+  local containers
+  if [ "$scan_mode" = "all" ]; then
+    containers=$(docker ps -a --format "{{.Names}}")
+  else
+    containers=$(docker ps --format "{{.Names}}")
+  fi
+
+  if [ -z "$containers" ]; then
+    mt-log WARN "No Docker containers found."
+    return 0
+  fi
+
+  local -A project_seen=() project_excluded=()
+  local project_order=()
+
+  local container project compose_file
+
+  while read -r container; do
+    [ -z "$container" ] && continue
+
+    if ! __docker_reboot_compose_metadata "$container" project compose_file; then
+      echo -e "${CB_YELLOW}⚠️  Skipping non-Compose container: ${container}${C_RESET}"
+      continue
+    fi
+
+    if [ -n "$exclude_pattern" ] && [[ "$container" =~ ^(${exclude_pattern})$ ]]; then
+      project_excluded["$project"]=1
+      continue
+    fi
+
+    if [ -z "${project_seen[$project]:-}" ]; then
+      project_seen["$project"]=1
+      project_order+=("$project")
+    fi
+  done <<< "$containers"
+
+  if [ "${#project_order[@]}" -eq 0 ]; then
+    mt-log WARN "No Compose projects found."
+    return 0
+  fi
+
+  echo -e "${CB_BLUE}🚀 Queueing Docker Compose projects for parallel ${action_verb}...${C_RESET}"
+
+  local queued=0 skipped=0
+  local timestamp
+  timestamp=$(date +%Y%m%d-%H%M%S)
+
+  for project in "${project_order[@]}"; do
+
+    if [ -n "${project_excluded[$project]:-}" ]; then
+      echo -e "${CB_YELLOW}⚠️  Skipping project: ${project} (excluded)${C_RESET}"
+      ((skipped++))
+      continue
+    fi
+
+    local verbose_arg=""
+    [ "$verbose" = true ] && verbose_arg=" --verbose"
+
+    local log_file="${LOG_DIR}/${job_prefix}_${project}_${timestamp}.log"
+    local cmd_string="${per_project_cmd} '${project}'${verbose_arg}"
+
+    __mt_bg_run "${job_prefix}: ${project}" "$log_file" "$cmd_string"
+
+    ((queued++))
+  done
+
+  echo
+  echo -e "${CB_GREEN}✅ ${queued} job(s) queued.${C_RESET}"
+
+  if [ "$skipped" -gt 0 ]; then
+    echo -e "${CB_YELLOW}⚠️  ${skipped} project(s) skipped due to exclusions.${C_RESET}"
+  fi
+
+  echo -e "${C_DIM}Run 'mt-jobs' to monitor progress.${C_RESET}"
+}
+
+#######################################
 # Docker: Recreate every running Docker Compose project on this host --
 # a full 'down' then 'up -d' per project rather than a naive per-
 # container 'docker restart', so shared networks/volumes and startup
-# ordering within a project are respected. A container excluded via -x
-# or DOCKER_BLOCKLIST takes its entire project out of the run, since a
-# Compose project can't be partially recreated. Containers not managed
-# by Compose are reported and skipped, since there's no project to
-# recreate them as part of.
+# ordering within a project are respected.
 # Usage: docker-reboot-all [-x container1,container2]
 # Options:
 #   -x <names>  Comma-separated list of container names to exclude, in
@@ -841,90 +1058,119 @@ docker-reboot-all() {
     esac
   done
 
-  local full_excludes="${DOCKER_BLOCKLIST:-}"
-  [ -n "$manual_excludes" ] && full_excludes="${full_excludes:+${full_excludes},}${manual_excludes}"
-
-  local exclude_pattern=""
-  [ -n "$full_excludes" ] && exclude_pattern=$(echo "$full_excludes" | sed 's/,/|/g; s/ //g')
-
-  local running_containers
-  running_containers=$(docker ps --format "{{.Names}}")
-
-  if [ -z "$running_containers" ]; then
-    mt-log WARN "No running Docker containers found."
-    return 0
-  fi
-
-  local -A project_seen=() project_excluded=()
-  local project_order=()
-
-  local container project compose_file
-
-  while read -r container; do
-    [ -z "$container" ] && continue
-
-    if ! __docker_reboot_compose_metadata "$container" project compose_file; then
-      echo -e "${CB_YELLOW}⚠️  Skipping non-Compose container: ${container}${C_RESET}"
-      continue
-    fi
-
-    if [ -n "$exclude_pattern" ] && [[ "$container" =~ ^(${exclude_pattern})$ ]]; then
-      project_excluded["$project"]=1
-      continue
-    fi
-
-    if [ -z "${project_seen[$project]:-}" ]; then
-      project_seen["$project"]=1
-      project_order+=("$project")
-    fi
-  done <<< "$running_containers"
-
-  if [ "${#project_order[@]}" -eq 0 ]; then
-    mt-log WARN "No Compose projects found among running containers."
-    return 0
-  fi
-
-  echo -e "${CB_BLUE}🚀 Queueing Docker Compose projects for parallel restart...${C_RESET}"
-
-  local queued=0 skipped=0
-  local timestamp
-  timestamp=$(date +%Y%m%d-%H%M%S)
-
-  for project in "${project_order[@]}"; do
-
-    if [ -n "${project_excluded[$project]:-}" ]; then
-      echo -e "${CB_YELLOW}⚠️  Skipping project: ${project} (excluded)${C_RESET}"
-      ((skipped++))
-      continue
-    fi
-
-    local verbose_arg=""
-    [ "$verbose" = true ] && verbose_arg=" --verbose"
-
-    local log_file="${LOG_DIR}/docker-reboot_${project}_${timestamp}.log"
-    local cmd_string="docker-reboot '${project}'${verbose_arg}"
-
-    __mt_bg_run "docker-reboot: ${project}" "$log_file" "$cmd_string"
-
-    ((queued++))
-  done
-
-  echo
-  echo -e "${CB_GREEN}✅ ${queued} Docker reboot job(s) queued.${C_RESET}"
-
-  if [ "$skipped" -gt 0 ]; then
-    echo -e "${CB_YELLOW}⚠️  ${skipped} project(s) skipped due to exclusions.${C_RESET}"
-  fi
-
-  echo -e "${C_DIM}Run 'mt-jobs' to monitor progress.${C_RESET}"
+  __docker_queue_all_projects "docker-reboot" "running" "$manual_excludes" "$verbose" "docker-reboot" "restart"
 }
 
 #######################################
-# Docker: List all running containers in a clean table format
-# Usage: docker-ls [-j|--json]
+# Docker: Stop every running Docker Compose project on this host in
+# place ('docker compose stop' per project) -- see docker-group-stop
+# for the single-project version this queues.
+# Usage: docker-stop-all [-x container1,container2]
+# Options:
+#   -x <names>  Comma-separated list of container names to exclude, in
+#               addition to the permanent DOCKER_BLOCKLIST
+# Globals:
+#   DOCKER_BLOCKLIST
+#######################################
+docker-stop-all() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  __docker_ensure_running || return 1
+
+  local manual_excludes=""
+  local verbose=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -x)
+        if [[ -z "$2" ]]; then
+          echo -e "${CB_RED}❌ -x requires a comma-separated exclusion list.${C_RESET}"
+          return 1
+        fi
+        manual_excludes="$2"
+        shift 2
+        ;;
+      --verbose | -v)
+        verbose=true
+        shift
+        ;;
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      *)
+        echo "Usage: docker-stop-all [-x container1,container2] [--verbose]" 1>&2
+        return 1
+        ;;
+    esac
+  done
+
+  __docker_queue_all_projects "docker-group-stop" "running" "$manual_excludes" "$verbose" "docker-stop" "stop"
+}
+
+#######################################
+# Docker: Start every known Docker Compose project on this host,
+# whether currently stopped or already running ('docker compose up -d'
+# per project) -- see docker-group-start for the single-project version
+# this queues. Scans every known container (docker ps -a), not just
+# running ones, since a project that's entirely stopped is the main
+# case this exists for.
+# Usage: docker-start-all [-x container1,container2]
+# Options:
+#   -x <names>  Comma-separated list of container names to exclude, in
+#               addition to the permanent DOCKER_BLOCKLIST
+# Globals:
+#   DOCKER_BLOCKLIST
+#######################################
+docker-start-all() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  __docker_ensure_running || return 1
+
+  local manual_excludes=""
+  local verbose=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -x)
+        if [[ -z "$2" ]]; then
+          echo -e "${CB_RED}❌ -x requires a comma-separated exclusion list.${C_RESET}"
+          return 1
+        fi
+        manual_excludes="$2"
+        shift 2
+        ;;
+      --verbose | -v)
+        verbose=true
+        shift
+        ;;
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      *)
+        echo "Usage: docker-start-all [-x container1,container2] [--verbose]" 1>&2
+        return 1
+        ;;
+    esac
+  done
+
+  __docker_queue_all_projects "docker-group-start" "all" "$manual_excludes" "$verbose" "docker-start" "start"
+}
+
+#######################################
+# Docker: List containers in a clean table format
+# Usage: docker-ls [-j|--json] [-a|--all]
 # Options:
 #   -j, --json   Print containers as a JSON array (docker ps's own
 #                per-container fields) instead of the table
+#   -a, --all    Include stopped/exited containers, not just running ones
 #######################################
 docker-ls() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -933,11 +1179,24 @@ docker-ls() {
   fi
   __docker_ensure_running || return 1
 
-  if [[ "$1" == "-j" || "$1" == "--json" ]]; then
-    docker ps --format '{{json .}}' | jq -s .
+  local json=false all_flag=()
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -j | --json) json=true ;;
+      -a | --all) all_flag=(-a) ;;
+      *)
+        echo "Usage: docker-ls [-j|--json] [-a|--all]" 1>&2
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  if $json; then
+    docker ps "${all_flag[@]}" --format '{{json .}}' | jq -s .
     return
   fi
-  docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+  docker ps "${all_flag[@]}" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
 }
 
 #######################################
