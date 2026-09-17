@@ -182,7 +182,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-toggle-update-confirm` | Config: Toggle whether mt-get-update pauses to confirm before overwriting |
 | `mt-wizard-ai` | Config: Interactive AI Setup Menu |
 | `mt-wizard-cicd` | Config: Interactive CI/CD Setup Menu |
-| `mt-wizard-docker` | Config: Interactive Docker Configuration Wizard -- restart blocklist |
+| `mt-wizard-docker` | Config: Interactive Docker Configuration Wizard -- restart blocklist, |
 | `mt-wizard-exports` | Config: Interactive Exports Setup Menu |
 | `mt-wizard-git` | Config: Interactive Git Setup Menu |
 | `mt-wizard-minikube` | Config: Interactive Minikube Configuration Wizard -- sets the |

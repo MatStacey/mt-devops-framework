@@ -12,6 +12,7 @@ __mt_bg_run() {
   local job_id
   job_id="job_$(date +%s)_${RANDOM}"
   local jobs_file="$CACHE_DIR/.mt_jobs.tsv"
+  local jobs_lock="${jobs_file}.lock"
 
   # Ensure log directory and job tracking directories exist BEFORE subshell redirects
   mkdir -p "$(dirname "$log_file")" "$(dirname "$jobs_file")"
@@ -20,16 +21,29 @@ __mt_bg_run() {
   (
     local start_time
     start_time=$(date +%s)
-    echo "${job_id}|${BASHPID}|${job_name}|${start_time}||RUNNING|${log_file}|${cmd_string}" >> "$jobs_file"
+    # Every jobs_file mutation here (this append, and the completion
+    # rewrite below) is flock-serialized -- a caller like docker-reboot-all
+    # submits several jobs at once, whose subshells all append/rewrite this
+    # same shared file concurrently. Without the lock, one job's read-
+    # rewrite-mv (see the completion step below) can clobber another job's
+    # concurrent append or its own status update, silently losing or
+    # reverting job history.
+    (
+      flock -x 200
+      echo "${job_id}|${BASHPID}|${job_name}|${start_time}||RUNNING|${log_file}|${cmd_string}" >> "$jobs_file"
+    ) 200> "$jobs_lock"
     eval "$cmd_string" > "$log_file" 2>&1
     local exit_code=$?
     local end_time
     end_time=$(date +%s)
     local status="SUCCESS"
     [ $exit_code -ne 0 ] && status="FAILED"
-    local tmp
-    tmp=$(mktemp)
-    awk -F'|' -v id="$job_id" -v e="$end_time" -v s="$status" 'BEGIN{OFS="|"} $1==id { $5=e; $6=s } {print $0}' "$jobs_file" > "$tmp" && mv "$tmp" "$jobs_file"
+    (
+      flock -x 200
+      local tmp
+      tmp=$(mktemp)
+      awk -F'|' -v id="$job_id" -v e="$end_time" -v s="$status" 'BEGIN{OFS="|"} $1==id { $5=e; $6=s } {print $0}' "$jobs_file" > "$tmp" && mv "$tmp" "$jobs_file"
+    ) 200> "$jobs_lock"
   ) &
   disown
   echo -e "${CB_GREEN}🚀 Background job started: ${job_name}${C_RESET}"
@@ -60,74 +74,92 @@ __mt_jobs_stop_pid() {
 }
 
 #######################################
-# System: Kill every RUNNING job and mark it CANCELLED in the jobs file
+# System: Kill every RUNNING job and mark it CANCELLED in the jobs file.
+# The whole read-rewrite-replace runs under the same flock other
+# jobs_file mutators use (see __mt_bg_run) -- a job finishing mid-purge
+# would otherwise have its own completion write clobbered by this
+# function's mv, or vice versa.
 # Globals (read, set by mt-jobs):
 #   jobs_file, current_time
 #######################################
 __mt_jobs_purge() {
   echo -e "${CB_RED}🛑 Purging all running background jobs...${C_RESET}"
-  local tmp_m
-  tmp_m=$(mktemp)
   local count=0
-  local j_id j_pid j_name j_start j_end j_status j_log j_cmd
-  while IFS='|' read -r j_id j_pid j_name j_start j_end j_status j_log j_cmd; do
-    [ -z "$j_id" ] && continue
-    if [ "$j_status" = "RUNNING" ]; then
-      __mt_jobs_stop_pid "$j_pid" "$j_name"
-      j_status="CANCELLED"
-      j_end=$current_time
-      ((count++))
-    fi
-    echo "${j_id}|${j_pid}|${j_name}|${j_start}|${j_end}|${j_status}|${j_log}|${j_cmd}" >> "$tmp_m"
-  done < "$jobs_file"
-  mv "$tmp_m" "$jobs_file"
+  {
+    flock -x 200
+    local tmp_m
+    tmp_m=$(mktemp)
+    local j_id j_pid j_name j_start j_end j_status j_log j_cmd
+    while IFS='|' read -r j_id j_pid j_name j_start j_end j_status j_log j_cmd; do
+      [ -z "$j_id" ] && continue
+      if [ "$j_status" = "RUNNING" ]; then
+        __mt_jobs_stop_pid "$j_pid" "$j_name"
+        j_status="CANCELLED"
+        j_end=$current_time
+        ((count++))
+      fi
+      echo "${j_id}|${j_pid}|${j_name}|${j_start}|${j_end}|${j_status}|${j_log}|${j_cmd}" >> "$tmp_m"
+    done < "$jobs_file"
+    mv "$tmp_m" "$jobs_file"
+  } 200> "${jobs_file}.lock"
   echo -e "${CB_GREEN}✅ Purged ${count} running job(s).${C_RESET}"
 }
 
 #######################################
-# System: Drop every finished (non-RUNNING) job and its log from history
+# System: Drop every finished (non-RUNNING) job and its log from history.
+# Runs under the same jobs_file flock as __mt_bg_run for the same reason
+# as __mt_jobs_purge above.
 # Globals (read, set by mt-jobs):
 #   jobs_file
 #######################################
 __mt_jobs_clean() {
   echo -e "${CB_YELLOW}🧹 Cleaning completed job history...${C_RESET}"
-  local tmp_c
-  tmp_c=$(mktemp)
   local count=0
-  local j_id j_pid j_name j_start j_end j_status j_log j_cmd
-  while IFS='|' read -r j_id j_pid j_name j_start j_end j_status j_log j_cmd; do
-    [ -z "$j_id" ] && continue
-    if [ "$j_status" != "RUNNING" ]; then
-      [ -f "$j_log" ] && rm -f "$j_log"
-      ((count++))
-    else
-      echo "${j_id}|${j_pid}|${j_name}|${j_start}|${j_end}|${j_status}|${j_log}|${j_cmd}" >> "$tmp_c"
-    fi
-  done < "$jobs_file"
-  mv "$tmp_c" "$jobs_file"
+  {
+    flock -x 200
+    local tmp_c
+    tmp_c=$(mktemp)
+    local j_id j_pid j_name j_start j_end j_status j_log j_cmd
+    while IFS='|' read -r j_id j_pid j_name j_start j_end j_status j_log j_cmd; do
+      [ -z "$j_id" ] && continue
+      if [ "$j_status" != "RUNNING" ]; then
+        [ -f "$j_log" ] && rm -f "$j_log"
+        ((count++))
+      else
+        echo "${j_id}|${j_pid}|${j_name}|${j_start}|${j_end}|${j_status}|${j_log}|${j_cmd}" >> "$tmp_c"
+      fi
+    done < "$jobs_file"
+    mv "$tmp_c" "$jobs_file"
+  } 200> "${jobs_file}.lock"
   echo -e "${CB_GREEN}✅ Removed ${count} finished job(s) from history.${C_RESET}"
 }
 
 #######################################
-# System: Mark RUNNING jobs whose PID no longer exists as ORPHANED
+# System: Mark RUNNING jobs whose PID no longer exists as ORPHANED. Runs
+# under the same jobs_file flock as __mt_bg_run -- called on every
+# 'mt-jobs' invocation and every tick of 'mt-jobs -w', so without the
+# lock it would regularly race a background job's own completion write.
 # Globals (read, set by mt-jobs):
 #   jobs_file, current_time
 #######################################
 __mt_jobs_reap_orphans() {
-  local tmp_jobs
-  tmp_jobs=$(mktemp)
-  local j_id j_pid j_name j_start j_end j_status j_log j_cmd
-  while IFS='|' read -r j_id j_pid j_name j_start j_end j_status j_log j_cmd; do
-    [ -z "$j_id" ] && continue
-    if [ "$j_status" = "RUNNING" ]; then
-      if ! kill -0 "$j_pid" 2> /dev/null; then
-        j_status="ORPHANED"
-        j_end=$current_time
+  {
+    flock -x 200
+    local tmp_jobs
+    tmp_jobs=$(mktemp)
+    local j_id j_pid j_name j_start j_end j_status j_log j_cmd
+    while IFS='|' read -r j_id j_pid j_name j_start j_end j_status j_log j_cmd; do
+      [ -z "$j_id" ] && continue
+      if [ "$j_status" = "RUNNING" ]; then
+        if ! kill -0 "$j_pid" 2> /dev/null; then
+          j_status="ORPHANED"
+          j_end=$current_time
+        fi
       fi
-    fi
-    echo "${j_id}|${j_pid}|${j_name}|${j_start}|${j_end}|${j_status}|${j_log}|${j_cmd}" >> "$tmp_jobs"
-  done < "$jobs_file"
-  mv "$tmp_jobs" "$jobs_file"
+      echo "${j_id}|${j_pid}|${j_name}|${j_start}|${j_end}|${j_status}|${j_log}|${j_cmd}" >> "$tmp_jobs"
+    done < "$jobs_file"
+    mv "$tmp_jobs" "$jobs_file"
+  } 200> "${jobs_file}.lock"
 }
 
 #######################################
@@ -195,9 +227,12 @@ __mt_jobs_stop_by_id() {
   fi
 
   __mt_jobs_stop_pid "$j_pid" "$j_name"
-  local tmp_m
-  tmp_m=$(mktemp)
-  awk -F'|' -v id="$j_id" -v e="$current_time" 'BEGIN{OFS="|"}$1==id{$5=e;$6="CANCELLED"}{print $0}' "$jobs_file" > "$tmp_m" && mv "$tmp_m" "$jobs_file"
+  {
+    flock -x 200
+    local tmp_m
+    tmp_m=$(mktemp)
+    awk -F'|' -v id="$j_id" -v e="$current_time" 'BEGIN{OFS="|"}$1==id{$5=e;$6="CANCELLED"}{print $0}' "$jobs_file" > "$tmp_m" && mv "$tmp_m" "$jobs_file"
+  } 200> "${jobs_file}.lock"
   echo -e "${CB_GREEN}✅ Job '${j_name}' cancelled.${C_RESET}"
 }
 
@@ -223,9 +258,12 @@ __mt_jobs_remove_by_id() {
   local j_id j_pid j_name j_start j_end j_status j_log j_cmd
   IFS='|' read -r j_id j_pid j_name j_start j_end j_status j_log j_cmd <<< "$sel_data"
 
-  local tmp_m
-  tmp_m=$(mktemp)
-  grep -v "^${j_id}|" "$jobs_file" > "$tmp_m" && mv "$tmp_m" "$jobs_file"
+  {
+    flock -x 200
+    local tmp_m
+    tmp_m=$(mktemp)
+    grep -v "^${j_id}|" "$jobs_file" > "$tmp_m" && mv "$tmp_m" "$jobs_file"
+  } 200> "${jobs_file}.lock"
   [ -f "$j_log" ] && rm -f "$j_log"
   echo -e "${CB_GREEN}✅ Removed '${j_name}' from job history.${C_RESET}"
 }
@@ -351,7 +389,10 @@ ${CB_BLUE}▶ Selected Job: ${j_name} (${j_id})${C_RESET}"
       __mt_jobs_remove_by_id "$j_id"
       ;;
     6*)
-      true > "$jobs_file"
+      {
+        flock -x 200
+        true > "$jobs_file"
+      } 200> "${jobs_file}.lock"
       echo -e "${CB_GREEN}✅ All job history cleared.${C_RESET}"
       ;;
   esac

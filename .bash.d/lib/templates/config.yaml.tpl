@@ -88,6 +88,15 @@ docker:
   gar_region: europe-west2
   gar_repo: ""
   dockerhub_namespace: ""
+  # docker-reboot's readiness poll (__docker_reboot_wait_for_project) waits
+  # at least this long for every container in a rebooted project, then adds
+  # each container's own healthcheck start_period + interval*(retries+1) on
+  # top for containers whose declared healthcheck needs longer than that --
+  # a flat floor was previously used as the only timeout, which reported a
+  # false failure for any container whose healthcheck start_period alone
+  # exceeded it (e.g. a 5m start_period on a slow-to-warm-up service).
+  reboot_min_timeout_sec: 120
+  reboot_poll_interval_sec: 2
 
 server:
   default_port: 8000

@@ -310,6 +310,8 @@ def load_env():
     export("DOCKER_GAR_REGION", dock_cfg.get("gar_region", "europe-west2"))
     export("DOCKER_GAR_REPO", dock_cfg.get("gar_repo", ""))
     export("DOCKER_DOCKERHUB_NAMESPACE", dock_cfg.get("dockerhub_namespace", ""))
+    export("DOCKER_REBOOT_MIN_TIMEOUT_SEC", dock_cfg.get("reboot_min_timeout_sec", 120))
+    export("DOCKER_REBOOT_POLL_INTERVAL_SEC", dock_cfg.get("reboot_poll_interval_sec", 2))
 
     # Minikube (local cluster driver/resource defaults for mk-start)
     export("MK_DRIVER", mk_cfg.get("driver", "docker"), to_lower=True)
