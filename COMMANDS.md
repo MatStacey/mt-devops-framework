@@ -256,11 +256,23 @@ Complex bash functions, framework utilities, and automated workflows.
 | `gcl-get-region` | GCP: Print active compute region (shortcut for `gcl-get region`) |
 | `gcl-get-user` | GCP: Print active user account (shortcut for `gcl-get user`) |
 | `gcl-get-zone` | GCP: Print active compute zone (shortcut for `gcl-get zone`) |
-| `gcl-org-policies` | GCP: List org policies for active project |
+| `gcl-org-policies` | GCP: List org policies for a project |
 | `gcl-update` | GCP: Update Google Cloud CLI tools |
 | `gcp-login` | GCP: Login to user & application default |
 | `gcp-login-adc` | GCP: Login to application default only |
 | `gcp-set-project` | GCP: Switch active project |
+
+### GCP: Read-Only Cross-Project Reconnaissance
+| Command | Description |
+|---|---|
+| `gcl-api-check` | GCP: Check whether an API is enabled across one or more projects |
+| `gcl-dataflow-describe` | GCP: Describe a single Dataflow job |
+| `gcl-iam-keys` | GCP: List a service account's IAM keys and its own IAM policy bindings |
+| `gcl-logging-read` | GCP: Read logs with a custom filter and optional custom output format |
+| `gcl-network-survey` | GCP: Read-only survey of a project's networking surface -- VPC |
+| `gcl-projects-list` | GCP: List projects, optionally filtered by name and/or parent folder |
+| `gcl-redis-describe` | GCP: Describe a single Memorystore Redis instance |
+| `gcl-run-describe` | GCP: Describe a single Cloud Run service |
 
 ### GCP: Resources & Services
 | Command | Description |
@@ -270,7 +282,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `gcp-crf-logs` | GCP: Tail logs of a Cloud Run Function |
 | `gcp-gar-docker` | GCP: Configure Docker auth for Artifact Registry |
 | `gcp-get-secret` | GCP: Read the latest payload of a secret |
-| `gcp-iam-show` | GCP: View IAM policy for the active project |
+| `gcp-iam-show` | GCP: View IAM policy for a project |
 | `gcp-ps-pull` | GCP: Pull and auto-ack one message from a Pub/Sub subscription |
 
 ### General System Utilities

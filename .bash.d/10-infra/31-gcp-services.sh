@@ -53,7 +53,10 @@ alias gcl-ps-topics='gcloud pubsub topics list'
 alias gcp-crf-ls='gcloud functions list'
 
 #######################################
-# GCP: View IAM policy for the active project
+# GCP: View IAM policy for a project
+# Usage: gcp-iam-show [-p <project>]
+# Options:
+#   -p, --project <id>   Project to inspect (default: the active gcloud project)
 # Globals:
 #   gcl-get-project (Framework Function)
 # Outputs:
@@ -64,7 +67,23 @@ gcp-iam-show() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
-  gcloud projects get-iam-policy "$(gcl-get-project)" --format="table(bindings.role, bindings.members)"
+
+  local project=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -p | --project)
+        project="$2"
+        shift 2
+        ;;
+      *)
+        echo "Usage: gcp-iam-show [-p <project>]" >&2
+        return 1
+        ;;
+    esac
+  done
+  [ -z "$project" ] && project=$(gcl-get-project)
+
+  gcloud projects get-iam-policy "$project" --format="table(bindings.role, bindings.members)" --quiet
 }
 
 #######################################
