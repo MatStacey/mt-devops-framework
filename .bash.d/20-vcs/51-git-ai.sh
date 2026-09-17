@@ -5,9 +5,13 @@
 # ~/.bash.d/20-vcs/51-git-ai.sh
 
 #######################################
-# Git: Validate that the configured AI provider has a usable API key
+# Git: Validate that the configured AI provider has a usable API key.
+# claude-code and local need no case here -- neither requires an API
+# key (claude-code shells out to the caller's own logged-in 'claude'
+# CLI; local talks to a self-hosted endpoint) -- so they fall through
+# to the default "ready" return.
 # Arguments:
-#   $1 - Provider name (gemini|claude|local)
+#   $1 - Provider name (gemini|claude|claude-code|local)
 # Globals:
 #   GEMINI_API_KEY, CLAUDE_API_KEY
 # Returns:
@@ -36,7 +40,7 @@ __git_sync_ai_provider_ready() {
 # Git: Query the configured AI provider with a prompt, dispatching to the
 # correct backend
 # Arguments:
-#   $1 - Provider name (gemini|claude|local)
+#   $1 - Provider name (gemini|claude|claude-code|local)
 #   $2 - Prompt text
 # Outputs:
 #   Prints the provider's response to STDOUT
@@ -49,6 +53,7 @@ __git_sync_ai_query_provider() {
   case "$provider" in
     gemini) __ai_query_gemini "$ai_prompt" "" "" "" "" ;;
     claude) __ai_query_claude "$ai_prompt" "" "" "" ;;
+    claude-code) __ai_query_claude_code "$ai_prompt" "" "" "" ;;
     local) __ai_query_local "$ai_prompt" "" "" "" ;;
     *)
       mt-log ERROR "Invalid AI provider '$provider'."
