@@ -878,10 +878,11 @@ mt-setup-cicd() {
 }
 
 #######################################
-# Config: Interactive Docker Configuration Wizard -- restart blocklist
-# plus the registry defaults docker-push/docker-release/docker-deploy
-# use (default registry, GAR region/repo, Docker Hub namespace), so none
-# of those are hardcoded at the call site.
+# Config: Interactive Docker Configuration Wizard -- restart blocklist,
+# the registry defaults docker-push/docker-release/docker-deploy use
+# (default registry, GAR region/repo, Docker Hub namespace), and
+# docker-reboot's readiness-poll timeout/interval, so none of those are
+# hardcoded at the call site.
 # Usage: mt-wizard-docker
 #######################################
 mt-wizard-docker() {
@@ -900,6 +901,10 @@ mt-wizard-docker() {
   [ -n "$gar_repo" ] && python3 "$CONFIG_MANAGER" update "docker" "gar_repo" "$gar_repo"
   read -r -p "Docker Hub Namespace (username/org) [${DOCKER_DOCKERHUB_NAMESPACE:-none}]: " dh_ns
   [ -n "$dh_ns" ] && python3 "$CONFIG_MANAGER" update "docker" "dockerhub_namespace" "$dh_ns"
+  read -r -p "docker-reboot minimum readiness timeout, seconds [${DOCKER_REBOOT_MIN_TIMEOUT_SEC:-120}]: " reboot_timeout
+  [ -n "$reboot_timeout" ] && python3 "$CONFIG_MANAGER" update "docker" "reboot_min_timeout_sec" "$reboot_timeout"
+  read -r -p "docker-reboot readiness poll interval, seconds [${DOCKER_REBOOT_POLL_INTERVAL_SEC:-2}]: " reboot_interval
+  [ -n "$reboot_interval" ] && python3 "$CONFIG_MANAGER" update "docker" "reboot_poll_interval_sec" "$reboot_interval"
   echo -e "${CB_GREEN}✅ Docker config updated.${C_RESET}"
 }
 

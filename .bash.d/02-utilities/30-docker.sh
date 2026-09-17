@@ -125,6 +125,11 @@ docker-daemon() {
 #######################################
 # Docker: Report whether a container is ready to be considered "up" --
 # running, and either healthy or has no healthcheck configured at all.
+# A container still in Docker's own "starting" grace period is reported
+# not-ready (the caller keeps polling) rather than treated the same as a
+# genuinely "unhealthy" one -- see __docker_reboot_container_failed for
+# the latter, which callers should check separately to fail fast instead
+# of waiting out the rest of the timeout.
 # Arguments:
 #   $1 - Container name or ID
 # Returns:
@@ -138,6 +143,61 @@ __docker_reboot_container_ready() {
 
   health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2> /dev/null) || return 1
   [ "$health" = "healthy" ] || [ "$health" = "none" ]
+}
+
+#######################################
+# Docker: Report whether a container's healthcheck has definitively
+# failed -- Docker itself only ever sets health to "unhealthy" after its
+# own start_period + retries have already elapsed, so unlike "starting"
+# this is never a false negative and callers can fail fast on it instead
+# of waiting out the rest of __docker_reboot_wait_for_project's timeout.
+# Arguments:
+#   $1 - Container name or ID
+# Returns:
+#   0 if unhealthy, 1 otherwise (including if the container doesn't exist)
+#######################################
+__docker_reboot_container_failed() {
+  local container="$1"
+  local health
+  health=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2> /dev/null) || return 1
+  [ "$health" = "unhealthy" ]
+}
+
+#######################################
+# Docker: How long a container's own healthcheck configuration says it
+# may legitimately take to report healthy -- start_period plus one
+# interval per retry. A container with no healthcheck at all only needs
+# to reach "running", so it reports 0 (no extra time beyond the
+# caller's own floor). Interval/retries fall back to Docker's own
+# defaults (30s/3) when a healthcheck is declared without overriding
+# them, matching Docker's own behaviour rather than assuming 0.
+#
+# Reads the healthcheck config via '{{json .Config.Healthcheck}}', not
+# a plain '{{.Config.Healthcheck.StartPeriod}}' template field -- Go's
+# template engine renders a time.Duration field with its String()
+# method ("5m0s"), not the raw nanosecond integer a plain field access
+# would imply; JSON-encoding it first is what actually yields the
+# nanosecond integers this function does arithmetic on.
+# Arguments:
+#   $1 - Container name or ID
+# Outputs:
+#   Seconds needed, to stdout
+#######################################
+__docker_reboot_health_deadline_sec() {
+  local container="$1"
+  local healthcheck_json
+  healthcheck_json=$(docker inspect --format '{{json .Config.Healthcheck}}' "$container" 2> /dev/null)
+  if [ -z "$healthcheck_json" ] || [ "$healthcheck_json" = "null" ]; then
+    echo 0
+    return
+  fi
+
+  jq -n --argjson h "$healthcheck_json" '
+    (($h.StartPeriod // 0) / 1000000000 | floor) as $start_period_sec |
+    ((if ($h.Interval // 0) > 0 then $h.Interval else 30000000000 end) / 1000000000 | floor) as $interval_sec |
+    ((if ($h.Retries // 0) > 0 then $h.Retries else 3 end)) as $retries |
+    $start_period_sec + $interval_sec * ($retries + 1)
+  '
 }
 
 #######################################
@@ -170,28 +230,50 @@ __docker_reboot_compose_metadata() {
 #######################################
 # Docker: Poll a just-recreated Compose project until every one of its
 # containers reports ready (see __docker_reboot_container_ready), up to
-# a fixed timeout.
+# a timeout sized to the slowest container's own healthcheck config
+# (docker.reboot_min_timeout_sec as a floor, plus each container's
+# __docker_reboot_health_deadline_sec on top) -- a single flat timeout
+# previously reported false failures for any container whose declared
+# start_period/interval/retries legitimately needed longer than that
+# floor (e.g. a 5-minute start_period). Fails fast, before the timeout
+# elapses, the moment any container reports "unhealthy" (never a false
+# negative -- see __docker_reboot_container_failed), instead of always
+# waiting out the full timeout on a real failure.
 # Arguments:
 #   $1 - Path to the project's compose file
+#   $2 - Name of the caller's variable to receive a diagnostic reason
+#        string on failure (unset/empty on success)
 # Returns:
-#   0 once every container is ready, 1 on timeout
+#   0 once every container is ready, 1 on a failed or un-ready container
 #######################################
 __docker_reboot_wait_for_project() {
-  local compose_file="$1"
-  local timeout=120 interval=2
+  local compose_file="$1" reason_var="$2"
+  local interval="${DOCKER_REBOOT_POLL_INTERVAL_SEC:-2}"
+  local timeout="${DOCKER_REBOOT_MIN_TIMEOUT_SEC:-120}"
+
+  local containers
+  containers=$(docker compose -f "$compose_file" ps -aq 2> /dev/null)
+  local container extra_deadline
+  while read -r container; do
+    [ -z "$container" ] && continue
+    extra_deadline=$(__docker_reboot_health_deadline_sec "$container")
+    ((extra_deadline > 0)) && ((timeout += extra_deadline))
+  done <<< "$containers"
 
   while ((timeout > 0)); do
-    local containers
     containers=$(docker compose -f "$compose_file" ps -aq 2> /dev/null)
 
     if [ -n "$containers" ]; then
-      local all_ready=true container
+      local all_ready=true
       while read -r container; do
         [ -z "$container" ] && continue
-        __docker_reboot_container_ready "$container" || {
-          all_ready=false
-          break
-        }
+        if __docker_reboot_container_failed "$container"; then
+          local name
+          name=$(docker inspect --format '{{.Name}}' "$container" 2> /dev/null | sed 's#^/##')
+          [ -n "$reason_var" ] && printf -v "$reason_var" '%s reported unhealthy' "${name:-$container}"
+          return 1
+        fi
+        __docker_reboot_container_ready "$container" || all_ready=false
       done <<< "$containers"
       [ "$all_ready" = true ] && return 0
     fi
@@ -199,6 +281,8 @@ __docker_reboot_wait_for_project() {
     sleep "$interval"
     ((timeout -= interval))
   done
+
+  [ -n "$reason_var" ] && printf -v "$reason_var" '%s' "timed out waiting for containers to become ready"
   return 1
 }
 
@@ -364,12 +448,13 @@ docker-reboot() {
 
   echo "⏳ Waiting for recovery..."
 
-  if __docker_reboot_wait_for_project "$compose_file"; then
+  local failure_reason
+  if __docker_reboot_wait_for_project "$compose_file" failure_reason; then
     echo -e "${CB_GREEN}✅ Project recreated: ${project}${C_RESET}"
     return 0
   fi
 
-  echo -e "${CB_YELLOW}⚠️  Project did not become healthy: ${project}${C_RESET}"
+  echo -e "${CB_YELLOW}⚠️  Project did not become healthy: ${project} (${failure_reason})${C_RESET}"
   return 1
 }
 
@@ -689,7 +774,8 @@ docker-update() {
   echo
   echo "⏳ Waiting for recovery..."
 
-  if __docker_reboot_wait_for_project "$compose_file"; then
+  local failure_reason
+  if __docker_reboot_wait_for_project "$compose_file" failure_reason; then
     if [[ "$channel" == "current" ]]; then
       echo -e "${CB_GREEN}✅ Project updated: ${project}${C_RESET}"
     else
@@ -699,7 +785,7 @@ docker-update() {
     return 0
   fi
 
-  echo -e "${CB_YELLOW}⚠️  Project did not become healthy after update: ${project}${C_RESET}"
+  echo -e "${CB_YELLOW}⚠️  Project did not become healthy after update: ${project} (${failure_reason})${C_RESET}"
   return 1
 }
 
