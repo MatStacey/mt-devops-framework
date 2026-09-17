@@ -203,6 +203,16 @@ if command -v zoxide > /dev/null 2>&1; then
   if [ ! -f "$ZOXIDE_CACHE" ]; then
     zoxide init bash > "$ZOXIDE_CACHE"
   fi
+  # __zoxide_doctor (baked into the cached init script itself, re-checked
+  # on every 'z'/'cd' call, not just once at generation time) warns
+  # whenever it runs before PROMPT_COMMAND already contains
+  # __zoxide_hook -- true for any 'cd' (aliased to 'z' below) that a
+  # framework function runs internally before this file's own source
+  # line finishes appending that hook. A pre-existing false positive,
+  # not something this ordering caused; _ZO_DOCTOR=0 (exported, so it's
+  # visible to that runtime check) silences it rather than the
+  # generation-time env var alone, which the doctor check never reads.
+  export _ZO_DOCTOR=0
   # shellcheck disable=SC1090
   source "$ZOXIDE_CACHE"
 
