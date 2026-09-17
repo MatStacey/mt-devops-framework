@@ -211,6 +211,7 @@ Complex bash functions, framework utilities, and automated workflows.
 ### Docker: Container Management Utilities
 | Command | Description |
 |---|---|
+| `docker-compose-inspect` | Docker: List each Compose service's container_name, restart policy, |
 | `docker-containers` | Docker: Interactive container management console -- fzf-pick any |
 | `docker-daemon` | Docker: Start, stop, restart, or check the status of the Docker daemon |
 | `docker-group-start` | Docker: Start every container in a single Compose project -- 'docker |
@@ -488,9 +489,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `git-pretty-log` | Git: Print a clean, color-coded, single-line log graph |
 | `git-push-all` | Git: Stage all files, commit with provided message, and push |
 | `git-raise-pr` | Git: Push current branch and raise a Pull Request (GitHub/GitLab/Bitbucket) |
+| `git-review-start` | Git: Quick orientation for starting a code review -- current branch |
 | `git-view-remote` | Git: Open current repository remote URL in default web browser |
 | `mt-git-clone` | Git: Clone a repository into a sensibly routed default location |
 | `mt-repos` | Git: Scan VCS root and list all local repositories, optionally |
+| `mt-repos-run` | Git: Run a git subcommand across every repo matching mt-repos' own |
 
 ### Version Control (Git) - Profile Synchronization
 | Command | Description |
@@ -499,6 +502,13 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-get-update` | System: Download and install profile updates from GitHub releases -- |
 | `mt-migrate-symlink` | Git: One-time, idempotent cutover that replaces ~/.bash.d as a |
 | `mt-push-update` | System: Sync local bash configs to terminal dotfiles repo and create a Pull Request |
+
+### Version Control (Git) - Remote-Ref Inspection
+| Command | Description |
+|---|---|
+| `git-remote-diff` | Git: Diff two refs -- typically two remote-tracking branches -- without |
+| `git-remote-grep` | Git: Count pattern matches across one or more refs without checking |
+| `git-remote-show` | Git: Show a file's content as of a specific ref without checking that |
 
 ### Workflow Gap / Backlog Capture
 | Command | Description |
