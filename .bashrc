@@ -3,7 +3,35 @@
 # see /usr/share/doc/bash/examples/startup-files (in the package bash-doc)
 # for examples
 
-# If not running interactively, don't do anything
+###=============================================================================
+### LOAD CUSTOM MODULES (interactive AND non-interactive shells)
+###=============================================================================
+# Runs before the "not interactive, don't do anything" guard below, on
+# purpose: .bash.d holds real command definitions (mt-*), not just
+# interactive-shell cosmetics, and a non-interactive shell (a `bash -c`
+# tool call, an `ssh host command` invocation, anything sourcing this
+# file via BASH_ENV) is exactly where those commands are most useful to
+# have available without a manual `bash -ic` wrapper. Recursively
+# sources all script files, enforcing sorted execution order.
+#
+# Numbering scheme: `find | sort` sorts by full path, so the DIRECTORY
+# prefix (00-system, 01-ui, 02-utilities, 03-mytools, 10-infra, 20-vcs,
+# 30-ai, ...) is what determines load order across the framework — gaps
+# between e.g. 03 and 10 are deliberate, reserved for future categories.
+# A file's own leading number only breaks ties *within* its directory and
+# has no effect on cross-directory order, so it does not need to relate
+# to its directory's number (e.g. 10-infra/30-gcp-config.sh is correct —
+# it just means "loads before 10-infra/40-terraform-k8s.sh").
+if [ -d "$HOME/.bash.d" ]; then
+    while IFS= read -r -d '' f; do
+        [ -r "$f" ] && source "$f"
+    done < <(find -L "$HOME/.bash.d" -type f -name "*.sh" -not -path "*/config/themes/*" -not -path "*/\.dev/*" -not -name "install.sh" -print0 | sort -z)
+fi
+
+# If not running interactively, stop here -- skip the prompt/history/
+# completion setup and the banner/uv-completion calls below, none of
+# which matter (or should print/execute) for a non-interactive shell.
+# mt-* commands are already loaded above regardless.
 case $- in
     *i*) ;;
       *) return;;
@@ -99,25 +127,6 @@ if ! shopt -oq posix; then
     # macOS (Intel) Homebrew bash-completion
     . /usr/local/etc/profile.d/bash_completion.sh
   fi
-fi
-
-###=============================================================================
-### LOAD CUSTOM MODULES
-###=============================================================================
-# Recursively source all script files, enforcing sorted execution order.
-#
-# Numbering scheme: `find | sort` sorts by full path, so the DIRECTORY
-# prefix (00-system, 01-ui, 02-utilities, 03-mytools, 10-infra, 20-vcs,
-# 30-ai, ...) is what determines load order across the framework — gaps
-# between e.g. 03 and 10 are deliberate, reserved for future categories.
-# A file's own leading number only breaks ties *within* its directory and
-# has no effect on cross-directory order, so it does not need to relate
-# to its directory's number (e.g. 10-infra/30-gcp-config.sh is correct —
-# it just means "loads before 10-infra/40-terraform-k8s.sh").
-if [ -d "$HOME/.bash.d" ]; then
-    while IFS= read -r -d '' f; do
-        [ -r "$f" ] && source "$f"
-    done < <(find -L "$HOME/.bash.d" -type f -name "*.sh" -not -path "*/config/themes/*" -not -path "*/\.dev/*" -not -name "install.sh" -print0 | sort -z)
 fi
 
 # Notify successful load (Green text, resets color afterwards)
