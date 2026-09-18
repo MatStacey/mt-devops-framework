@@ -916,7 +916,7 @@ __mt_radar_search() {
 # System: Interactive AI-powered Repository Dashboard. An unfiltered
 # --index run also prunes cache entries for repos no longer found on
 # disk (moved, renamed, or deleted) before indexing.
-# Usage: mt-radar [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>] [--infra]] [--infra [-t <type>] [-r <name>]] [--show-infra <repo>] [--preview <repo>] [--scan-gcp -r <repo> [--gcp-project <id>]]
+# Usage: mt-radar [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>] [--infra]] [--infra [-t <type>] [-r <name>]] [--show-infra <repo>] [--preview <repo>] [--scan-gcp -r <repo> [--gcp-project <id>]] [--iam -r <repo> [-p <provider>]] [--show-iam <repo>]
 # Options:
 #   --index                    Scan and build the AI metadata cache
 #   -b, --bg, --background     Run the index scan as a background job (with --index)
@@ -953,6 +953,14 @@ __mt_radar_search() {
 #                              only, never run automatically by --index/--infra
 #   --gcp-project <id>         GCP project to scan against (with --scan-gcp). Defaults to
 #                              gcloud's own active project (`gcloud config get-value project`)
+#   --iam                      Analyze one repo's Terraform via the configured AI provider
+#                              (same prompts as tf-ai-iam) and cache the recommended GCP
+#                              service accounts/least-privilege roles into a separate cache
+#                              (.vcs_iam.json). Real AI cost/latency, unlike --infra --
+#                              requires -r/--repo; on-demand only, never run automatically
+#                              by --index/--infra
+#   --show-iam <repo>          Show the cached IAM analysis for one repo (by absolute path
+#                              or bare repo name) and exit
 #   --preview <repo>           Show cached metadata for one repo (by absolute path or
 #                              bare repo name) and exit
 #   --search <term>            Search the indexed cache (name, description, category,
@@ -980,6 +988,11 @@ mt-radar() {
   local infra_cache_file="$CACHE_DIR/.vcs_infra.json"
   [ ! -f "$infra_cache_file" ] && echo "{}" > "$infra_cache_file"
 
+  local iam_cache_file="$CACHE_DIR/.vcs_iam.json"
+  [ ! -f "$iam_cache_file" ] && echo "{}" > "$iam_cache_file"
+
+  local search_dir="${VCS_ROOT:-$HOME/vcs}"
+
   local do_index=false
   local run_bg=false
   local force_index=false
@@ -993,6 +1006,8 @@ mt-radar() {
   local show_infra_repo=""
   local run_scan_gcp=false
   local gcp_project_override=""
+  local run_iam=false
+  local show_iam_repo=""
 
   # Argument parsing
   while [[ "$#" -gt 0 ]]; do
@@ -1035,6 +1050,11 @@ mt-radar() {
         gcp_project_override="$2"
         shift
         ;;
+      --iam) run_iam=true ;;
+      --show-iam)
+        show_iam_repo="$2"
+        shift
+        ;;
       -j | --json) json_mode=true ;;
       -h | --help)
         mt-help "${FUNCNAME[0]}"
@@ -1055,6 +1075,51 @@ mt-radar() {
 
   if [ -n "$show_infra_repo" ]; then
     __mt_radar_infra_show "$show_infra_repo" "$infra_cache_file" "$json_mode"
+    return 0
+  fi
+
+  if [ -n "$show_iam_repo" ]; then
+    __mt_radar_iam_show "$show_iam_repo" "$iam_cache_file" "$json_mode"
+    return 0
+  fi
+
+  if [ "$run_iam" = true ]; then
+    if [ -z "$filter_repo" ]; then
+      echo -e "${CB_RED}🚨 --iam requires -r/--repo <name>.${C_RESET}"
+      return 1
+    fi
+
+    local iam_repo_path candidate_path
+    while IFS= read -r candidate_path; do
+      [ "$(basename "$candidate_path")" = "$filter_repo" ] && iam_repo_path="$candidate_path" && break
+    done < <(__mt_radar_find_repos "$search_dir")
+    if [ -z "$iam_repo_path" ]; then
+      echo -e "${CB_RED}🚨 No repository named \"${filter_repo}\" found under ${search_dir}.${C_RESET}"
+      return 1
+    fi
+
+    echo -e "${CB_BLUE}🤖 Analyzing ${filter_repo}'s Terraform for IAM requirements...${C_RESET}"
+    local iam_json iam_status
+    iam_json=$(__mt_radar_iam_analyze_repo "$iam_repo_path" "$provider_override")
+    iam_status=$(echo "$iam_json" | jq -r '.status')
+
+    if [ "$iam_status" = "no-terraform" ]; then
+      echo -e "${CB_YELLOW}⚠️  No Terraform found in \"${filter_repo}\".${C_RESET}"
+      return 0
+    fi
+    if [ "$iam_status" = "error" ]; then
+      echo -e "${CB_RED}🚨 IAM analysis failed for \"${filter_repo}\" -- check your AI provider configuration.${C_RESET}"
+      return 1
+    fi
+
+    __mt_radar_iam_write_cache_entry "$iam_cache_file" "$iam_repo_path" "$iam_json"
+
+    if [ "$json_mode" = true ]; then
+      echo "$iam_json"
+    else
+      echo -e "${CB_GREEN}✅ IAM analysis complete: ${filter_repo}${C_RESET}\n"
+      __mt_radar_iam_show "$iam_repo_path" "$iam_cache_file" false
+    fi
     return 0
   fi
 
@@ -1102,8 +1167,6 @@ mt-radar() {
     fi
     return 0
   fi
-
-  local search_dir="${VCS_ROOT:-$HOME/vcs}"
 
   if [ "$do_index" = true ]; then
     if [ "$run_bg" = true ]; then
