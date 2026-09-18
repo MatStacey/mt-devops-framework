@@ -30,6 +30,29 @@ __mt_radar_gcp_available() {
 }
 
 #######################################
+# Repo Radar: Turn a failed gcloud call's stderr into a specific reason
+# string instead of the generic "api-error" every caller used to report
+# regardless of cause -- distinguishes the common case (the active
+# identity, per `gcloud config get-value account`, lacks the list
+# permission on this project, e.g. a service account scoped to a
+# different project than the one being scanned) from anything else, so
+# the panel itself can point at "check your active gcloud account /IAM
+# role" instead of a diagnostic dead end.
+# Arguments:
+#   $1 - The failed gcloud call's captured stderr text
+# Outputs:
+#   Prints "permission-denied" or "api-error"
+#######################################
+__mt_radar_gcp_classify_error() {
+  local stderr_text="$1"
+  if [[ "$stderr_text" =~ PERMISSION_DENIED ]]; then
+    echo "permission-denied"
+  else
+    echo "api-error"
+  fi
+}
+
+#######################################
 # Repo Radar: Check whether one Terraform-declared google_* resource actually
 # exists in a live GCP project, dispatching the `gcloud ... list` call by
 # resource type. Every call is scoped with an explicit --project (never the
@@ -69,16 +92,21 @@ __mt_radar_gcp_check_resource() {
   local -a candidates=("$rname")
   [ -n "$fallback_name" ] && [ "$fallback_name" != "$rname" ] && candidates+=("$fallback_name")
 
-  # Every branch below captures stdout only (stderr discarded) and checks
-  # the real exit code for success/failure -- gcloud often emits benign
-  # warnings on stderr (e.g. deprecation notices) alongside perfectly valid
-  # JSON on stdout, so merging the two streams would misparse a successful,
-  # empty result as an API error.
+  # Every branch below captures stdout separately from stderr (never
+  # merged) and checks the real exit code for success/failure -- gcloud
+  # often emits benign warnings on stderr (e.g. deprecation notices)
+  # alongside perfectly valid JSON on stdout, so merging the two streams
+  # would misparse a successful, empty result as an API error. stderr is
+  # written to $gcp_stderr_file (overwritten each candidate attempt, not
+  # discarded) so a genuine failure's reason can be classified below
+  # rather than lumped into a single opaque "api-error".
+  local gcp_stderr_file
+  gcp_stderr_file=$(mktemp)
   local rc candidate found=false
   case "$rtype" in
     google_cloud_run_service | google_cloud_run_v2_service | google_cloud_run_v2_job)
       for candidate in "${candidates[@]}"; do
-        raw=$(gcloud run services list --project="$project" --filter="metadata.name=$candidate" --format=json --quiet 2> /dev/null)
+        raw=$(gcloud run services list --project="$project" --filter="metadata.name=$candidate" --format=json --quiet 2> "$gcp_stderr_file")
         rc=$?
         [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ] && {
           found=true
@@ -92,12 +120,12 @@ __mt_radar_gcp_check_resource() {
         live_url=$(echo "$raw" | jq -r '.[0].status.url // empty')
         console_url="https://console.cloud.google.com/run/detail/${region}/${candidate}/metrics?project=${project}"
       elif [ "$rc" -ne 0 ]; then
-        reason="api-error"
+        reason=$(__mt_radar_gcp_classify_error "$(cat "$gcp_stderr_file")")
       fi
       ;;
     google_container_cluster | google_container_node_pool)
       for candidate in "${candidates[@]}"; do
-        raw=$(gcloud container clusters list --project="$project" --filter="name=$candidate" --format=json --quiet 2> /dev/null)
+        raw=$(gcloud container clusters list --project="$project" --filter="name=$candidate" --format=json --quiet 2> "$gcp_stderr_file")
         rc=$?
         [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ] && {
           found=true
@@ -110,12 +138,12 @@ __mt_radar_gcp_check_resource() {
         region=$(echo "$raw" | jq -r '.[0].location // empty')
         console_url="https://console.cloud.google.com/kubernetes/clusters/details/${region}/${candidate}/details?project=${project}"
       elif [ "$rc" -ne 0 ]; then
-        reason="api-error"
+        reason=$(__mt_radar_gcp_classify_error "$(cat "$gcp_stderr_file")")
       fi
       ;;
     google_compute_instance | google_compute_instance_template | google_compute_instance_group*)
       for candidate in "${candidates[@]}"; do
-        raw=$(gcloud compute instances list --project="$project" --filter="name=$candidate" --format=json --quiet 2> /dev/null)
+        raw=$(gcloud compute instances list --project="$project" --filter="name=$candidate" --format=json --quiet 2> "$gcp_stderr_file")
         rc=$?
         [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ] && {
           found=true
@@ -128,12 +156,12 @@ __mt_radar_gcp_check_resource() {
         region=$(echo "$raw" | jq -r '.[0].zone // empty' | sed -E 's#.*/##')
         console_url="https://console.cloud.google.com/compute/instancesDetail/zones/${region}/instances/${candidate}?project=${project}"
       elif [ "$rc" -ne 0 ]; then
-        reason="api-error"
+        reason=$(__mt_radar_gcp_classify_error "$(cat "$gcp_stderr_file")")
       fi
       ;;
     google_sql_database_instance)
       for candidate in "${candidates[@]}"; do
-        raw=$(gcloud sql instances list --project="$project" --filter="name=$candidate" --format=json --quiet 2> /dev/null)
+        raw=$(gcloud sql instances list --project="$project" --filter="name=$candidate" --format=json --quiet 2> "$gcp_stderr_file")
         rc=$?
         [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ] && {
           found=true
@@ -146,7 +174,7 @@ __mt_radar_gcp_check_resource() {
         region=$(echo "$raw" | jq -r '.[0].region // empty')
         console_url="https://console.cloud.google.com/sql/instances/${candidate}/overview?project=${project}"
       elif [ "$rc" -ne 0 ]; then
-        reason="api-error"
+        reason=$(__mt_radar_gcp_classify_error "$(cat "$gcp_stderr_file")")
       fi
       ;;
     google_storage_bucket)
@@ -175,7 +203,7 @@ __mt_radar_gcp_check_resource() {
       # second region setting), not that it's currently streaming.
       local dataflow_region="${DOCKER_GAR_REGION:-europe-west2}"
       for candidate in "${candidates[@]}"; do
-        raw=$(gcloud dataflow jobs list --project="$project" --region="$dataflow_region" --filter="name:$candidate" --format=json --quiet 2> /dev/null)
+        raw=$(gcloud dataflow jobs list --project="$project" --region="$dataflow_region" --filter="name:$candidate" --format=json --quiet 2> "$gcp_stderr_file")
         rc=$?
         [ "$rc" -eq 0 ] && [ "$(echo "$raw" | jq 'length')" -gt 0 ] && {
           found=true
@@ -190,7 +218,7 @@ __mt_radar_gcp_check_resource() {
         job_id=$(echo "$raw" | jq -r '.[0].id // empty')
         console_url="https://console.cloud.google.com/dataflow/jobs/${dataflow_region}/${job_id}?project=${project}"
       elif [ "$rc" -ne 0 ]; then
-        reason="api-error"
+        reason=$(__mt_radar_gcp_classify_error "$(cat "$gcp_stderr_file")")
       fi
       ;;
     *)
@@ -198,6 +226,8 @@ __mt_radar_gcp_check_resource() {
       reason="unsupported-resource-type"
       ;;
   esac
+
+  rm -f "$gcp_stderr_file"
 
   [ "$region" != "null" ] && region="\"$region\""
   [ "$console_url" != "null" ] && console_url="\"$console_url\""
