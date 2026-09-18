@@ -30,8 +30,14 @@
 __mt_radar_iam_analyze_repo() {
   local repo_path="$1" provider_override="$2"
 
+  # Unrestricted depth, matching __mt_radar_infra_analyze_repo
+  # (57-infra.sh) rather than tf-ai-iam's own shallow -maxdepth 3 check --
+  # a repo laid out as terraform/environments/<env>/<component>/*.tf (4
+  # levels deep) has real Terraform that -maxdepth 3 would silently miss,
+  # reporting "no-terraform" even though the Infrastructure Overview
+  # panel, which scans the same repo unrestricted, finds it fine.
   local tf_count
-  tf_count=$(find "$repo_path" -maxdepth 3 -name "*.tf" -not -path "*/.terraform/*" 2> /dev/null | wc -l)
+  tf_count=$(find "$repo_path" -name "*.tf" -not -path "*/.terraform/*" 2> /dev/null | wc -l)
   if [ "$tf_count" -eq 0 ]; then
     jq -n '{status: "no-terraform", analyzed_at: null, provider: null, analysis: null}'
     return 0
@@ -57,9 +63,22 @@ __mt_radar_iam_analyze_repo() {
     return 1
   fi
 
+  # AI_SYSTEM_PROMPT instructs every provider to answer inside a fixed
+  # {category, message, ...} JSON envelope (so `ai`'s own code-saving path
+  # can tell a "chat" reply from generated code) -- __ai_query_provider
+  # returns that raw envelope untouched, unlike `ai` itself, which pipes
+  # it through __ai_parse_response before ever printing anything. Since
+  # this is the same "chat" category `__ai_parse_response` prints as
+  # plain text via `${msg:-$content}`, apply the identical extraction
+  # here rather than caching the raw ```json {...}``` blob as "analysis".
+  local clean_content analysis_text
+  clean_content=$(echo "$content" | python3 "$HOME/.bash.d/lib/python/ai_parse_response.py" 2> /dev/null)
+  analysis_text=$(echo "$clean_content" | jq -r '.message // empty' 2> /dev/null)
+  [ -z "$analysis_text" ] && analysis_text="$content"
+
   jq -n \
     --arg provider "$provider" \
-    --arg analysis "$content" \
+    --arg analysis "$analysis_text" \
     --argjson analyzed_at "$(date +%s)" \
     '{status: "ok", analyzed_at: $analyzed_at, provider: $provider, analysis: $analysis}'
 }

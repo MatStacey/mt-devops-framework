@@ -346,27 +346,27 @@ __ai_query_claude_code() {
     full_prompt="${full_prompt}"$'\n\n=== LOCAL DIRECTORY CONTEXT ===\n'"$(command cat "$context_file")"
   fi
 
-  local -a claude_cli_args=(-p "$full_prompt" --output-format json --restricted --permission-prompts none)
+  local -a claude_cli_args=(-p --output-format json --restricted --permission-prompts none)
   [ -n "$final_model" ] && claude_cli_args+=(--model "$final_model")
   [ -n "${AI_SYSTEM_PROMPT:-}" ] && claude_cli_args+=(--system-prompt "$AI_SYSTEM_PROMPT")
 
   echo "⏳ Querying Claude Code (${final_model:-default model})..." >&2
 
-  # `< /dev/null`: without an explicit stdin, `claude -p` waits ~3s then
-  # prints a "Warning: no stdin data received..." line to stderr before
-  # its real --output-format json payload on stdout -- explicitly closing
-  # stdin (the CLI's own suggested fix) skips that wait and the warning
-  # entirely. Even so, stdout/stderr are captured separately (never
-  # merged via 2>&1 into the same variable) as defense in depth: `jq`
-  # requires its whole input to be valid JSON, so any stray diagnostic
-  # line landing ahead of the payload -- this one or a future one --
-  # would silently break `is_error`/`content` parsing below and fall
-  # through to "Unknown"/"No description available." at every caller,
-  # exactly as happened here before this fix.
+  # $full_prompt (base prompt + title + the whole compiled directory
+  # context) goes in via stdin, not as a CLI argv element -- a real repo's
+  # context easily exceeds the kernel's ARG_MAX for a single exec()
+  # argument (observed: "Argument list too long" against a mid-size Java
+  # repo), where stdin has no such limit. `claude -p` with the prompt
+  # positional omitted reads it from stdin instead (verified: `claude
+  # --help`'s own usage line lists prompt as a separate positional from
+  # -p/--print, and piping confirms the CLI reads and answers it).
+  # Previously this also relied on `< /dev/null` to skip a ~3s
+  # "no stdin data received" warning -- piping real content makes that
+  # moot, since stdin is never empty now.
   local response stderr_output is_error content
   local stderr_file
   stderr_file=$(mktemp)
-  response=$(claude "${claude_cli_args[@]}" < /dev/null 2> "$stderr_file")
+  response=$(claude "${claude_cli_args[@]}" <<< "$full_prompt" 2> "$stderr_file")
   stderr_output=$(cat "$stderr_file")
   rm -f "$stderr_file"
 
