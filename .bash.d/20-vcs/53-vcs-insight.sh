@@ -1104,10 +1104,25 @@ mt-radar() {
     iam_status=$(echo "$iam_json" | jq -r '.status')
 
     if [ "$iam_status" = "no-terraform" ]; then
+      # Written to cache (unlike --infra's bulk scan, which silently skips
+      # no-terraform repos to avoid bloating .vcs_infra.json with one entry
+      # per non-Terraform repo) -- this is a single, on-demand, user-
+      # requested analysis, so --show-iam must be able to report back
+      # "no-terraform" specifically. Without this, a repeat --show-iam
+      # falls through to the cache-miss "not-analyzed" case instead,
+      # which looks identical to having never run --iam at all.
+      __mt_radar_iam_write_cache_entry "$iam_cache_file" "$iam_repo_path" "$iam_json"
       echo -e "${CB_YELLOW}⚠️  No Terraform found in \"${filter_repo}\".${C_RESET}"
       return 0
     fi
     if [ "$iam_status" = "error" ]; then
+      # Also written to cache, same reasoning as the no-terraform branch
+      # above -- a bare `return 1` here is otherwise invisible to a caller
+      # like the VS Code companion that only reads --show-iam back after a
+      # `bash -ic "...; echo MARKER"`-wrapped run (whose own exit code is
+      # always 0, since the wrapping echo is the last command), leaving no
+      # other way to distinguish "the query failed" from "never run".
+      __mt_radar_iam_write_cache_entry "$iam_cache_file" "$iam_repo_path" "$iam_json"
       echo -e "${CB_RED}🚨 IAM analysis failed for \"${filter_repo}\" -- check your AI provider configuration.${C_RESET}"
       return 1
     fi
