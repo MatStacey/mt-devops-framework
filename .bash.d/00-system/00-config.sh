@@ -562,13 +562,15 @@ mt-setup() {
     "7. CI/CD Default Provider"
     "8. Docker Preferences"
     "9. Minikube Preferences"
-    "10. Exit"
+    "10. GCP Preferences"
+    "11. Exit"
   )
 
   local choice
   choice=$(printf '%s\n' "${options[@]}" | fzf --prompt="⚙️ Select a category to configure > " --height=~15 --layout=reverse --border)
 
   case "$choice" in
+    10*) mt-wizard-gcp ;;
     1*) __mt_setup_quick ;;
     2*) mt-wizard-system ;;
     3*) mt-wizard-ai ;;
@@ -837,6 +839,26 @@ mt-wizard-git() {
   read -r -p "AI Max Diff Bytes [${AI_MAX_DIFF_BYTES:-4000}]: " bytes
   [ -n "$bytes" ] && python3 "$CONFIG_MANAGER" update "ai" "max_context_bytes" "$bytes"
   echo -e "${CB_GREEN}✅ Git config updated.${C_RESET}"
+}
+
+#######################################
+# Config: Interactive GCP Setup Menu
+# Usage: mt-wizard-gcp
+# Options:
+#   -h, --help   Show this help menu
+# Globals:
+#   GCP_SCAN_REGIONS
+#######################################
+mt-wizard-gcp() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  echo -e "${CB_BLUE}--- GCP Configuration ---${C_RESET}"
+  echo -e "${C_DIM}💡 Regions 'mt-radar --scan-gcp' checks for resource types whose gcloud list command needs one (Redis, VPC connectors, API Gateway gateways, Cloud Scheduler jobs). Space-separated.${C_RESET}"
+  read -r -p "GCP scan regions [${GCP_SCAN_REGIONS:-europe-west1 europe-west2}]: " scan_regions
+  [ -n "$scan_regions" ] && python3 "$CONFIG_MANAGER" update "gcp" "scan_regions" "$scan_regions"
+  echo -e "${CB_GREEN}✅ GCP config updated.${C_RESET}"
 }
 
 #######################################

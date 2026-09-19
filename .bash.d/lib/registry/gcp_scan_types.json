@@ -1,0 +1,295 @@
+{
+  "_comment": "Registry for mt-radar --scan-gcp (.bash.d/20-vcs/58-infra-gcp-scan.sh). 'types' maps a Terraform resource type to a 'specs' entry (and, when the live name comes from an attribute other than `name`, the Terraform attribute holding it). A spec runs one list command per scan (cached, and once per region in GCP_SCAN_REGIONS when 'regional' is true); '{project}' and '{region}' are substituted in 'cmd'. 'name_jq'/'region_jq'/'live_url_jq'/'id_jq' extract fields from each item of the list's JSON array. 'console' is a URL template over {project} {region} {name} {id}; omitted when unsure of the deep link.",
+  "specs": {
+    "run_services": {
+      "cmd": ["gcloud", "run", "services", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".metadata.name",
+      "region_jq": ".metadata.labels[\"cloud.googleapis.com/location\"] // .region",
+      "live_url_jq": ".status.url",
+      "console": "https://console.cloud.google.com/run/detail/{region}/{name}/metrics?project={project}"
+    },
+    "run_jobs": {
+      "cmd": ["gcloud", "run", "jobs", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".metadata.name",
+      "region_jq": ".metadata.labels[\"cloud.googleapis.com/location\"]",
+      "console": "https://console.cloud.google.com/run/jobs/details/{region}/{name}/executions?project={project}"
+    },
+    "functions": {
+      "cmd": ["gcloud", "functions", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "region_jq": ".name | split(\"/\") | .[3]",
+      "console": "https://console.cloud.google.com/functions/details/{region}/{name}?project={project}"
+    },
+    "gke_clusters": {
+      "cmd": ["gcloud", "container", "clusters", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".location",
+      "console": "https://console.cloud.google.com/kubernetes/clusters/details/{region}/{name}/details?project={project}"
+    },
+    "sql_instances": {
+      "cmd": ["gcloud", "sql", "instances", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".region",
+      "console": "https://console.cloud.google.com/sql/instances/{name}/overview?project={project}"
+    },
+    "compute_instances": {
+      "cmd": ["gcloud", "compute", "instances", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".zone | split(\"/\") | last",
+      "console": "https://console.cloud.google.com/compute/instancesDetail/zones/{region}/instances/{name}?project={project}"
+    },
+    "instance_templates": {
+      "cmd": ["gcloud", "compute", "instance-templates", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "console": "https://console.cloud.google.com/compute/instanceTemplates/details/{name}?project={project}"
+    },
+    "instance_group_managers": {
+      "cmd": ["gcloud", "compute", "instance-groups", "managed", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": "(.region // .zone) | split(\"/\") | last"
+    },
+    "autoscalers": {
+      "cmd": ["gcloud", "compute", "autoscalers", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": "(.region // .zone) | split(\"/\") | last"
+    },
+    "networks": {
+      "cmd": ["gcloud", "compute", "networks", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "console": "https://console.cloud.google.com/networking/networks/details/{name}?project={project}"
+    },
+    "subnetworks": {
+      "cmd": ["gcloud", "compute", "networks", "subnets", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".region | split(\"/\") | last",
+      "console": "https://console.cloud.google.com/networking/subnetworks/details/{region}/{name}?project={project}"
+    },
+    "firewalls": {
+      "cmd": ["gcloud", "compute", "firewall-rules", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "console": "https://console.cloud.google.com/networking/firewalls/details/{name}?project={project}"
+    },
+    "addresses": {
+      "cmd": ["gcloud", "compute", "addresses", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".region | split(\"/\") | last",
+      "console": "https://console.cloud.google.com/networking/addresses/list?project={project}"
+    },
+    "forwarding_rules": {
+      "cmd": ["gcloud", "compute", "forwarding-rules", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".region | split(\"/\") | last",
+      "console": "https://console.cloud.google.com/net-services/loadbalancing/list/loadBalancers?project={project}"
+    },
+    "url_maps": {
+      "cmd": ["gcloud", "compute", "url-maps", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".region | split(\"/\") | last",
+      "console": "https://console.cloud.google.com/net-services/loadbalancing/list/loadBalancers?project={project}"
+    },
+    "backend_services": {
+      "cmd": ["gcloud", "compute", "backend-services", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".region | split(\"/\") | last",
+      "console": "https://console.cloud.google.com/net-services/loadbalancing/list/backends?project={project}"
+    },
+    "https_proxies": {
+      "cmd": ["gcloud", "compute", "target-https-proxies", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".region | split(\"/\") | last"
+    },
+    "http_proxies": {
+      "cmd": ["gcloud", "compute", "target-http-proxies", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".region | split(\"/\") | last"
+    },
+    "health_checks": {
+      "cmd": ["gcloud", "compute", "health-checks", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".region | split(\"/\") | last"
+    },
+    "routers": {
+      "cmd": ["gcloud", "compute", "routers", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".region | split(\"/\") | last"
+    },
+    "ssl_certificates": {
+      "cmd": ["gcloud", "compute", "ssl-certificates", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "console": "https://console.cloud.google.com/security/ccm/list/lbCertificates?project={project}"
+    },
+    "network_endpoint_groups": {
+      "cmd": ["gcloud", "compute", "network-endpoint-groups", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": "(.region // .zone) | split(\"/\") | last"
+    },
+    "service_attachments": {
+      "cmd": ["gcloud", "compute", "service-attachments", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".region | split(\"/\") | last"
+    },
+    "vpc_connectors": {
+      "regional": true,
+      "cmd": ["gcloud", "compute", "networks", "vpc-access", "connectors", "list", "--region={region}", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "region_jq": ".name | split(\"/\") | .[3]",
+      "console": "https://console.cloud.google.com/networking/connectors/list?project={project}"
+    },
+    "redis_instances": {
+      "regional": true,
+      "cmd": ["gcloud", "redis", "instances", "list", "--region={region}", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "region_jq": ".name | split(\"/\") | .[3]",
+      "console": "https://console.cloud.google.com/memorystore/redis/locations/{region}/instances/{name}/details/overview?project={project}"
+    },
+    "bq_datasets": {
+      "cmd": ["bq", "ls", "--format=json", "--project_id={project}", "--max_results=1000"],
+      "name_jq": ".datasetReference.datasetId",
+      "region_jq": ".location",
+      "console": "https://console.cloud.google.com/bigquery?project={project}&ws=!1m4!1m3!3m2!1s{project}!2s{name}"
+    },
+    "dataflow_jobs": {
+      "cmd": ["gcloud", "dataflow", "jobs", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".location",
+      "id_jq": ".id",
+      "console": "https://console.cloud.google.com/dataflow/jobs/{region}/{id}?project={project}"
+    },
+    "firestore_databases": {
+      "cmd": ["gcloud", "firestore", "databases", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "region_jq": ".locationId"
+    },
+    "pubsub_topics": {
+      "cmd": ["gcloud", "pubsub", "topics", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "console": "https://console.cloud.google.com/cloudpubsub/topic/detail/{name}?project={project}"
+    },
+    "pubsub_subscriptions": {
+      "cmd": ["gcloud", "pubsub", "subscriptions", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "console": "https://console.cloud.google.com/cloudpubsub/subscription/detail/{name}?project={project}"
+    },
+    "secrets": {
+      "cmd": ["gcloud", "secrets", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "console": "https://console.cloud.google.com/security/secret-manager/secret/{name}/versions?project={project}"
+    },
+    "artifact_repositories": {
+      "cmd": ["gcloud", "artifacts", "repositories", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "region_jq": ".name | split(\"/\") | .[3]",
+      "console": "https://console.cloud.google.com/artifacts/docker/{project}/{region}/{name}?project={project}"
+    },
+    "service_accounts": {
+      "cmd": ["gcloud", "iam", "service-accounts", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".email | split(\"@\") | .[0]",
+      "console": "https://console.cloud.google.com/iam-admin/serviceaccounts?project={project}"
+    },
+    "workload_identity_pools": {
+      "cmd": ["gcloud", "iam", "workload-identity-pools", "list", "--location=global", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "console": "https://console.cloud.google.com/iam-admin/workload-identity-pools?project={project}"
+    },
+    "dns_zones": {
+      "cmd": ["gcloud", "dns", "managed-zones", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "console": "https://console.cloud.google.com/net-services/dns/zones/{name}/details?project={project}"
+    },
+    "api_gateway_apis": {
+      "cmd": ["gcloud", "api-gateway", "apis", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "console": "https://console.cloud.google.com/api-gateway/api/{name}/overview?project={project}"
+    },
+    "api_gateway_gateways": {
+      "regional": true,
+      "cmd": ["gcloud", "api-gateway", "gateways", "list", "--location={region}", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "region_jq": ".name | split(\"/\") | .[3]",
+      "live_url_jq": "\"https://\" + .defaultHostname",
+      "console": "https://console.cloud.google.com/api-gateway/gateway/{region}/{name}/overview?project={project}"
+    },
+    "scheduler_jobs": {
+      "regional": true,
+      "cmd": ["gcloud", "scheduler", "jobs", "list", "--location={region}", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name | split(\"/\") | last",
+      "region_jq": ".name | split(\"/\") | .[3]",
+      "console": "https://console.cloud.google.com/cloudscheduler?project={project}"
+    },
+    "storage_buckets": {
+      "cmd": ["gcloud", "storage", "buckets", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "region_jq": ".location",
+      "live_url_jq": "\"https://storage.googleapis.com/\" + .name",
+      "console": "https://console.cloud.google.com/storage/browser/{name}?project={project}"
+    },
+    "logging_sinks": {
+      "cmd": ["gcloud", "logging", "sinks", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "console": "https://console.cloud.google.com/logs/router?project={project}"
+    },
+    "logging_metrics": {
+      "cmd": ["gcloud", "logging", "metrics", "list", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".name",
+      "console": "https://console.cloud.google.com/logs/metrics?project={project}"
+    },
+    "enabled_apis": {
+      "cmd": ["gcloud", "services", "list", "--enabled", "--project={project}", "--format=json", "--quiet"],
+      "name_jq": ".config.name",
+      "console": "https://console.cloud.google.com/apis/library/{name}?project={project}"
+    }
+  },
+  "types": {
+    "google_cloud_run_service": { "spec": "run_services" },
+    "google_cloud_run_v2_service": { "spec": "run_services" },
+    "google_cloud_run_v2_job": { "spec": "run_jobs" },
+    "google_cloudfunctions_function": { "spec": "functions" },
+    "google_cloudfunctions2_function": { "spec": "functions" },
+    "google_container_cluster": { "spec": "gke_clusters" },
+    "google_sql_database_instance": { "spec": "sql_instances" },
+    "google_compute_instance": { "spec": "compute_instances" },
+    "google_compute_instance_template": { "spec": "instance_templates" },
+    "google_compute_instance_group_manager": { "spec": "instance_group_managers" },
+    "google_compute_region_instance_group_manager": { "spec": "instance_group_managers" },
+    "google_compute_autoscaler": { "spec": "autoscalers" },
+    "google_compute_network": { "spec": "networks" },
+    "google_compute_subnetwork": { "spec": "subnetworks" },
+    "google_compute_firewall": { "spec": "firewalls" },
+    "google_compute_address": { "spec": "addresses" },
+    "google_compute_global_address": { "spec": "addresses" },
+    "google_compute_forwarding_rule": { "spec": "forwarding_rules" },
+    "google_compute_global_forwarding_rule": { "spec": "forwarding_rules" },
+    "google_compute_url_map": { "spec": "url_maps" },
+    "google_compute_region_url_map": { "spec": "url_maps" },
+    "google_compute_backend_service": { "spec": "backend_services" },
+    "google_compute_region_backend_service": { "spec": "backend_services" },
+    "google_compute_target_https_proxy": { "spec": "https_proxies" },
+    "google_compute_target_http_proxy": { "spec": "http_proxies" },
+    "google_compute_region_target_http_proxy": { "spec": "http_proxies" },
+    "google_compute_health_check": { "spec": "health_checks" },
+    "google_compute_region_health_check": { "spec": "health_checks" },
+    "google_compute_router": { "spec": "routers" },
+    "google_compute_managed_ssl_certificate": { "spec": "ssl_certificates" },
+    "google_compute_region_network_endpoint_group": { "spec": "network_endpoint_groups" },
+    "google_compute_service_attachment": { "spec": "service_attachments" },
+    "google_vpc_access_connector": { "spec": "vpc_connectors" },
+    "google_redis_instance": { "spec": "redis_instances" },
+    "google_bigquery_dataset": { "spec": "bq_datasets", "attr": "dataset_id" },
+    "google_dataflow_job": { "spec": "dataflow_jobs" },
+    "google_firestore_database": { "spec": "firestore_databases" },
+    "google_pubsub_topic": { "spec": "pubsub_topics" },
+    "google_pubsub_subscription": { "spec": "pubsub_subscriptions" },
+    "google_secret_manager_secret": { "spec": "secrets", "attr": "secret_id" },
+    "google_artifact_registry_repository": { "spec": "artifact_repositories", "attr": "repository_id" },
+    "google_service_account": { "spec": "service_accounts", "attr": "account_id" },
+    "google_iam_workload_identity_pool": { "spec": "workload_identity_pools", "attr": "workload_identity_pool_id" },
+    "google_dns_managed_zone": { "spec": "dns_zones" },
+    "google_api_gateway_api": { "spec": "api_gateway_apis", "attr": "api_id" },
+    "google_api_gateway_gateway": { "spec": "api_gateway_gateways", "attr": "gateway_id" },
+    "google_cloud_scheduler_job": { "spec": "scheduler_jobs" },
+    "google_storage_bucket": { "spec": "storage_buckets" },
+    "google_logging_project_sink": { "spec": "logging_sinks" },
+    "google_logging_metric": { "spec": "logging_metrics" },
+    "google_project_service": { "spec": "enabled_apis", "attr": "service" }
+  }
+}

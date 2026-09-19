@@ -98,6 +98,13 @@ docker:
   reboot_min_timeout_sec: 120
   reboot_poll_interval_sec: 2
 
+gcp:
+  # Regions mt-radar --scan-gcp checks for resource types whose gcloud list
+  # command needs one (Redis, VPC connectors, API Gateway gateways, Cloud
+  # Scheduler jobs) -- space-separated. Add a region here if your
+  # infrastructure lives outside the defaults.
+  scan_regions: "europe-west1 europe-west2"
+
 server:
   default_port: 8000
   enable_auth: false

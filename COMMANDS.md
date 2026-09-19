@@ -184,6 +184,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-wizard-cicd` | Config: Interactive CI/CD Setup Menu |
 | `mt-wizard-docker` | Config: Interactive Docker Configuration Wizard -- restart blocklist, |
 | `mt-wizard-exports` | Config: Interactive Exports Setup Menu |
+| `mt-wizard-gcp` | Config: Interactive GCP Setup Menu |
 | `mt-wizard-git` | Config: Interactive Git Setup Menu |
 | `mt-wizard-minikube` | Config: Interactive Minikube Configuration Wizard -- sets the |
 | `mt-wizard-paths` | Config: Interactive Paths Setup Menu -- prompts for and persists the |

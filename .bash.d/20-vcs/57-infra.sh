@@ -70,7 +70,8 @@ __mt_radar_infra_categorize_resource() {
 #   Prints a JSON object:
 #   {status: "ok"|"no-terraform", analyzed_at: <epoch>|null,
 #    tf_file_count, providers: [...], modules: [{name}],
-#    resources: {<category>: [{type, name}]}, resource_count}
+#    resources: {<category>: [{type, name, attrs: {<attr>: <literal>}}]},
+#    resource_count}
 #######################################
 __mt_radar_infra_analyze_repo() {
   local repo_path="$1"
@@ -100,17 +101,17 @@ __mt_radar_infra_analyze_repo() {
     modules_json=$(printf '%s\n' "${module_names[@]}" | jq -R '{name: .}' | jq -s .)
   fi
 
+  # One line per resource occurrence: type, label, then optional
+  # attr/value pairs for identifying string literals (see
+  # lib/awk/tf_resources.awk) -- the live names the GCP scan matches on.
   local resource_tsv
   resource_tsv=$(mktemp)
-  local rtype rname category
-  while IFS=$'\t' read -r rtype rname; do
+  local rtype rname attr_pairs category
+  while IFS=$'\t' read -r rtype rname attr_pairs; do
     [ -z "$rtype" ] && continue
     category=$(__mt_radar_infra_categorize_resource "$rtype")
-    printf '%s\t%s\t%s\n' "$category" "$rtype" "$rname" >> "$resource_tsv"
-  done < <(
-    grep -hoE 'resource[[:space:]]+"[a-zA-Z0-9_]+"[[:space:]]+"[a-zA-Z0-9_-]+"' "${tf_files[@]}" 2> /dev/null |
-      sed -E 's/resource[[:space:]]+"([a-zA-Z0-9_]+)"[[:space:]]+"([a-zA-Z0-9_-]+)"/\1\t\2/'
-  )
+    printf '%s\t%s\t%s\t%s\n' "$category" "$rtype" "$rname" "$attr_pairs" >> "$resource_tsv"
+  done < <(awk -f "$HOME/.bash.d/lib/awk/tf_resources.awk" "${tf_files[@]}" 2> /dev/null)
 
   local resource_count
   resource_count=$(wc -l < "$resource_tsv")
@@ -119,9 +120,10 @@ __mt_radar_infra_analyze_repo() {
   if [ "$resource_count" -gt 0 ]; then
     resources_json=$(jq -R -s '
       split("\n") | map(select(length > 0) | split("\t")) |
-      map({category: .[0], type: .[1], name: .[2]}) |
+      map({category: .[0], type: .[1], name: .[2],
+           attrs: ([.[3:][] | select(length > 0)] | [range(0; length; 2) as $i | {key: .[$i], value: .[$i + 1]}] | from_entries)}) |
       group_by(.category) |
-      map({key: .[0].category, value: map({type, name})}) |
+      map({key: .[0].category, value: map({type, name, attrs})}) |
       from_entries
     ' "$resource_tsv")
   fi
