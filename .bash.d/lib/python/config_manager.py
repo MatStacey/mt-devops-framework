@@ -223,6 +223,11 @@ def load_env():
     # how far back its `git log` window looks, in months.
     export("CONTRIBUTOR_LOOKBACK_MONTHS", git_cfg.get("contributor_lookback_months", 12))
 
+    # mt-radar --scan-gcp (20-vcs/58-infra-gcp-scan.sh) -- regions checked
+    # for resource types whose gcloud list command requires one.
+    gcp_cfg = d.get("gcp") or {}
+    export("GCP_SCAN_REGIONS", gcp_cfg.get("scan_regions", "europe-west1 europe-west2"))
+
     # Paths
     export(
         "VCS_ROOT",

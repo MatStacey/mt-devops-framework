@@ -418,6 +418,7 @@ __mt_menu_setup_wizards() {
     "Git Configuration (mt-wizard-git)" mt-wizard-git \
     "CI/CD Configuration (mt-wizard-cicd)" mt-wizard-cicd \
     "Docker Configuration (mt-wizard-docker)" mt-wizard-docker \
+    "GCP Configuration (mt-wizard-gcp)" mt-wizard-gcp \
     "Minikube Configuration (mt-wizard-minikube)" mt-wizard-minikube \
     "Exports Configuration (mt-wizard-exports)" mt-wizard-exports \
     "Paths Configuration (mt-wizard-paths)" mt-wizard-paths
