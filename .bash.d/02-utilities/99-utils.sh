@@ -58,10 +58,9 @@ mt-vcs-audit() {
 # Options:
 #   -u, --update <name>   Update a specific existing alias
 #   -i, --interactive     Select an existing alias to update via fzf
-#   -p, --private         Create the alias in a local-only file that is
-#                         never synced to the framework repo (matches
-#                         install.sh's own *private*.sh protection, so it
-#                         also survives fresh installs and mt-get-update)
+#   -p, --private         Create the alias in 40-private/10-aliases.sh, the
+#                         private bash.d folder that is never synced to the
+#                         framework repo and survives mt-get-update
 #######################################
 mt-alias() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -95,7 +94,7 @@ mt-alias() {
   fi
   local alias_name="$update_name" default_cmd="" default_cat="User Custom" default_desc=""
   local public_aliases_file="$HOME/.bash.d/02-utilities/20-aliases.sh"
-  local private_aliases_file="$HOME/.bash.d/02-utilities/20-aliases.private.sh"
+  local private_aliases_file="$HOME/.bash.d/40-private/10-aliases.sh"
   local aliases_file="$public_aliases_file"
   [ "$private" = true ] && aliases_file="$private_aliases_file"
   echo -e "${CB_BLUE}==========================================================${C_RESET}"
@@ -136,13 +135,14 @@ mt-alias() {
   if [ -n "$update_name" ]; then
     python3 "$HOME/.bash.d/lib/python/remove_alias_block.py" "$aliases_file" "$alias_name"
   fi
+  mkdir -p "$(dirname "$aliases_file")"
   if [ ! -f "$aliases_file" ]; then
     cat << HEADEREOF > "$aliases_file"
 # shellcheck shell=bash
 # ------------------------------------------
 # Private Aliases (local-only -- never synced to the framework repo)
 # ------------------------------------------
-# ~/.bash.d/02-utilities/20-aliases.private.sh
+# ~/.bash.d/40-private/10-aliases.sh
 HEADEREOF
   fi
   cat << ALIASEOF >> "$aliases_file"
