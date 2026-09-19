@@ -7,6 +7,13 @@ tf_iam_script: |
 tf_iam_chat: |
   Output the result as a copy-pastable comma-separated list of roles in 'roles/<role>' format for each service account, with the service account name as the header. Output this as a chat message, not a code block.
 
+tf_iam_report: |
+  Analyze the local Terraform configuration and application context provided. All GCP Service Accounts and their role grants are created outside Terraform as a pre-requisite, so identify every service account this codebase needs (pipeline/deployer identities and runtime identities) and the least-privilege predefined roles each needs. Never recommend custom roles or basic roles (roles/owner, roles/editor, roles/viewer).
+  Respond with ONLY a JSON object -- no prose, no markdown fences -- of exactly this shape:
+  {"recommended":[{"name":"<short service account id>","purpose":"<what it is used for>","replaces":"<email of the existing account it should replace, or null>","roles":[{"role":"roles/<role>","reason":"<why it is needed>"}]}],"current":[{"email":"<existing account email>","roles":[{"role":"roles/<role>","verdict":"required|not-needed|excessive","reason":"<one sentence>"}]}]}
+  Rules for "current": only fill it when a CURRENT IAM BINDINGS section follows, otherwise return an empty array. Include only existing accounts this codebase plausibly uses (its pipelines, runtime, or Terraform); omit unrelated accounts. Give a verdict for every role each included account holds: "required" if your recommendation needs it, "not-needed" if nothing in this codebase needs it, "excessive" if it is broader than least privilege (name the narrower role in the reason).
+  Rules for "replaces": use the email of an existing account from the current bindings that plays the same role as the recommended account; otherwise null.
+
 git_commit: |
   Analyze this git diff and group the changes into logical features/tasks. Return ONLY a valid JSON array of objects representing separate commits. Each object must have a 'files' array (exact file paths from the diff) and a 'message' string (conventional commit format, < 60 chars).
 

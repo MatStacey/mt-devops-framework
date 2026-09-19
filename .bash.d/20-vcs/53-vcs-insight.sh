@@ -916,7 +916,7 @@ __mt_radar_search() {
 # System: Interactive AI-powered Repository Dashboard. An unfiltered
 # --index run also prunes cache entries for repos no longer found on
 # disk (moved, renamed, or deleted) before indexing.
-# Usage: mt-radar [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>] [--infra]] [--infra [-t <type>] [-r <name>]] [--show-infra <repo>] [--preview <repo>] [--scan-gcp -r <repo> [--gcp-project <id>]] [--iam -r <repo> [-p <provider>]] [--show-iam <repo>]
+# Usage: mt-radar [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>] [--infra]] [--infra [-t <type>] [-r <name>]] [--show-infra <repo>] [--preview <repo>] [--scan-gcp -r <repo> [--gcp-project <id>]] [--iam -r <repo> [-p <provider>] [--gcp-project <id>]] [--show-iam <repo>]
 # Options:
 #   --index                    Scan and build the AI metadata cache
 #   -b, --bg, --background     Run the index scan as a background job (with --index)
@@ -951,14 +951,18 @@ __mt_radar_search() {
 #                              red = none, amber = partial). Existence-based only, not a real
 #                              `terraform plan` drift check. Requires -r/--repo; on-demand
 #                              only, never run automatically by --index/--infra
-#   --gcp-project <id>         GCP project to scan against (with --scan-gcp). Defaults to
-#                              gcloud's own active project (`gcloud config get-value project`)
+#   --gcp-project <id>         GCP project to scan against (with --scan-gcp; defaults to
+#                              gcloud's own active project) or to read current IAM from
+#                              (with --iam; no default -- omitted means no current-IAM
+#                              comparison)
 #   --iam                      Analyze one repo's Terraform via the configured AI provider
-#                              (same prompts as tf-ai-iam) and cache the recommended GCP
-#                              service accounts/least-privilege roles into a separate cache
-#                              (.vcs_iam.json). Real AI cost/latency, unlike --infra --
-#                              requires -r/--repo; on-demand only, never run automatically
-#                              by --index/--infra
+#                              and cache a structured recommended GCP service account/
+#                              least-privilege role report into a separate cache
+#                              (.vcs_iam.json). With --gcp-project, the project's live
+#                              service-account role grants are read too, and each granted
+#                              role is labeled required/not-needed/excessive. Real AI
+#                              cost/latency, unlike --infra -- requires -r/--repo;
+#                              on-demand only, never run automatically by --index/--infra
 #   --show-iam <repo>          Show the cached IAM analysis for one repo (by absolute path
 #                              or bare repo name) and exit
 #   --preview <repo>           Show cached metadata for one repo (by absolute path or
@@ -1100,7 +1104,7 @@ mt-radar() {
 
     echo -e "${CB_BLUE}🤖 Analyzing ${filter_repo}'s Terraform for IAM requirements...${C_RESET}"
     local iam_json iam_status
-    iam_json=$(__mt_radar_iam_analyze_repo "$iam_repo_path" "$provider_override")
+    iam_json=$(__mt_radar_iam_analyze_repo "$iam_repo_path" "$provider_override" "$gcp_project_override")
     iam_status=$(echo "$iam_json" | jq -r '.status')
 
     if [ "$iam_status" = "no-terraform" ]; then
@@ -1123,7 +1127,7 @@ mt-radar() {
       # always 0, since the wrapping echo is the last command), leaving no
       # other way to distinguish "the query failed" from "never run".
       __mt_radar_iam_write_cache_entry "$iam_cache_file" "$iam_repo_path" "$iam_json"
-      echo -e "${CB_RED}🚨 IAM analysis failed for \"${filter_repo}\" -- check your AI provider configuration.${C_RESET}"
+      echo -e "${CB_RED}🚨 IAM analysis failed for \"${filter_repo}\": $(echo "$iam_json" | jq -r '.message // "unknown error"')${C_RESET}"
       return 1
     fi
 
