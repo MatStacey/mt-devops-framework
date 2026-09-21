@@ -963,6 +963,12 @@ __mt_radar_search() {
 #                              role is labeled required/not-needed/excessive. Real AI
 #                              cost/latency, unlike --infra -- requires -r/--repo;
 #                              on-demand only, never run automatically by --index/--infra
+#   --suggest-projects         List the GCP projects a repo deploys to, mined from its
+#                              own Terraform, tfvars, YAML/JSON config, CI pipelines and
+#                              gcloud calls (literal project IDs only), with an inferred
+#                              environment (dev/stage/prod). Feeds the project picker
+#                              for --scan-gcp/--iam. Requires -r/--repo; with -j/--json
+#                              prints [{project, environment, references, sources}]
 #   --show-iam <repo>          Show the cached IAM analysis for one repo (by absolute path
 #                              or bare repo name) and exit
 #   --preview <repo>           Show cached metadata for one repo (by absolute path or
@@ -1012,6 +1018,7 @@ mt-radar() {
   local gcp_project_override=""
   local run_iam=false
   local show_iam_repo=""
+  local run_suggest_projects=false
 
   # Argument parsing
   while [[ "$#" -gt 0 ]]; do
@@ -1055,6 +1062,7 @@ mt-radar() {
         shift
         ;;
       --iam) run_iam=true ;;
+      --suggest-projects) run_suggest_projects=true ;;
       --show-iam)
         show_iam_repo="$2"
         shift
@@ -1084,6 +1092,33 @@ mt-radar() {
 
   if [ -n "$show_iam_repo" ]; then
     __mt_radar_iam_show "$show_iam_repo" "$iam_cache_file" "$json_mode"
+    return 0
+  fi
+
+  if [ "$run_suggest_projects" = true ]; then
+    if [ -z "$filter_repo" ]; then
+      echo -e "${CB_RED}🚨 --suggest-projects requires -r/--repo <name>.${C_RESET}"
+      return 1
+    fi
+
+    local suggest_repo_path suggest_candidate
+    while IFS= read -r suggest_candidate; do
+      [ "$(basename "$suggest_candidate")" = "$filter_repo" ] && suggest_repo_path="$suggest_candidate" && break
+    done < <(__mt_radar_find_repos "$search_dir")
+    if [ -z "$suggest_repo_path" ]; then
+      echo -e "${CB_RED}🚨 No repository named \"${filter_repo}\" found under ${search_dir}.${C_RESET}"
+      return 1
+    fi
+
+    local suggestions
+    suggestions=$(__mt_radar_gcp_suggest_projects "$suggest_repo_path")
+    if [ "$json_mode" = true ]; then
+      echo "$suggestions"
+    elif [ "$(echo "$suggestions" | jq 'length')" -eq 0 ]; then
+      echo -e "${CB_YELLOW}⚠️  No GCP project IDs found in \"${filter_repo}\".${C_RESET}"
+    else
+      echo "$suggestions" | jq -r '.[] | "  \(.project)\t\(.environment)\t\(.references) ref(s)\t\(.sources | join(", "))"' | column -t -s $'\t'
+    fi
     return 0
   fi
 

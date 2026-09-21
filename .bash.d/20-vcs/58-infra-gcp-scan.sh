@@ -406,3 +406,35 @@ __mt_radar_infra_write_gcp_scan() {
     jq --arg r "$repo_path" --argjson s "$scan_json" '.[$r].gcp_scan = $s' "$cache_file" > "$tmp_cache" && mv "$tmp_cache" "$cache_file"
   ) 200> "$lock_file"
 }
+
+#######################################
+# Repo Radar: Suggest GCP projects a repo deploys to, mined from the repo's
+# own files -- Terraform/tfvars/HCL (`project`, `project_id`, `project_name`),
+# YAML/JSON config and CI pipelines (`project_id:`, `--project=`,
+# `GCP_PROJECT`), and shell/package.json (`gcloud config set project`). Only
+# literal, syntactically valid project IDs are reported; `= var.x` references
+# are never resolved or guessed.
+# Arguments:
+#   $1 - Repository path
+# Globals:
+#   GCP_SUGGEST_MAX_SOURCES (default 3) - files listed per project
+# Outputs:
+#   Prints a JSON array [{project, environment, references, sources}],
+#   ordered dev, stage, test, prod, then unclassified
+#######################################
+__mt_radar_gcp_suggest_projects() {
+  local repo_path="$1"
+  local project_id_pattern='[a-z][a-z0-9-]{4,28}[a-z0-9]'
+  local assignment_pattern="(^|[^A-Za-z0-9_])(project(_id|_name)?|gcp_project(_id)?|GCP_PROJECT(_ID)?|PROJECT_ID|CLOUDSDK_CORE_PROJECT)[\"']?[[:space:]]*[=:][[:space:]]*[\"']?${project_id_pattern}[\"']?"
+  local flag_pattern="(--project[= ]|set project )${project_id_pattern}"
+
+  (
+    cd "$repo_path" 2> /dev/null || exit 0
+    grep -rHoE "(${assignment_pattern})|(${flag_pattern})" . \
+      --include='*.tf' --include='*.tfvars' --include='*.hcl' \
+      --include='*.yml' --include='*.yaml' --include='*.json' --include='*.sh' \
+      --exclude='*lock*.json' --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.terraform 2> /dev/null |
+      sed 's#^\./##' |
+      awk -f "$HOME/.bash.d/lib/awk/gcp_project_refs.awk"
+  ) | jq -R -s --argjson max_sources "${GCP_SUGGEST_MAX_SOURCES:-3}" -f "$HOME/.bash.d/lib/jq/gcp_project_suggestions.jq"
+}
