@@ -217,6 +217,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `docker-daemon` | Docker: Start, stop, restart, or check the status of the Docker daemon |
 | `docker-group-start` | Docker: Start every container in a single Compose project -- 'docker |
 | `docker-group-stop` | Docker: Stop every container in a single Compose project in place -- |
+| `docker-health` | Docker: Diagnose an unhealthy container -- its health status and failing |
 | `docker-ls` | Docker: List containers in a clean table format |
 | `docker-nuke` | Docker: Aggressive cleanup of all unused containers, images, and volumes |
 | `docker-reboot` | Docker: Recreate a single Compose project |

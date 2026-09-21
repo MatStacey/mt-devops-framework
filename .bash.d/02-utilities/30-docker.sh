@@ -1200,6 +1200,165 @@ docker-ls() {
 }
 
 #######################################
+# Docker: Diagnose an unhealthy container -- its health status and failing
+# streak, the healthcheck's configured interval/timeout/retries, the
+# recent probe log (exit code, duration, output) with slow probes flagged,
+# and optionally the healthcheck command run once and timed. With no
+# container, every currently unhealthy container is diagnosed.
+# Usage: docker-health [-n <count>] [-t|--time] [-j|--json] [container]
+# Options:
+#   -n, --lines <count>  Number of recent probes to show
+#                        (default: $DOCKER_HEALTH_LOG_ENTRIES or 5)
+#   -t, --time           Run the container's healthcheck command via
+#                        'docker exec' and time it against the timeout
+#   -j, --json           Print the diagnosis as JSON (an array, one object
+#                        per container) instead of the report
+# Arguments:
+#   container            Container name or ID (default: all unhealthy ones)
+# Globals:
+#   DOCKER_HEALTH_LOG_ENTRIES, DOCKER_HEALTH_WARN_RATIO
+# Returns:
+#   0 on success, 1 on bad arguments or an unknown container
+#######################################
+docker-health() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  __docker_ensure_running || return 1
+
+  local max_probes="${DOCKER_HEALTH_LOG_ENTRIES:-5}" time_probe=false json=false target=""
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -n | --lines)
+        max_probes="$2"
+        shift 2
+        ;;
+      -t | --time)
+        time_probe=true
+        shift
+        ;;
+      -j | --json)
+        json=true
+        shift
+        ;;
+      -*)
+        echo "Usage: docker-health [-n <count>] [-t|--time] [-j|--json] [container]" >&2
+        return 1
+        ;;
+      *)
+        target="$1"
+        shift
+        ;;
+    esac
+  done
+  if ! [[ "$max_probes" =~ ^[0-9]+$ ]] || [ "$max_probes" -eq 0 ]; then
+    echo -e "${CB_RED}❌ --lines must be a positive integer.${C_RESET}" >&2
+    return 1
+  fi
+
+  local containers=()
+  if [ -n "$target" ]; then
+    containers=("$target")
+  else
+    mapfile -t containers < <(docker ps --filter health=unhealthy --format '{{.Names}}')
+    if [ "${#containers[@]}" -eq 0 ]; then
+      $json && echo "[]" || echo -e "${CB_GREEN}✅ No unhealthy containers.${C_RESET}"
+      return 0
+    fi
+  fi
+
+  local jq_filter="$HOME/.bash.d/lib/jq/docker_health.jq"
+  local default_timeout_sec=30 warn_ratio="${DOCKER_HEALTH_WARN_RATIO:-0.8}"
+  local container inspect_json report
+  local reports=()
+  for container in "${containers[@]}"; do
+    if ! inspect_json=$(docker inspect "$container" 2> /dev/null); then
+      echo -e "${CB_RED}❌ No such container: ${container}${C_RESET}" >&2
+      return 1
+    fi
+    report=$(jq -c --argjson default_timeout_sec "$default_timeout_sec" --argjson warn_ratio "$warn_ratio" --argjson max_probes "$max_probes" -f "$jq_filter" <<< "$inspect_json") || {
+      echo -e "${CB_RED}❌ Could not parse the health data of ${container}.${C_RESET}" >&2
+      return 1
+    }
+    if $json; then
+      reports+=("$report")
+    else
+      __docker_health_print_report "$report"
+      $time_probe && __docker_health_time_probe "$container" "$report"
+    fi
+  done
+  $json && printf '%s\n' "${reports[@]}" | jq -s .
+  return 0
+}
+
+#######################################
+# Docker: Print one container's health diagnosis (a docker_health.jq
+# object) as a colourised report; helper for docker-health.
+# Arguments:
+#   $1 - Diagnosis JSON for one container
+#######################################
+__docker_health_print_report() {
+  local report="$1"
+  if [ "$(jq -r '.has_healthcheck' <<< "$report")" != "true" ]; then
+    echo -e "${CB_YELLOW}⚠️  $(jq -r '.name' <<< "$report") has no healthcheck configured.${C_RESET}"
+    return 0
+  fi
+
+  local status_color="${CB_GREEN}" status
+  status=$(jq -r '.status' <<< "$report")
+  [ "$status" != "healthy" ] && status_color="${CB_RED}"
+
+  echo -e "\n${CB_BLUE}🩺 $(jq -r '.name' <<< "$report")${C_RESET}"
+  echo -e "  Status         : ${status_color}${status}${C_RESET} (failing streak: $(jq -r '.failing_streak' <<< "$report"))"
+  jq -r '.config | "  Test           : \(.test | join(" "))", "  Interval       : \(.interval_sec)s (0 = default)", "  Timeout        : \(.timeout_sec)s", "  Retries        : \(.retries) (0 = default)", "  Start period   : \(.start_period_sec)s"' <<< "$report"
+
+  echo -e "  ${CB_CYAN}Recent probes (oldest first):${C_RESET}"
+  jq -r '.probes[] | "  \(if .exit_code == 0 then "✅" else "❌" end) \(.start) exit=\(.exit_code) took \(.duration_sec)s\(if .near_timeout then "  ⚠️  near timeout" else "" end)\(if .output != "" then "\n       " + (.output | gsub("\n"; "\n       ")) else "" end)"' <<< "$report"
+
+  if [ "$(jq -r '[.probes[] | select(.near_timeout)] | length > 0' <<< "$report")" = "true" ]; then
+    echo -e "  ${CB_YELLOW}💡 Probes are taking close to the ${CB_CYAN}$(jq -r '.config.timeout_sec' <<< "$report")s${CB_YELLOW} timeout -- raise the healthcheck timeout or fix the slow endpoint.${C_RESET}"
+  fi
+}
+
+#######################################
+# Docker: Run a container's healthcheck command once via 'docker exec' and
+# report its exit code and wall time against the configured timeout;
+# helper for docker-health --time.
+# Arguments:
+#   $1 - Container name or ID
+#   $2 - Diagnosis JSON for that container
+#######################################
+__docker_health_time_probe() {
+  local container="$1" report="$2"
+  local kind test_args=()
+  kind=$(jq -r '.config.test[0] // "NONE"' <<< "$report")
+
+  case "$kind" in
+    CMD) mapfile -t test_args < <(jq -r '.config.test[1:][]' <<< "$report") ;;
+    CMD-SHELL) test_args=(sh -c "$(jq -r '.config.test[1]' <<< "$report")") ;;
+    *)
+      echo -e "  ${CB_YELLOW}⚠️  Cannot time this healthcheck (test type: ${kind}).${C_RESET}"
+      return 0
+      ;;
+  esac
+
+  local timeout_sec started_us elapsed_us exit_code
+  timeout_sec=$(jq -r '.config.timeout_sec' <<< "$report")
+  echo -e "  ${CB_CYAN}⏱️  Timing the healthcheck command...${C_RESET}"
+  started_us=${EPOCHREALTIME/./}
+  timeout "$((${timeout_sec%.*} * 3))" docker exec "$container" "${test_args[@]}" > /dev/null 2>&1
+  exit_code=$?
+  elapsed_us=$((${EPOCHREALTIME/./} - started_us))
+
+  local elapsed_disp
+  elapsed_disp=$(awk -v us="$elapsed_us" 'BEGIN { printf "%.2f", us / 1000000 }')
+  local color="${CB_GREEN}"
+  [ "$exit_code" -ne 0 ] && color="${CB_RED}"
+  echo -e "  ${color}exit=${exit_code}${C_RESET} in ${elapsed_disp}s (timeout ${timeout_sec}s)"
+}
+
+#######################################
 # Docker: List each Compose service's container_name, restart policy,
 # and whether it declares a healthcheck at all -- a quick inventory
 # before deciding what needs an external monitor (Uptime Kuma,
