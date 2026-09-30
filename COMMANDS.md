@@ -477,6 +477,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-log` | System: Centralized logging for MyTools |
 | `mt-logs` | System: View, filter, and manage framework logs |
 
+### Utilities: Framework Test Runner
+| Command | Description |
+|---|---|
+| `mt-test-all` | Testing: Run the framework's full test suite -- bats (tests/bash/) |
+
 ### Utilities: Temporary HTTP File Server
 | Command | Description |
 |---|---|
