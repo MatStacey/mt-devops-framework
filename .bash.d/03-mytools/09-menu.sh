@@ -326,6 +326,10 @@ __mt_menu_gcp_ps_pull() { __mt_menu_prompt_arg "Pub/Sub subscription name" gcp-p
 
 __mt_menu_tf_replace() { __mt_menu_prompt_arg "Terraform resource address" tf-replace; }
 __mt_menu_tf_yaml() { __mt_menu_prompt_arg "YAML var file path" tf-yaml; }
+__mt_menu_conftest() { __mt_menu_prompt_arg "File(s) to test against policy/" mt-conftest; }
+__mt_menu_conftest_verify() { mt-conftest --verify; }
+__mt_menu_html_check() { __mt_menu_prompt_arg "HTML file path" mt-html-check; }
+__mt_menu_grep_repos() { __mt_menu_prompt_arg "Pattern to search for across all repos" mt-grep-repos; }
 
 __mt_menu_docker_reboot() { __mt_menu_prompt_arg "Container or Compose project name" docker-reboot; }
 __mt_menu_docker_update() { __mt_menu_prompt_arg "Container or Compose project name" docker-update; }
@@ -736,7 +740,9 @@ __mt_menu_terraform() {
     "Clean Terraform Caches (tf-clean)" tf-clean \
     "Generate IAM Bindings (tf-ai-iam)" tf-ai-iam \
     "Plan Resource Replacement (tf-replace)" __mt_menu_tf_replace \
-    "Run with YAML Var File (tf-yaml)" __mt_menu_tf_yaml
+    "Run with YAML Var File (tf-yaml)" __mt_menu_tf_yaml \
+    "Test Files Against OPA Policies (mt-conftest)" __mt_menu_conftest \
+    "Run OPA Policy Unit Tests (mt-conftest --verify)" __mt_menu_conftest_verify
 }
 
 #######################################
@@ -751,7 +757,9 @@ __mt_menu_git_repos() {
     "Clone Repository (mt-git-clone)" __mt_menu_git_clone \
     "Bulk-Clone a Project (mt-clone -i)" __mt_menu_clone_wizard \
     "Bulk-Update Repos (mt-bulk-update)" __mt_menu_bulk_update \
-    "Bulk-Update Repos, Background (mt-bulk-update -b)" __mt_menu_bulk_update_bg
+    "Bulk-Update Repos, Background (mt-bulk-update -b)" __mt_menu_bulk_update_bg \
+    "Search Across All Repos (mt-grep-repos)" __mt_menu_grep_repos \
+    "List Open Pull Requests (git-review-prs)" git-review-prs
 }
 
 #######################################
@@ -873,7 +881,8 @@ __mt_menu_utilities_inspection() {
     "List Largest Files (mt-top-files)" mt-top-files \
     "Audit VCS Root (mt-vcs-audit)" mt-vcs-audit \
     "Show Command History (mt-cmd-history)" mt-cmd-history \
-    "Run/Save Clipboard Code (mt-apply)" mt-apply
+    "Run/Save Clipboard Code (mt-apply)" mt-apply \
+    "Check HTML Tags & Anchors (mt-html-check)" __mt_menu_html_check
 }
 
 #######################################
