@@ -333,6 +333,11 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `tf-val-all` | Terraform: Recursively validate and scan all Terraform directories |
 
+### Infrastructure: Conftest (OPA Policy Testing)
+| Command | Description |
+|---|---|
+| `mt-conftest` | Conftest: Test files against OPA/Rego policies, or run the policies' |
+
 ### LLM Context & Export Utilities
 | Command | Description |
 |---|---|
@@ -477,6 +482,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-log` | System: Centralized logging for MyTools |
 | `mt-logs` | System: View, filter, and manage framework logs |
 
+### Utilities: HTML Structure Checker
+| Command | Description |
+|---|---|
+| `mt-html-check` | HTML: Validate a local HTML file for unbalanced tags and broken |
+
 ### Utilities: Temporary HTTP File Server
 | Command | Description |
 |---|---|
@@ -503,9 +513,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `git-pretty-log` | Git: Print a clean, color-coded, single-line log graph |
 | `git-push-all` | Git: Stage all files, commit with provided message, and push |
 | `git-raise-pr` | Git: Push current branch and raise a Pull Request (GitHub/GitLab/Bitbucket) |
+| `git-review-prs` | Git: List the open pull requests for the current repo, or show the |
 | `git-review-start` | Git: Quick orientation for starting a code review -- current branch |
 | `git-view-remote` | Git: Open current repository remote URL in default web browser |
 | `mt-git-clone` | Git: Clone a repository into a sensibly routed default location |
+| `mt-grep-repos` | Git: Search file contents and/or file names across every local repo |
 | `mt-repos` | Git: Scan VCS root and list all local repositories, optionally |
 | `mt-repos-run` | Git: Run a git subcommand across every repo matching mt-repos' own |
 
