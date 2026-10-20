@@ -59,3 +59,9 @@ def test_is_configured_true_when_export_line_present(tmp_path, monkeypatch):
 
     assert secrets_manager._is_configured("GEMINI_API_KEY") is True
     assert secrets_manager._is_configured("CLAUDE_API_KEY") is False
+
+
+def test_confluence_token_is_a_registered_secret_paired_with_its_email():
+    spec = secrets_manager.SUPPORTED_SECRETS["CONFLUENCE_API_TOKEN"]
+    assert spec["add_command"] == "mt-add-confluence-secret"
+    assert spec["paired_with"] == "CONFLUENCE_EMAIL"
