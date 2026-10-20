@@ -762,7 +762,8 @@ __mt_menu_git_repos() {
     "Bulk-Update Repos (mt-bulk-update)" __mt_menu_bulk_update \
     "Bulk-Update Repos, Background (mt-bulk-update -b)" __mt_menu_bulk_update_bg \
     "Search Across All Repos (mt-grep-repos)" __mt_menu_grep_repos \
-    "List Open Pull Requests (git-review-prs)" git-review-prs
+    "List Open Pull Requests (git-review-prs)" git-review-prs \
+    "Diff All Uncommitted Changes incl. Untracked (git-diff-all)" git-diff-all
 }
 
 #######################################
