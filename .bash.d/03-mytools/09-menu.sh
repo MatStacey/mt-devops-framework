@@ -845,6 +845,7 @@ __mt_menu_utilities_scaffolding() {
     "Scaffold Repo from Blueprint (mt-blueprint)" mt-blueprint \
     "Format Code to Google Style (google-fmt)" google-fmt \
     "Format Python with Ruff (ruff-fmt)" __mt_menu_ruff_fmt \
+    "Run uv Project Tests with Coverage (uv-pytest)" uv-pytest \
     "Format Shell Scripts (sh-fmt-all)" __mt_menu_sh_fmt_all
 }
 
