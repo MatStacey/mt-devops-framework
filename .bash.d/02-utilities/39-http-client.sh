@@ -33,7 +33,7 @@ __mt_http_redact() {
 #   Sanitised text on stdout
 #######################################
 __mt_strip_control_chars() {
-  perl -pe 's/[\x00-\x08\x0B-\x1F\x7F]|\xC2[\x80-\x9F]//g'
+  perl -pe 's/[\x00-\x08\x0B-\x1F\x7F]//g; 1 while s/\xC2[\x80-\x9F]//g'
 }
 
 #######################################

@@ -128,3 +128,9 @@ STUB
   [ "$status" -eq 0 ]
   [[ "$output" == *tail* ]]
 }
+
+@test "control characters cannot be spliced into a C1 sequence" {
+  STUB_BODY=$'a\xc2\x01\x9bb \xc2\xc2\x9b\x9bc' run mt-http --raw https://example.test/x
+  [[ "$output" != *$'\xc2\x9b'* ]]
+  [[ "$output" == a* ]]
+}
