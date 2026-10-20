@@ -39,3 +39,11 @@ def test_code_macro_cdata_is_kept():
 
 def test_empty_input():
     assert confluence_text.convert("") == "\n"
+
+
+def test_paragraphs_inside_table_cells_stay_on_one_row():
+    html = (
+        "<table><tr><th><p>Project</p></th><th><p>Namespace</p></th></tr>"
+        "<tr><td><p>a</p></td><td><p>b</p></td></tr></table>"
+    )
+    assert confluence_text.convert(html) == "Project | Namespace\na | b\n"

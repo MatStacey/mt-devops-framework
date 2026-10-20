@@ -37,6 +37,7 @@ class StorageTextExtractor(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
         self.cells_in_row = 0
+        self.cell_depth = 0
 
     def _ensure_breaks(self, count: int) -> None:
         """End the current line and leave `count` newlines in total at the tail."""
@@ -47,7 +48,8 @@ class StorageTextExtractor(HTMLParser):
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in PARAGRAPH_TAGS:
-            self._ensure_breaks(2)
+            if not self.cell_depth:
+                self._ensure_breaks(2)
         elif tag in LINE_TAGS:
             self._ensure_breaks(1)
         if tag in HEADING_PREFIX:
@@ -60,10 +62,14 @@ class StorageTextExtractor(HTMLParser):
             if self.cells_in_row:
                 self.parts.append(CELL_SEPARATOR)
             self.cells_in_row += 1
+            self.cell_depth += 1
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in PARAGRAPH_TAGS:
-            self._ensure_breaks(2)
+        if tag in CELL_TAGS:
+            self.cell_depth = max(0, self.cell_depth - 1)
+        elif tag in PARAGRAPH_TAGS:
+            if not self.cell_depth:
+                self._ensure_breaks(2)
         elif tag in LINE_TAGS:
             self._ensure_breaks(1)
 

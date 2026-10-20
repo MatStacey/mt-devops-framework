@@ -36,8 +36,8 @@ __mt_bb_resolve_pipeline() {
     __mt_bb_encode_uuid "$ref"
     return 0
   fi
-  found=$(__mt_bb_api "repositories/${repo}/pipelines/" --raw -q "q=build_number=${ref}") || return $?
-  found=$(jq -r '.values[0].uuid // empty' <<< "$found")
+  found=$(__mt_bb_api "repositories/${repo}/pipelines/${ref}" --raw) || return $?
+  found=$(jq -r '.uuid // empty' <<< "$found")
   if [ -z "$found" ]; then
     echo -e "${CB_RED}🚨 No pipeline with build number ${ref}.${C_RESET}" >&2
     return 1
@@ -130,6 +130,11 @@ bb-pipelines() {
   pipeline_uuid=$(__mt_bb_resolve_pipeline "$repo" "$ref") || return $?
   steps=$(__mt_bb_collect "repositories/${repo}/pipelines/${pipeline_uuid}/steps/") || return $?
 
+  if [ "$steps" = "[]" ]; then
+    data=$(__mt_bb_api "repositories/${repo}/pipelines/${pipeline_uuid}" --raw) || return $?
+    jq -r -f "$BITBUCKET_JQ_DIR/bb_pipeline_no_steps.jq" <<< "$data" | __mt_strip_control_chars
+    return 0
+  fi
   if [ -z "$log_step" ]; then
     jq -r -f "$BITBUCKET_JQ_DIR/bb_pipeline_steps.jq" <<< "$steps" | __mt_strip_control_chars
     return 0
