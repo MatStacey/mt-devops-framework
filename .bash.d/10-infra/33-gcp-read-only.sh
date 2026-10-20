@@ -206,7 +206,8 @@ gcl-run-log-summary() {
 # is accepted, and permission failures name the missing permission.
 # Usage: gcl-bq-query [-p <project>] [--json] "<sql>"
 # Arguments:
-#   <sql>                A single SELECT or WITH statement (standard SQL)
+#   <sql>                A single SELECT or WITH statement (standard SQL) with no
+#                        comments or semicolons other than one trailing semicolon
 # Options:
 #   -p, --project <id>   Project to run (and bill) the job in (default: the active gcloud project)
 #   --json               Print the result as JSON instead of a table
@@ -239,13 +240,19 @@ gcl-bq-query() {
   fi
 
   local statement
-  statement=$(sed -E 's/--.*$//' <<< "$sql" | tr '\n' ' ' | sed -E 's/;[[:space:]]*$//')
+  statement="${sql%"${sql##*[![:space:]]}"}"
+  statement="${statement%;}"
+  statement="${statement%"${statement##*[![:space:]]}"}"
   if ! grep -qiE '^[[:space:]]*(select|with)[[:space:]]' <<< "$statement"; then
     echo -e "${CB_RED}🚫 Only SELECT or WITH statements are allowed.${C_RESET}" >&2
     return 1
   fi
-  if [[ "$statement" == *\;* ]] || grep -qiE "\\b(${GCL_BQ_FORBIDDEN_KEYWORDS})\\b" <<< "$statement"; then
-    echo -e "${CB_RED}🚫 Rejected: multiple statements or a data-changing keyword (${GCL_BQ_FORBIDDEN_KEYWORDS//|/, }).${C_RESET}" >&2
+  if [[ "$statement" == *\;* || "$statement" == *--* || "$statement" == *\#* || "$statement" == */\** ]]; then
+    echo -e "${CB_RED}🚫 Rejected: multiple statements or SQL comments (; -- # /*) are not allowed.${C_RESET}" >&2
+    return 1
+  fi
+  if grep -qiE "\\b(${GCL_BQ_FORBIDDEN_KEYWORDS})\\b" <<< "$statement"; then
+    echo -e "${CB_RED}🚫 Rejected: data-changing keyword (${GCL_BQ_FORBIDDEN_KEYWORDS//|/, }).${C_RESET}" >&2
     return 1
   fi
   __mt_gcl_preflight || return $?
@@ -253,7 +260,7 @@ gcl-bq-query() {
 
   local result err_file rc=0
   err_file=$(mktemp)
-  result=$(bq query --project_id="$project" --use_legacy_sql=false --format="$format" "$sql" 2> "$err_file") || rc=$?
+  result=$(bq query --project_id="$project" --use_legacy_sql=false --format="$format" "$statement" 2> "$err_file") || rc=$?
   if [ "$rc" -ne 0 ]; then
     __mt_gcl_report_failure "BigQuery job in ${project}" "$(cat "$err_file")"
     rc=$?
