@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Mon Sep 14 06:13:18 AM BST 2026  
+> Generated: Tue Oct 20 03:39:38 PM BST 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -14,7 +14,7 @@
 - **`mci`** *(Development & Build Tools)*: Dev: Maven - Clean and Install
 - **`pip-load`** *(Development & Build Tools)*: Dev: Python - Install pip requirements
 - **`pip-save`** *(Development & Build Tools)*: Dev: Python - Save pip requirements
-- **`ruff-fmt`** *(Development & Build Tools)*: Dev: Python - Format Python files and imports using Ruff (recursive)
+- **`ruff-fmt`** *(Development & Build Tools)*: Dev: Python - Format Python files and imports using Ruff (recursive, rewrites files; see ruff-check)
 - **`sh-fmt-all`** *(Development & Build Tools)*: Dev: Shell - Format all shell scripts in current directory (recursive)
 - **`shfmtlw`** *(Development & Build Tools)*: Dev: Shell - Format all shell scripts in current directory (recursive) (Alias)
 - **`venv-make`** *(Development & Build Tools)*: Dev: Python - Create & active Python venv
@@ -302,7 +302,7 @@ mt-ai-models() {
         ;;
       -p | --provider)
         provider="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -r | --refresh)
         refresh=true
@@ -794,7 +794,7 @@ mt-open-config() {
         ;;
       -ide)
         selected_ide="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         args+=("$1")
@@ -982,13 +982,15 @@ mt-setup() {
     "7. CI/CD Default Provider"
     "8. Docker Preferences"
     "9. Minikube Preferences"
-    "10. Exit"
+    "10. GCP Preferences"
+    "11. Exit"
   )
 
   local choice
   choice=$(printf '%s\n' "${options[@]}" | fzf --prompt="⚙️ Select a category to configure > " --height=~15 --layout=reverse --border)
 
   case "$choice" in
+    10*) mt-wizard-gcp ;;
     1*) __mt_setup_quick ;;
     2*) mt-wizard-system ;;
     3*) mt-wizard-ai ;;
@@ -1198,11 +1200,11 @@ mt-toggle-display() {
         ;;
       -e | --element)
         element="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --gcp-mode)
         gcp_mode="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --ai-model)
         toggle_ai_model=true
@@ -1214,7 +1216,7 @@ mt-toggle-display() {
         ;;
       --git-branch-len)
         branch_len="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --prod-bg-warning)
         toggle_prod_bg=true
@@ -1466,14 +1468,15 @@ mt-wizard-cicd() {
 
 #### `mt-wizard-docker`
 
-> Config: Interactive Docker Configuration Wizard -- restart blocklist
+> Config: Interactive Docker Configuration Wizard -- restart blocklist,
 
 ```bash
 #######################################
-# Config: Interactive Docker Configuration Wizard -- restart blocklist
-# plus the registry defaults docker-push/docker-release/docker-deploy
-# use (default registry, GAR region/repo, Docker Hub namespace), so none
-# of those are hardcoded at the call site.
+# Config: Interactive Docker Configuration Wizard -- restart blocklist,
+# the registry defaults docker-push/docker-release/docker-deploy use
+# (default registry, GAR region/repo, Docker Hub namespace), and
+# docker-reboot's readiness-poll timeout/interval, so none of those are
+# hardcoded at the call site.
 # Usage: mt-wizard-docker
 #######################################
 mt-wizard-docker() {
@@ -1492,6 +1495,10 @@ mt-wizard-docker() {
   [ -n "$gar_repo" ] && python3 "$CONFIG_MANAGER" update "docker" "gar_repo" "$gar_repo"
   read -r -p "Docker Hub Namespace (username/org) [${DOCKER_DOCKERHUB_NAMESPACE:-none}]: " dh_ns
   [ -n "$dh_ns" ] && python3 "$CONFIG_MANAGER" update "docker" "dockerhub_namespace" "$dh_ns"
+  read -r -p "docker-reboot minimum readiness timeout, seconds [${DOCKER_REBOOT_MIN_TIMEOUT_SEC:-120}]: " reboot_timeout
+  [ -n "$reboot_timeout" ] && python3 "$CONFIG_MANAGER" update "docker" "reboot_min_timeout_sec" "$reboot_timeout"
+  read -r -p "docker-reboot readiness poll interval, seconds [${DOCKER_REBOOT_POLL_INTERVAL_SEC:-2}]: " reboot_interval
+  [ -n "$reboot_interval" ] && python3 "$CONFIG_MANAGER" update "docker" "reboot_poll_interval_sec" "$reboot_interval"
   echo -e "${CB_GREEN}✅ Docker config updated.${C_RESET}"
 }
 ```
@@ -1517,6 +1524,32 @@ mt-wizard-exports() {
   read -r -p "Regex Blocklist [${EXPORT_BLOCKLIST}]: " blk
   [ -n "$blk" ] && python3 "$CONFIG_MANAGER" update "llm_exports" "file_blocklist_regex" "$blk"
   echo -e "${CB_GREEN}✅ Exports config updated.${C_RESET}"
+}
+```
+
+#### `mt-wizard-gcp`
+
+> Config: Interactive GCP Setup Menu
+
+```bash
+#######################################
+# Config: Interactive GCP Setup Menu
+# Usage: mt-wizard-gcp
+# Options:
+#   -h, --help   Show this help menu
+# Globals:
+#   GCP_SCAN_REGIONS
+#######################################
+mt-wizard-gcp() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  echo -e "${CB_BLUE}--- GCP Configuration ---${C_RESET}"
+  echo -e "${C_DIM}💡 Regions 'mt-radar --scan-gcp' checks for resource types whose gcloud list command needs one (Redis, VPC connectors, API Gateway gateways, Cloud Scheduler jobs). Space-separated.${C_RESET}"
+  read -r -p "GCP scan regions [${GCP_SCAN_REGIONS:-europe-west1 europe-west2}]: " scan_regions
+  [ -n "$scan_regions" ] && python3 "$CONFIG_MANAGER" update "gcp" "scan_regions" "$scan_regions"
+  echo -e "${CB_GREEN}✅ GCP config updated.${C_RESET}"
 }
 ```
 
@@ -2103,6 +2136,65 @@ k8s-tail() {
 ### 📂 Docker: Container Management Utilities
 
 
+#### `docker-compose-inspect`
+
+> Docker: List each Compose service's container_name, restart policy,
+
+```bash
+#######################################
+# Docker: List each Compose service's container_name, restart policy,
+# and whether it declares a healthcheck at all -- a quick inventory
+# before deciding what needs an external monitor (Uptime Kuma,
+# Prometheus, ...) versus what already self-reports via Docker's own
+# health status. Reads the Compose file's YAML directly (not 'docker
+# compose config'), so it works without a running project.
+# Usage: docker-compose-inspect [-f <compose-file>]
+# Options:
+#   -f, --file <path>   Compose file to inspect (default: ./docker-compose.yml)
+#######################################
+docker-compose-inspect() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local compose_file="./docker-compose.yml"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -f | --file)
+        compose_file="$2"
+        shift 2 || shift
+        ;;
+      *)
+        echo "Usage: docker-compose-inspect [-f <compose-file>]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if ! command -v yq > /dev/null 2>&1; then
+    echo -e "${CB_RED}❌ yq is required by docker-compose-inspect but was not found.${C_RESET}"
+    return 1
+  fi
+
+  if [ ! -f "$compose_file" ]; then
+    echo -e "${CB_RED}❌ Compose file not found: $compose_file${C_RESET}"
+    return 1
+  fi
+
+  printf "${CB_BLUE}%-20s %-20s %-16s %-12s${C_RESET}\n" "SERVICE" "CONTAINER_NAME" "RESTART" "HEALTHCHECK"
+  echo "-----------------------------------------------------------------"
+
+  local service container restart has_health health_disp
+  while IFS='|' read -r service container restart has_health; do
+    [ -z "$service" ] && continue
+    health_disp="none"
+    [ "$has_health" = "true" ] && health_disp="yes"
+    printf "%-20s %-20s %-16s %-12s\n" "$service" "$container" "$restart" "$health_disp"
+  done < <(yq -r '.services | to_entries[] | "\(.key)|\(.value.container_name // .key)|\(.value.restart // "no")|\((.value.healthcheck != null))"' "$compose_file")
+}
+```
+
 #### `docker-containers`
 
 > Docker: Interactive container management console -- fzf-pick any
@@ -2239,17 +2331,227 @@ docker-daemon() {
 }
 ```
 
-#### `docker-ls`
+#### `docker-group-start`
 
-> Docker: List all running containers in a clean table format
+> Docker: Start every container in a single Compose project -- 'docker
 
 ```bash
 #######################################
-# Docker: List all running containers in a clean table format
-# Usage: docker-ls [-j|--json]
+# Docker: Start every container in a single Compose project -- 'docker
+# compose up -d', which both creates a never-started project and
+# resumes a stopped one, then waits for the same readiness
+# __docker_reboot_wait_for_project uses for docker-reboot.
+# Usage: docker-group-start <container|project> [--verbose]
+#######################################
+docker-group-start() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  __docker_ensure_running || return 1
+
+  local target="$1"
+  local verbose=false
+  [[ "$2" == "--verbose" ]] && verbose=true
+
+  if [[ -z "$target" ]]; then
+    echo "Usage: docker-group-start <container|project> [--verbose]"
+    return 1
+  fi
+
+  local project="" compose_file=""
+  if ! __docker_resolve_project "$target" project compose_file; then
+    echo -e "${CB_RED}❌ Unable to resolve Compose project for: $target${C_RESET}"
+    return 1
+  fi
+
+  echo "🚀 Starting Docker Compose project: ${project}"
+
+  if $verbose; then
+    docker compose -f "$compose_file" up -d
+  else
+    docker compose -f "$compose_file" up -d > /dev/null 2>&1
+  fi
+
+  echo "⏳ Waiting for recovery..."
+
+  local failure_reason
+  if __docker_reboot_wait_for_project "$compose_file" failure_reason; then
+    echo -e "${CB_GREEN}✅ Project started: ${project}${C_RESET}"
+    return 0
+  fi
+
+  echo -e "${CB_YELLOW}⚠️  Project did not become healthy: ${project} (${failure_reason})${C_RESET}"
+  return 1
+}
+```
+
+#### `docker-group-stop`
+
+> Docker: Stop every container in a single Compose project in place --
+
+```bash
+#######################################
+# Docker: Stop every container in a single Compose project in place --
+# 'docker compose stop', not the down+up recreate docker-reboot does, so
+# containers/networks/volumes are left intact for a later
+# docker-group-start to resume.
+# Usage: docker-group-stop <container|project> [--verbose]
+#######################################
+docker-group-stop() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  __docker_ensure_running || return 1
+
+  local target="$1"
+  local verbose=false
+  [[ "$2" == "--verbose" ]] && verbose=true
+
+  if [[ -z "$target" ]]; then
+    echo "Usage: docker-group-stop <container|project> [--verbose]"
+    return 1
+  fi
+
+  local project="" compose_file=""
+  if ! __docker_resolve_project "$target" project compose_file; then
+    echo -e "${CB_RED}❌ Unable to resolve Compose project for: $target${C_RESET}"
+    return 1
+  fi
+
+  echo "🛑 Stopping Docker Compose project: ${project}"
+
+  local stop_succeeded=true
+  if $verbose; then
+    docker compose -f "$compose_file" stop || stop_succeeded=false
+  else
+    docker compose -f "$compose_file" stop > /dev/null 2>&1 || stop_succeeded=false
+  fi
+
+  if $stop_succeeded; then
+    echo -e "${CB_GREEN}✅ Project stopped: ${project}${C_RESET}"
+    return 0
+  fi
+
+  echo -e "${CB_RED}❌ Failed to stop project: ${project}${C_RESET}"
+  return 1
+}
+```
+
+#### `docker-health`
+
+> Docker: Diagnose an unhealthy container -- its health status and failing
+
+```bash
+#######################################
+# Docker: Diagnose an unhealthy container -- its health status and failing
+# streak, the healthcheck's configured interval/timeout/retries, the
+# recent probe log (exit code, duration, output) with slow probes flagged,
+# and optionally the healthcheck command run once and timed. With no
+# container, every currently unhealthy container is diagnosed.
+# Usage: docker-health [-n <count>] [-t|--time] [-j|--json] [container]
+# Options:
+#   -n, --lines <count>  Number of recent probes to show
+#                        (default: $DOCKER_HEALTH_LOG_ENTRIES or 5)
+#   -t, --time           Run the container's healthcheck command via
+#                        'docker exec' and time it against the timeout
+#   -j, --json           Print the diagnosis as JSON (an array, one object
+#                        per container) instead of the report
+# Arguments:
+#   container            Container name or ID (default: all unhealthy ones)
+# Globals:
+#   DOCKER_HEALTH_LOG_ENTRIES, DOCKER_HEALTH_WARN_RATIO
+# Returns:
+#   0 on success, 1 on bad arguments or an unknown container
+#######################################
+docker-health() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  __docker_ensure_running || return 1
+
+  local max_probes="${DOCKER_HEALTH_LOG_ENTRIES:-5}" time_probe=false json=false target=""
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -n | --lines)
+        max_probes="$2"
+        shift 2 || shift
+        ;;
+      -t | --time)
+        time_probe=true
+        shift
+        ;;
+      -j | --json)
+        json=true
+        shift
+        ;;
+      -*)
+        echo "Usage: docker-health [-n <count>] [-t|--time] [-j|--json] [container]" >&2
+        return 1
+        ;;
+      *)
+        target="$1"
+        shift
+        ;;
+    esac
+  done
+  if ! [[ "$max_probes" =~ ^[0-9]+$ ]] || [ "$max_probes" -eq 0 ]; then
+    echo -e "${CB_RED}❌ --lines must be a positive integer.${C_RESET}" >&2
+    return 1
+  fi
+
+  local containers=()
+  if [ -n "$target" ]; then
+    containers=("$target")
+  else
+    mapfile -t containers < <(docker ps --filter health=unhealthy --format '{{.Names}}')
+    if [ "${#containers[@]}" -eq 0 ]; then
+      $json && echo "[]" || echo -e "${CB_GREEN}✅ No unhealthy containers.${C_RESET}"
+      return 0
+    fi
+  fi
+
+  local jq_filter="$HOME/.bash.d/lib/jq/docker_health.jq"
+  local default_timeout_sec=30 warn_ratio="${DOCKER_HEALTH_WARN_RATIO:-0.8}"
+  local container inspect_json report
+  local reports=()
+  for container in "${containers[@]}"; do
+    if ! inspect_json=$(docker inspect "$container" 2> /dev/null); then
+      echo -e "${CB_RED}❌ No such container: ${container}${C_RESET}" >&2
+      return 1
+    fi
+    report=$(jq -c --argjson default_timeout_sec "$default_timeout_sec" --argjson warn_ratio "$warn_ratio" --argjson max_probes "$max_probes" -f "$jq_filter" <<< "$inspect_json") || {
+      echo -e "${CB_RED}❌ Could not parse the health data of ${container}.${C_RESET}" >&2
+      return 1
+    }
+    if $json; then
+      reports+=("$report")
+    else
+      __docker_health_print_report "$report"
+      $time_probe && __docker_health_time_probe "$container" "$report"
+    fi
+  done
+  $json && printf '%s\n' "${reports[@]}" | jq -s .
+  return 0
+}
+```
+
+#### `docker-ls`
+
+> Docker: List containers in a clean table format
+
+```bash
+#######################################
+# Docker: List containers in a clean table format
+# Usage: docker-ls [-j|--json] [-a|--all]
 # Options:
 #   -j, --json   Print containers as a JSON array (docker ps's own
 #                per-container fields) instead of the table
+#   -a, --all    Include stopped/exited containers, not just running ones
 #######################################
 docker-ls() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -2258,11 +2560,24 @@ docker-ls() {
   fi
   __docker_ensure_running || return 1
 
-  if [[ "$1" == "-j" || "$1" == "--json" ]]; then
-    docker ps --format '{{json .}}' | jq -s .
+  local json=false all_flag=()
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -j | --json) json=true ;;
+      -a | --all) all_flag=(-a) ;;
+      *)
+        echo "Usage: docker-ls [-j|--json] [-a|--all]" 1>&2
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  if $json; then
+    docker ps "${all_flag[@]}" --format '{{json .}}' | jq -s .
     return
   fi
-  docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
+  docker ps "${all_flag[@]}" --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.Ports}}"
 }
 ```
 
@@ -2340,33 +2655,10 @@ docker-reboot() {
     return 1
   fi
 
-  local project=""
-  local compose_file=""
-
-  # Resolve container name to compose metadata
-  if docker inspect "$target" > /dev/null 2>&1; then
-    if ! __docker_reboot_compose_metadata "$target" project compose_file; then
-      echo -e "${CB_RED}❌ Unable to resolve Compose project for: $target${C_RESET}"
-      return 1
-    fi
-  else
-    # Allow project name directly
-    local container
-    container=$(docker ps --format "{{.Names}}" | while read -r c; do
-      local p
-      # f is required by __docker_reboot_compose_metadata's 3-arg signature; only $p is checked here
-      # shellcheck disable=SC2034
-      local f
-      __docker_reboot_compose_metadata "$c" p f || continue
-      [[ "$p" == "$target" ]] && echo "$c" && break
-    done)
-
-    if [[ -z "$container" ]]; then
-      echo -e "${CB_RED}❌ Compose project not found: $target${C_RESET}"
-      return 1
-    fi
-
-    __docker_reboot_compose_metadata "$container" project compose_file
+  local project="" compose_file=""
+  if ! __docker_resolve_project "$target" project compose_file; then
+    echo -e "${CB_RED}❌ Unable to resolve Compose project for: $target${C_RESET}"
+    return 1
   fi
 
   echo "🔄 Restarting Docker Compose project: ${project}"
@@ -2389,12 +2681,13 @@ docker-reboot() {
 
   echo "⏳ Waiting for recovery..."
 
-  if __docker_reboot_wait_for_project "$compose_file"; then
+  local failure_reason
+  if __docker_reboot_wait_for_project "$compose_file" failure_reason; then
     echo -e "${CB_GREEN}✅ Project recreated: ${project}${C_RESET}"
     return 0
   fi
 
-  echo -e "${CB_YELLOW}⚠️  Project did not become healthy: ${project}${C_RESET}"
+  echo -e "${CB_YELLOW}⚠️  Project did not become healthy: ${project} (${failure_reason})${C_RESET}"
   return 1
 }
 ```
@@ -2408,11 +2701,7 @@ docker-reboot() {
 # Docker: Recreate every running Docker Compose project on this host --
 # a full 'down' then 'up -d' per project rather than a naive per-
 # container 'docker restart', so shared networks/volumes and startup
-# ordering within a project are respected. A container excluded via -x
-# or DOCKER_BLOCKLIST takes its entire project out of the run, since a
-# Compose project can't be partially recreated. Containers not managed
-# by Compose are reported and skipped, since there's no project to
-# recreate them as part of.
+# ordering within a project are respected.
 # Usage: docker-reboot-all [-x container1,container2]
 # Options:
 #   -x <names>  Comma-separated list of container names to exclude, in
@@ -2439,7 +2728,7 @@ docker-reboot-all() {
           return 1
         fi
         manual_excludes="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --verbose | -v)
         verbose=true
@@ -2456,82 +2745,7 @@ docker-reboot-all() {
     esac
   done
 
-  local full_excludes="${DOCKER_BLOCKLIST:-}"
-  [ -n "$manual_excludes" ] && full_excludes="${full_excludes:+${full_excludes},}${manual_excludes}"
-
-  local exclude_pattern=""
-  [ -n "$full_excludes" ] && exclude_pattern=$(echo "$full_excludes" | sed 's/,/|/g; s/ //g')
-
-  local running_containers
-  running_containers=$(docker ps --format "{{.Names}}")
-
-  if [ -z "$running_containers" ]; then
-    mt-log WARN "No running Docker containers found."
-    return 0
-  fi
-
-  local -A project_seen=() project_excluded=()
-  local project_order=()
-
-  local container project compose_file
-
-  while read -r container; do
-    [ -z "$container" ] && continue
-
-    if ! __docker_reboot_compose_metadata "$container" project compose_file; then
-      echo -e "${CB_YELLOW}⚠️  Skipping non-Compose container: ${container}${C_RESET}"
-      continue
-    fi
-
-    if [ -n "$exclude_pattern" ] && [[ "$container" =~ ^(${exclude_pattern})$ ]]; then
-      project_excluded["$project"]=1
-      continue
-    fi
-
-    if [ -z "${project_seen[$project]:-}" ]; then
-      project_seen["$project"]=1
-      project_order+=("$project")
-    fi
-  done <<< "$running_containers"
-
-  if [ "${#project_order[@]}" -eq 0 ]; then
-    mt-log WARN "No Compose projects found among running containers."
-    return 0
-  fi
-
-  echo -e "${CB_BLUE}🚀 Queueing Docker Compose projects for parallel restart...${C_RESET}"
-
-  local queued=0 skipped=0
-  local timestamp
-  timestamp=$(date +%Y%m%d-%H%M%S)
-
-  for project in "${project_order[@]}"; do
-
-    if [ -n "${project_excluded[$project]:-}" ]; then
-      echo -e "${CB_YELLOW}⚠️  Skipping project: ${project} (excluded)${C_RESET}"
-      ((skipped++))
-      continue
-    fi
-
-    local verbose_arg=""
-    [ "$verbose" = true ] && verbose_arg=" --verbose"
-
-    local log_file="${LOG_DIR}/docker-reboot_${project}_${timestamp}.log"
-    local cmd_string="docker-reboot '${project}'${verbose_arg}"
-
-    __mt_bg_run "docker-reboot: ${project}" "$log_file" "$cmd_string"
-
-    ((queued++))
-  done
-
-  echo
-  echo -e "${CB_GREEN}✅ ${queued} Docker reboot job(s) queued.${C_RESET}"
-
-  if [ "$skipped" -gt 0 ]; then
-    echo -e "${CB_YELLOW}⚠️  ${skipped} project(s) skipped due to exclusions.${C_RESET}"
-  fi
-
-  echo -e "${C_DIM}Run 'mt-jobs' to monitor progress.${C_RESET}"
+  __docker_queue_all_projects "docker-reboot" "running" "$manual_excludes" "$verbose" "docker-reboot" "restart"
 }
 ```
 
@@ -2586,6 +2800,121 @@ docker-shell() {
   echo -e "${CB_GREEN}🚀 Entering sandbox for: ${target}...${C_RESET}"
   # Try bash first, fallback to standard sh if bash isn't installed in the container
   docker exec -it "$target" /bin/bash || docker exec -it "$target" /bin/sh
+}
+```
+
+#### `docker-start-all`
+
+> Docker: Start every known Docker Compose project on this host,
+
+```bash
+#######################################
+# Docker: Start every known Docker Compose project on this host,
+# whether currently stopped or already running ('docker compose up -d'
+# per project) -- see docker-group-start for the single-project version
+# this queues. Scans every known container (docker ps -a), not just
+# running ones, since a project that's entirely stopped is the main
+# case this exists for.
+# Usage: docker-start-all [-x container1,container2]
+# Options:
+#   -x <names>  Comma-separated list of container names to exclude, in
+#               addition to the permanent DOCKER_BLOCKLIST
+# Globals:
+#   DOCKER_BLOCKLIST
+#######################################
+docker-start-all() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  __docker_ensure_running || return 1
+
+  local manual_excludes=""
+  local verbose=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -x)
+        if [[ -z "$2" ]]; then
+          echo -e "${CB_RED}❌ -x requires a comma-separated exclusion list.${C_RESET}"
+          return 1
+        fi
+        manual_excludes="$2"
+        shift 2 || shift
+        ;;
+      --verbose | -v)
+        verbose=true
+        shift
+        ;;
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      *)
+        echo "Usage: docker-start-all [-x container1,container2] [--verbose]" 1>&2
+        return 1
+        ;;
+    esac
+  done
+
+  __docker_queue_all_projects "docker-group-start" "all" "$manual_excludes" "$verbose" "docker-start" "start"
+}
+```
+
+#### `docker-stop-all`
+
+> Docker: Stop every running Docker Compose project on this host in
+
+```bash
+#######################################
+# Docker: Stop every running Docker Compose project on this host in
+# place ('docker compose stop' per project) -- see docker-group-stop
+# for the single-project version this queues.
+# Usage: docker-stop-all [-x container1,container2]
+# Options:
+#   -x <names>  Comma-separated list of container names to exclude, in
+#               addition to the permanent DOCKER_BLOCKLIST
+# Globals:
+#   DOCKER_BLOCKLIST
+#######################################
+docker-stop-all() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  __docker_ensure_running || return 1
+
+  local manual_excludes=""
+  local verbose=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -x)
+        if [[ -z "$2" ]]; then
+          echo -e "${CB_RED}❌ -x requires a comma-separated exclusion list.${C_RESET}"
+          return 1
+        fi
+        manual_excludes="$2"
+        shift 2 || shift
+        ;;
+      --verbose | -v)
+        verbose=true
+        shift
+        ;;
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      *)
+        echo "Usage: docker-stop-all [-x container1,container2] [--verbose]" 1>&2
+        return 1
+        ;;
+    esac
+  done
+
+  __docker_queue_all_projects "docker-group-stop" "running" "$manual_excludes" "$verbose" "docker-stop" "stop"
 }
 ```
 
@@ -2961,7 +3290,8 @@ docker-update() {
   echo
   echo "⏳ Waiting for recovery..."
 
-  if __docker_reboot_wait_for_project "$compose_file"; then
+  local failure_reason
+  if __docker_reboot_wait_for_project "$compose_file" failure_reason; then
     if [[ "$channel" == "current" ]]; then
       echo -e "${CB_GREEN}✅ Project updated: ${project}${C_RESET}"
     else
@@ -2971,7 +3301,7 @@ docker-update() {
     return 0
   fi
 
-  echo -e "${CB_YELLOW}⚠️  Project did not become healthy after update: ${project}${C_RESET}"
+  echo -e "${CB_YELLOW}⚠️  Project did not become healthy after update: ${project} (${failure_reason})${C_RESET}"
   return 1
 }
 ```
@@ -3359,6 +3689,61 @@ mt-blueprint() {
 ### 📂 GCP: Configuration & Authentication
 
 
+#### `gcl-auth-check`
+
+> GCP: Check whether the active gcloud account has a usable token. Unlike
+
+```bash
+#######################################
+# GCP: Check whether the active gcloud account has a usable token. Unlike
+# 'gcloud auth list' this detects accounts that need re-authentication.
+# Usage: gcl-auth-check [-q|--quiet]
+# Options:
+#   -q, --quiet   Print nothing, report through the exit code only
+#   -h, --help    Show this help menu
+# Returns:
+#   0 token valid, 1 no active account, 2 re-authentication required,
+#   3 gcloud not installed, 4 token check failed for another reason
+# Outputs:
+#   One status line (and the remedy on failure) unless --quiet
+#######################################
+gcl-auth-check() {
+  local quiet=false
+  case "${1:-}" in
+    -h | --help)
+      mt-help "${FUNCNAME[0]}"
+      return 0
+      ;;
+    -q | --quiet) quiet=true ;;
+  esac
+
+  local account err_output rc=0
+  if ! command -v gcloud > /dev/null 2>&1; then
+    [ "$quiet" = true ] || echo -e "${CB_RED}🚨 gcloud is not installed.${C_RESET}"
+    return "$GCL_AUTH_EXIT_NO_GCLOUD"
+  fi
+
+  account=$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2> /dev/null)
+  if [ -z "$account" ]; then
+    [ "$quiet" = true ] || echo -e "${CB_RED}🚨 No active gcloud account. Run 'gcp-login'.${C_RESET}"
+    return "$GCL_AUTH_EXIT_NO_ACCOUNT"
+  fi
+
+  err_output=$(CLOUDSDK_CORE_DISABLE_PROMPTS=1 gcloud auth print-access-token 2>&1 > /dev/null) || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    [ "$quiet" = true ] || echo -e "${CB_GREEN}✅ gcloud token for ${account} is valid.${C_RESET}"
+    return 0
+  fi
+
+  if [[ "$err_output" == *[Rr]eauth* || "$err_output" == *invalid_grant* ]]; then
+    [ "$quiet" = true ] || echo -e "${CB_YELLOW}⚠️  ${account} needs re-authentication. Run 'gcp-login'.${C_RESET}"
+    return "$GCL_AUTH_EXIT_REAUTH"
+  fi
+  [ "$quiet" = true ] || echo -e "${CB_RED}🚨 Token check failed for ${account}: ${err_output}${C_RESET}"
+  return "$GCL_AUTH_EXIT_CHECK_FAILED"
+}
+```
+
 #### `gcl-config`
 
 > GCP: List active configuration properties
@@ -3542,20 +3927,38 @@ gcl-get-zone() {
 
 #### `gcl-org-policies`
 
-> GCP: List org policies for active project
+> GCP: List org policies for a project
 
 ```bash
 #######################################
-# GCP: List org policies for active project
+# GCP: List org policies for a project
+# Usage: gcl-org-policies [-p <project>]
+# Options:
+#   -p, --project <id>   Project to inspect (default: the active gcloud project)
 #######################################
 gcl-org-policies() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
-  local project_id
-  project_id=$(gcl-get-project)
-  [ -n "$project_id" ] && gcloud alpha resource-manager org-policies list --project="$project_id"
+
+  local project_id=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -p | --project)
+        project_id="${2:-}"
+        shift
+        ;;
+      *)
+        echo "Usage: gcl-org-policies [-p <project>]" >&2
+        return 1
+        ;;
+    esac
+    shift
+  done
+  [ -z "$project_id" ] && project_id=$(gcl-get-project)
+
+  [ -n "$project_id" ] && gcloud alpha resource-manager org-policies list --project="$project_id" --quiet
 }
 ```
 
@@ -3649,6 +4052,756 @@ gcp-set-project() {
   fi
 
   gcloud config set project "$project"
+}
+```
+
+### 📂 GCP: Read-Only Cross-Project Reconnaissance
+
+
+#### `gcl-api-check`
+
+> GCP: Check whether an API is enabled across one or more projects
+
+```bash
+#######################################
+# GCP: Check whether an API is enabled across one or more projects
+# Usage: gcl-api-check <api> <project> [project...]
+#
+# Examples:
+#   gcl-api-check appengine.googleapis.com connect-api-dev connect-api-prod
+#######################################
+gcl-api-check() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local api="$1"
+  if [[ -z "$api" ]]; then
+    echo "Usage: gcl-api-check <api> <project> [project...]" >&2
+    return 1
+  fi
+  shift
+
+  if [[ "$#" -eq 0 ]]; then
+    echo "Usage: gcl-api-check <api> <project> [project...]" >&2
+    return 1
+  fi
+
+  printf "${CB_BLUE}%-40s %-12s${C_RESET}\n" "PROJECT" "ENABLED"
+  echo "------------------------------------------------------"
+
+  local project enabled_name
+  for project in "$@"; do
+    enabled_name=$(gcloud services list --enabled --project="$project" --filter="config.name:${api}" --format="value(config.name)" --quiet 2> /dev/null)
+    if [ -n "$enabled_name" ]; then
+      printf "%-40s ${CB_GREEN}%-12s${C_RESET}\n" "$project" "yes"
+    else
+      printf "%-40s ${CB_YELLOW}%-12s${C_RESET}\n" "$project" "no"
+    fi
+  done
+}
+```
+
+#### `gcl-dataflow-describe`
+
+> GCP: Describe a single Dataflow job
+
+```bash
+#######################################
+# GCP: Describe a single Dataflow job
+# Usage: gcl-dataflow-describe <job-id> [-p <project>] [--full]
+# Options:
+#   -p, --project <id>   Project to inspect (default: the active gcloud project)
+#   --full               Include full job details (steps, environment)
+#######################################
+gcl-dataflow-describe() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local job_id="$1"
+  if [[ -z "$job_id" ]]; then
+    echo "Usage: gcl-dataflow-describe <job-id> [-p <project>] [--full]" >&2
+    return 1
+  fi
+  shift
+
+  local project="" full=false
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -p | --project)
+        project="$2"
+        shift 2 || shift
+        ;;
+      --full)
+        full=true
+        shift
+        ;;
+      *)
+        echo "Usage: gcl-dataflow-describe <job-id> [-p <project>] [--full]" >&2
+        return 1
+        ;;
+    esac
+  done
+  [ -z "$project" ] && project=$(gcl-get-project)
+
+  local -a full_flag=()
+  $full && full_flag=(--full)
+
+  gcloud dataflow jobs describe "$job_id" --project="$project" "${full_flag[@]}" --quiet
+}
+```
+
+#### `gcl-iam-keys`
+
+> GCP: List a service account's IAM keys and its own IAM policy bindings
+
+```bash
+#######################################
+# GCP: List a service account's IAM keys and its own IAM policy bindings
+# in one call -- the two checks a "who can use/impersonate this service
+# account, and what keys already exist" audit needs together.
+# Usage: gcl-iam-keys <service-account-email> [-p <project>]
+# Options:
+#   -p, --project <id>   Project to inspect (default: the active gcloud project)
+#######################################
+gcl-iam-keys() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local sa_email="$1"
+  if [[ -z "$sa_email" ]]; then
+    echo "Usage: gcl-iam-keys <service-account-email> [-p <project>]" >&2
+    return 1
+  fi
+  shift
+
+  local project=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -p | --project)
+        project="$2"
+        shift 2 || shift
+        ;;
+      *)
+        echo "Usage: gcl-iam-keys <service-account-email> [-p <project>]" >&2
+        return 1
+        ;;
+    esac
+  done
+  [ -z "$project" ] && project=$(gcl-get-project)
+
+  echo -e "${CB_BLUE}🔑 Keys${C_RESET}"
+  gcloud iam service-accounts keys list --iam-account="$sa_email" --format="table(name.basename(),validAfterTime,validBeforeTime,keyType)" --quiet
+
+  echo -e "\n${CB_BLUE}📜 IAM Policy${C_RESET}"
+  gcloud iam service-accounts get-iam-policy "$sa_email" --project="$project" --format="table(bindings.role,bindings.members)" --quiet
+}
+```
+
+#### `gcl-logging-read`
+
+> GCP: Read logs with a custom filter and optional custom output format
+
+```bash
+#######################################
+# GCP: Read logs with a custom filter and optional custom output format
+# -- gcl-as-json only ever emits JSON, with no way to project a
+# --format=value(...) expression the way raw 'gcloud logging read' can.
+# Usage: gcl-logging-read <filter> [-p <project>] [--limit <n>] [--fmt <format-expr>]
+# Options:
+#   -p, --project <id>     Project to read from (default: the active gcloud project)
+#   --limit <n>            Maximum number of log entries (default: 50)
+#   --fmt <format-expr>    A gcloud --format expression, e.g. 'value(textPayload)'
+#
+# Examples:
+#   gcl-logging-read 'resource.type=cloud_run_revision AND severity>=ERROR' --limit 20
+#   gcl-logging-read 'resource.type=cloud_run_revision' --fmt 'value(textPayload)'
+#######################################
+gcl-logging-read() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local log_filter="$1"
+  if [[ -z "$log_filter" ]]; then
+    echo "Usage: gcl-logging-read <filter> [-p <project>] [--limit <n>] [--fmt <format-expr>]" >&2
+    return 1
+  fi
+  shift
+
+  local project="" limit=50 fmt=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -p | --project)
+        project="$2"
+        shift 2 || shift
+        ;;
+      --limit)
+        limit="$2"
+        shift 2 || shift
+        ;;
+      --fmt)
+        fmt="$2"
+        shift 2 || shift
+        ;;
+      *)
+        echo "Usage: gcl-logging-read <filter> [-p <project>] [--limit <n>] [--fmt <format-expr>]" >&2
+        return 1
+        ;;
+    esac
+  done
+  [ -z "$project" ] && project=$(gcl-get-project)
+
+  if [ -n "$fmt" ]; then
+    gcloud logging read "$log_filter" --project="$project" --limit="$limit" --format="$fmt" --quiet
+  else
+    gcloud logging read "$log_filter" --project="$project" --limit="$limit" --quiet
+  fi
+}
+```
+
+#### `gcl-network-survey`
+
+> GCP: Read-only survey of a project's networking surface -- VPC
+
+```bash
+#######################################
+# GCP: Read-only survey of a project's networking surface -- VPC
+# peerings, VPC Access connectors (region-scoped, skipped if no region
+# given), Private Service Connect service attachments, Memorystore
+# Redis instances, and custom routes. One consolidated report instead
+# of five separate raw gcloud calls when planning connectivity between
+# services.
+# Usage: gcl-network-survey [-p <project>] [-r <region>]
+# Options:
+#   -p, --project <id>   Project to survey (default: the active gcloud project)
+#   -r, --region <name>  Region for the VPC Access connector check (skipped if omitted)
+#######################################
+gcl-network-survey() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local project="" region=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -p | --project)
+        project="$2"
+        shift 2 || shift
+        ;;
+      -r | --region)
+        region="$2"
+        shift 2 || shift
+        ;;
+      *)
+        echo "Usage: gcl-network-survey [-p <project>] [-r <region>]" >&2
+        return 1
+        ;;
+    esac
+  done
+  [ -z "$project" ] && project=$(gcl-get-project)
+
+  echo -e "${CB_BLUE}🌐 VPC Peerings${C_RESET}"
+  gcloud compute networks peerings list --project="$project" --format="table(name,network,peerNetwork,state)" --quiet
+
+  echo -e "\n${CB_BLUE}🔌 VPC Access Connectors${C_RESET}"
+  if [ -n "$region" ]; then
+    gcloud compute networks vpc-access connectors list --project="$project" --region="$region" --format="table(name,network,ipCidrRange,state)" --quiet
+  else
+    echo -e "${CB_YELLOW}⚠️  No region given (-r), skipping -- VPC Access connectors are region-scoped.${C_RESET}"
+  fi
+
+  echo -e "\n${CB_BLUE}🔗 Private Service Connect Attachments${C_RESET}"
+  gcloud compute service-attachments list --project="$project" --format="table(name,region,connectionPreference)" --quiet
+
+  echo -e "\n${CB_BLUE}💾 Memorystore Redis Instances${C_RESET}"
+  gcloud redis instances list --project="$project" --region=- --format="table(name,region,tier,host,port)" --quiet
+
+  echo -e "\n${CB_BLUE}🛣️  Custom Routes${C_RESET}"
+  gcloud compute routes list --project="$project" --format="table(name,network,destRange,priority)" --quiet
+}
+```
+
+#### `gcl-projects-list`
+
+> GCP: List projects, optionally filtered by name and/or parent folder
+
+```bash
+#######################################
+# GCP: List projects, optionally filtered by name and/or parent folder
+# Usage: gcl-projects-list [-f <name-filter>] [--folder <folder-id>]
+# Options:
+#   -f, --filter <text>    Only projects whose name contains this text
+#   --folder <id>          Only projects directly under this folder ID
+# Outputs:
+#   Prints a table of project ID/name/number/parent to STDOUT
+#######################################
+gcl-projects-list() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local name_filter="" folder=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -f | --filter)
+        name_filter="$2"
+        shift 2 || shift
+        ;;
+      --folder)
+        folder="$2"
+        shift 2 || shift
+        ;;
+      *)
+        echo "Usage: gcl-projects-list [-f <name-filter>] [--folder <folder-id>]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  local -a filter_parts=()
+  [ -n "$name_filter" ] && filter_parts+=("name:*${name_filter}*")
+  [ -n "$folder" ] && filter_parts+=("parent.type:folder" "parent.id:${folder}")
+
+  local filter_expr=""
+  if [ "${#filter_parts[@]}" -gt 0 ]; then
+    filter_expr=$(printf ' AND %s' "${filter_parts[@]}")
+    filter_expr="${filter_expr# AND }"
+  fi
+
+  if [ -n "$filter_expr" ]; then
+    gcloud projects list --filter="$filter_expr" --format="table(projectId,name,projectNumber,parent.type,parent.id)" --quiet
+  else
+    gcloud projects list --format="table(projectId,name,projectNumber,parent.type,parent.id)" --quiet
+  fi
+}
+```
+
+#### `gcl-redis-describe`
+
+> GCP: Describe a single Memorystore Redis instance
+
+```bash
+#######################################
+# GCP: Describe a single Memorystore Redis instance
+# Usage: gcl-redis-describe <instance> -r <region> [-p <project>]
+# Options:
+#   -r, --region <name>  Region the instance is in (required)
+#   -p, --project <id>   Project to inspect (default: the active gcloud project)
+#######################################
+gcl-redis-describe() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local instance="$1"
+  if [[ -z "$instance" ]]; then
+    echo "Usage: gcl-redis-describe <instance> -r <region> [-p <project>]" >&2
+    return 1
+  fi
+  shift
+
+  local project="" region=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -r | --region)
+        region="$2"
+        shift 2 || shift
+        ;;
+      -p | --project)
+        project="$2"
+        shift 2 || shift
+        ;;
+      *)
+        echo "Usage: gcl-redis-describe <instance> -r <region> [-p <project>]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$region" ]]; then
+    echo "Usage: gcl-redis-describe <instance> -r <region> [-p <project>]" >&2
+    return 1
+  fi
+  [ -z "$project" ] && project=$(gcl-get-project)
+
+  gcloud redis instances describe "$instance" --region="$region" --project="$project" --quiet
+}
+```
+
+#### `gcl-run-describe`
+
+> GCP: Describe a single Cloud Run service
+
+```bash
+#######################################
+# GCP: Describe a single Cloud Run service
+# Usage: gcl-run-describe <service> -r <region> [-p <project>]
+# Options:
+#   -r, --region <name>  Region the service is deployed in (required)
+#   -p, --project <id>   Project to inspect (default: the active gcloud project)
+#######################################
+gcl-run-describe() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local service="$1"
+  if [[ -z "$service" ]]; then
+    echo "Usage: gcl-run-describe <service> -r <region> [-p <project>]" >&2
+    return 1
+  fi
+  shift
+
+  local project="" region=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -r | --region)
+        region="$2"
+        shift 2 || shift
+        ;;
+      -p | --project)
+        project="$2"
+        shift 2 || shift
+        ;;
+      *)
+        echo "Usage: gcl-run-describe <service> -r <region> [-p <project>]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$region" ]]; then
+    echo "Usage: gcl-run-describe <service> -r <region> [-p <project>]" >&2
+    return 1
+  fi
+  [ -z "$project" ] && project=$(gcl-get-project)
+
+  gcloud run services describe "$service" --region="$region" --project="$project" --quiet
+}
+```
+
+### 📂 GCP: Read-Only Inspection Wrappers
+
+
+#### `gcl-bq-query`
+
+> GCP: Run a read-only BigQuery query. Only a single SELECT/WITH statement
+
+```bash
+#######################################
+# GCP: Run a read-only BigQuery query. Only a single SELECT/WITH statement
+# is accepted (the statement must start with the keyword and contain no
+# semicolon), and permission failures name the missing permission. For a
+# hard guarantee, run under an account limited to bigquery.dataViewer + jobUser.
+# Usage: gcl-bq-query [-p <project>] [--json] "<sql>"
+# Arguments:
+#   <sql>                A single SELECT or WITH statement (standard SQL); the only
+#                        semicolon allowed is one trailing semicolon
+# Options:
+#   -p, --project <id>   Project to run (and bill) the job in (default: the active gcloud project)
+#   --json               Print the result as JSON instead of a table
+#   -h, --help           Show this help menu
+# Returns:
+#   0 on success, 1 on failure or a rejected statement, 5 on permission denied
+# Outputs:
+#   Query result on stdout
+#######################################
+gcl-bq-query() {
+  local project="" format="pretty" sql=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -p | --project)
+        project="${2:-}"
+        shift
+        ;;
+      --json) format="json" ;;
+      *) sql="$1" ;;
+    esac
+    shift
+  done
+  if [ -z "$sql" ]; then
+    echo "Usage: gcl-bq-query [-p <project>] [--json] \"<sql>\"" >&2
+    return 1
+  fi
+
+  local statement
+  statement="${sql%"${sql##*[![:space:]]}"}"
+  statement="${statement%;}"
+  statement="${statement%"${statement##*[![:space:]]}"}"
+  if [[ ! "$statement" =~ ^[[:space:]]*([Ss][Ee][Ll][Ee][Cc][Tt]|[Ww][Ii][Tt][Hh])([[:space:]]|\() ]]; then
+    echo -e "${CB_RED}🚫 Only SELECT or WITH statements are allowed.${C_RESET}" >&2
+    return 1
+  fi
+  if [[ "$statement" == *\;* ]]; then
+    echo -e "${CB_RED}🚫 Rejected: multiple statements (semicolon) are not allowed.${C_RESET}" >&2
+    return 1
+  fi
+  __mt_gcl_preflight || return $?
+  [ -z "$project" ] && project=$(gcl-get-project)
+
+  local result err_file rc=0
+  err_file=$(mktemp)
+  result=$(bq query --project_id="$project" --use_legacy_sql=false --format="$format" "$statement" 2> "$err_file") || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    __mt_gcl_report_failure "BigQuery job in ${project}" "$(cat "$err_file")"
+    rc=$?
+    rm -f "$err_file"
+    return "$rc"
+  fi
+  rm -f "$err_file"
+  __mt_strip_control_chars <<< "$result"
+}
+```
+
+#### `gcl-gcs-summary`
+
+> GCP: Summarise a GCS location -- one line per immediate prefix with its
+
+```bash
+#######################################
+# GCP: Summarise a GCS location -- one line per immediate prefix with its
+# object count and total size. Read-only.
+# Usage: gcl-gcs-summary <gs://bucket[/prefix]> [-m <max-prefixes>]
+# Arguments:
+#   <gs://bucket[/prefix]>   Location to summarise
+# Options:
+#   -m, --max <n>            Maximum prefixes to inspect (default: 50)
+#   -h, --help               Show this help menu
+# Returns:
+#   0 on success, 1 on failure or bad usage, 5 on permission denied
+# Outputs:
+#   "prefix<TAB>objects<TAB>size" per prefix, plus a line for top-level objects
+#######################################
+gcl-gcs-summary() {
+  local location="" max_prefixes="$GCL_GCS_DEFAULT_MAX_PREFIXES"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -m | --max)
+        max_prefixes="${2:-}"
+        shift
+        ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) location="$1" ;;
+    esac
+    shift
+  done
+  if [[ "$location" != gs://* ]] || [[ ! "$max_prefixes" =~ ^[0-9]+$ ]]; then
+    echo "Usage: gcl-gcs-summary <gs://bucket[/prefix]> [-m <max-prefixes>]" >&2
+    return 1
+  fi
+  __mt_gcl_preflight || return $?
+
+  location="${location%/}/"
+  local listing err_file
+  err_file=$(mktemp)
+  if ! listing=$(gcloud storage ls "$location" 2> "$err_file"); then
+    __mt_gcl_report_failure "listing ${location}" "$(cat "$err_file")"
+    local rc=$?
+    rm -f "$err_file"
+    return "$rc"
+  fi
+  rm -f "$err_file"
+
+  local entry objects size shown=0 top_level=0 report=""
+  while IFS= read -r entry; do
+    [ -z "$entry" ] && continue
+    if [[ "$entry" != */ ]]; then
+      top_level=$((top_level + 1))
+      continue
+    fi
+    if [ "$shown" -ge "$max_prefixes" ]; then
+      echo -e "${CB_YELLOW}… more prefixes not shown (raise --max).${C_RESET}" >&2
+      break
+    fi
+    objects=$(gcloud storage ls "${entry}**" 2> /dev/null | grep -vc '/$')
+    size=$(gcloud storage du --summarize "$entry" 2> /dev/null | awk '{print $1}')
+    report+=$(printf '%s\t%s\t%s' "${entry#"$location"}" "$objects" "$(numfmt --to=iec "${size:-0}" 2> /dev/null || echo "${size:-0}")")$'\n'
+    shown=$((shown + 1))
+  done <<< "$listing"
+  [ "$top_level" -gt 0 ] && report+=$(printf '%s\t%s\t%s' "(top-level objects)" "$top_level" "-")$'\n'
+  printf '%s' "$report" | __mt_strip_control_chars
+  return 0
+}
+```
+
+#### `gcl-run-log-summary`
+
+> GCP: Count Cloud Run log lines by message template. Numbers, IDs, UUIDs,
+
+```bash
+#######################################
+# GCP: Count Cloud Run log lines by message template. Numbers, IDs, UUIDs,
+# emails, URLs, long tokens and quoted strings are masked, but the remaining
+# text of each distinct template (first 160 characters) is printed, so treat
+# the output as log content, not as payload-free.
+# Usage: gcl-run-log-summary <service> [-p <project>] [--limit <n>] [--freshness <dur>] [--severity <level>]
+# Arguments:
+#   <service>              Cloud Run service name
+# Options:
+#   -p, --project <id>     Project (default: the active gcloud project)
+#   --limit <n>            Maximum log entries to read (default: 1000)
+#   --freshness <dur>      How far back to read, e.g. 1h, 1d (default: 1d)
+#   --severity <level>     Minimum severity, e.g. WARNING, ERROR (default: all)
+#   -h, --help             Show this help menu
+# Returns:
+#   0 on success, 1 on failure or bad usage, 5 on permission denied
+# Outputs:
+#   "count<TAB>template" lines, most frequent first
+#######################################
+gcl-run-log-summary() {
+  local service="" project="" limit="$GCL_LOG_DEFAULT_LIMIT" freshness="$GCL_LOG_DEFAULT_FRESHNESS" severity=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -p | --project)
+        project="${2:-}"
+        shift
+        ;;
+      --limit)
+        limit="${2:-}"
+        shift
+        ;;
+      --freshness)
+        freshness="${2:-}"
+        shift
+        ;;
+      --severity)
+        severity="${2:-}"
+        shift
+        ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) service="$1" ;;
+    esac
+    shift
+  done
+  if [ -z "$service" ] || [[ ! "$limit" =~ ^[0-9]+$ ]] || [[ ! "$service" =~ ^[A-Za-z0-9_-]+$ ]]; then
+    echo "Usage: gcl-run-log-summary <service> [-p <project>] [--limit <n>] [--freshness <dur>] [--severity <level>]" >&2
+    return 1
+  fi
+  if [ -n "$severity" ] && [[ ! "$severity" =~ ^[A-Z]+$ ]]; then
+    echo -e "${CB_RED}❌ --severity must be an upper-case level such as ERROR.${C_RESET}" >&2
+    return 1
+  fi
+  __mt_gcl_preflight || return $?
+  [ -z "$project" ] && project=$(gcl-get-project)
+
+  local log_filter="resource.type=cloud_run_revision AND resource.labels.service_name=\"${service}\""
+  [ -n "$severity" ] && log_filter="${log_filter} AND severity>=${severity}"
+
+  local lines err_file rc=0
+  err_file=$(mktemp)
+  lines=$(gcloud logging read "$log_filter" --project="$project" --limit="$limit" --freshness="$freshness" \
+    --format='value(textPayload,jsonPayload.message)' --quiet 2> "$err_file") || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    __mt_gcl_report_failure "reading logs for ${service}" "$(cat "$err_file")"
+    rc=$?
+    rm -f "$err_file"
+    return "$rc"
+  fi
+  rm -f "$err_file"
+
+  tr '\t' ' ' <<< "$lines" |
+    sed -E -f "$GCL_LOG_TEMPLATE_SED" |
+    cut -c1-"$GCL_LOG_TEMPLATE_MAX_LENGTH" |
+    grep -v '^[[:space:]]*$' |
+    sort | uniq -c | sort -rn |
+    awk '{count = $1; $1 = ""; sub(/^ /, ""); printf "%s\t%s\n", count, $0}' |
+    __mt_strip_control_chars
+}
+```
+
+#### `gcl-wif-describe`
+
+> GCP: Describe a Workload Identity Pool and list its providers. Read-only.
+
+```bash
+#######################################
+# GCP: Describe a Workload Identity Pool and list its providers. Read-only.
+# Usage: gcl-wif-describe <pool> [-l <location>] [-p <project>]
+# Arguments:
+#   <pool>               Workload Identity Pool ID
+# Options:
+#   -l, --location <l>   Pool location (default: global)
+#   -p, --project <id>   Project (default: the active gcloud project)
+#   -h, --help           Show this help menu
+# Returns:
+#   0 on success, 1 on failure or bad usage, 5 on permission denied
+# Outputs:
+#   Pool description followed by its providers
+#######################################
+gcl-wif-describe() {
+  local pool="" location="global" project=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -l | --location)
+        location="${2:-}"
+        shift
+        ;;
+      -p | --project)
+        project="${2:-}"
+        shift
+        ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) pool="$1" ;;
+    esac
+    shift
+  done
+  if [ -z "$pool" ]; then
+    echo "Usage: gcl-wif-describe <pool> [-l <location>] [-p <project>]" >&2
+    return 1
+  fi
+  __mt_gcl_preflight || return $?
+  [ -z "$project" ] && project=$(gcl-get-project)
+
+  local err_file output rc=0
+  err_file=$(mktemp)
+  output=$(gcloud iam workload-identity-pools describe "$pool" --location="$location" --project="$project" --quiet 2> "$err_file") || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    output+=$'\n\nProviders\n'
+    output+=$(gcloud iam workload-identity-pools providers list --workload-identity-pool="$pool" --location="$location" --project="$project" --quiet 2> "$err_file") || rc=$?
+  fi
+  [ "$rc" -eq 0 ] && __mt_strip_control_chars <<< "$output"
+  if [ "$rc" -ne 0 ]; then
+    __mt_gcl_report_failure "describing pool ${pool}" "$(cat "$err_file")"
+    rc=$?
+  fi
+  rm -f "$err_file"
+  return "$rc"
 }
 ```
 
@@ -3765,11 +4918,14 @@ gcp-get-secret() {
 
 #### `gcp-iam-show`
 
-> GCP: View IAM policy for the active project
+> GCP: View IAM policy for a project
 
 ```bash
 #######################################
-# GCP: View IAM policy for the active project
+# GCP: View IAM policy for a project
+# Usage: gcp-iam-show [-p <project>]
+# Options:
+#   -p, --project <id>   Project to inspect (default: the active gcloud project)
 # Globals:
 #   gcl-get-project (Framework Function)
 # Outputs:
@@ -3780,7 +4936,23 @@ gcp-iam-show() {
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
-  gcloud projects get-iam-policy "$(gcl-get-project)" --format="table(bindings.role, bindings.members)"
+
+  local project=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -p | --project)
+        project="$2"
+        shift 2 || shift
+        ;;
+      *)
+        echo "Usage: gcp-iam-show [-p <project>]" >&2
+        return 1
+        ;;
+    esac
+  done
+  [ -z "$project" ] && project=$(gcl-get-project)
+
+  gcloud projects get-iam-policy "$project" --format="table(bindings.role, bindings.members)" --quiet
 }
 ```
 
@@ -3819,10 +4991,9 @@ gcp-ps-pull() {
 # Options:
 #   -u, --update <name>   Update a specific existing alias
 #   -i, --interactive     Select an existing alias to update via fzf
-#   -p, --private         Create the alias in a local-only file that is
-#                         never synced to the framework repo (matches
-#                         install.sh's own *private*.sh protection, so it
-#                         also survives fresh installs and mt-get-update)
+#   -p, --private         Create the alias in 40-private/10-aliases.sh, the
+#                         private bash.d folder that is never synced to the
+#                         framework repo and survives mt-get-update
 #######################################
 mt-alias() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -3834,7 +5005,7 @@ mt-alias() {
     case "$1" in
       -u | --update)
         update_name="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -i | --interactive)
         interactive=true
@@ -3856,7 +5027,7 @@ mt-alias() {
   fi
   local alias_name="$update_name" default_cmd="" default_cat="User Custom" default_desc=""
   local public_aliases_file="$HOME/.bash.d/02-utilities/20-aliases.sh"
-  local private_aliases_file="$HOME/.bash.d/02-utilities/20-aliases.private.sh"
+  local private_aliases_file="$HOME/.bash.d/40-private/10-aliases.sh"
   local aliases_file="$public_aliases_file"
   [ "$private" = true ] && aliases_file="$private_aliases_file"
   echo -e "${CB_BLUE}==========================================================${C_RESET}"
@@ -3897,6 +5068,7 @@ mt-alias() {
   if [ -n "$update_name" ]; then
     python3 "$HOME/.bash.d/lib/python/remove_alias_block.py" "$aliases_file" "$alias_name"
   fi
+  mkdir -p "$(dirname "$aliases_file")"
   if [ ! -f "$aliases_file" ]; then
     cat << HEADEREOF > "$aliases_file"
 HEADEREOF
@@ -4029,19 +5201,19 @@ mt-clone() {
           echo "mt-clone: --scope must be 'work' or 'personal'" >&2
           return 1
         fi
-        shift 2
+        shift 2 || shift
         ;;
       -p | --provider)
         provider="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -w | --workspace)
         raw_workspace="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -pr | --project)
         raw_project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -t | --type)
         type_filter="${2,,}"
@@ -4049,15 +5221,15 @@ mt-clone() {
           echo "mt-clone: --type must be 'private' or 'public'" >&2
           return 1
         fi
-        shift 2
+        shift 2 || shift
         ;;
       -l | --lang)
         lang_filter="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -d | --from-date)
         from_date="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -y | --year)
         if ! [[ "$2" =~ ^[0-9]{4}$ ]]; then
@@ -4065,7 +5237,7 @@ mt-clone() {
           return 1
         fi
         year_filter="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -a | --age)
         if ! [[ "$2" =~ ^[0-9]+$ ]]; then
@@ -4073,7 +5245,7 @@ mt-clone() {
           return 1
         fi
         age_filter="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --auto-approve)
         auto_approve=true
@@ -4258,23 +5430,23 @@ mt-bulk-update() {
           echo "mt-bulk-update: --scope must be 'work' or 'personal'" >&2
           return 1
         fi
-        shift 2
+        shift 2 || shift
         ;;
       -p | --provider)
         provider="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -w | --workspace)
         workspace="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -pr | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --repo)
         repo_path="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -b | --bg | --background)
         run_bg=true
@@ -4666,6 +5838,50 @@ google-fmt() {
   else
     echo "⚠️ 'google-java-format' not found. Run 'bootstrap' to install it."
   fi
+}
+```
+
+#### `ruff-check`
+
+> Dev: Python - Lint and format-check with Ruff without modifying any file.
+
+```bash
+#######################################
+# Dev: Python - Lint and format-check with Ruff without modifying any file.
+# Read-only counterpart of ruff-fmt.
+# Usage: ruff-check [paths...]
+# Arguments:
+#   paths        Files or directories to check (default: current directory)
+# Options:
+#   -h, --help   Show this help menu
+# Returns:
+#   0 if both checks pass, 1 if either reports problems, 127 if ruff is missing
+# Outputs:
+#   Ruff diagnostics on STDOUT
+#######################################
+ruff-check() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  if ! command -v ruff > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 ruff is not installed.${C_RESET}"
+    return 127
+  fi
+
+  local -a targets=("$@")
+  [ "${#targets[@]}" -eq 0 ] && targets=(.)
+
+  local failed=0
+  ruff check "${targets[@]}" || failed=1
+  ruff format --check "${targets[@]}" || failed=1
+
+  if [ "$failed" -eq 1 ]; then
+    echo -e "${CB_RED}❌ Ruff found problems (nothing was modified; run ruff-fmt to fix).${C_RESET}"
+    return 1
+  fi
+  echo -e "${CB_GREEN}✅ Ruff lint and format checks passed.${C_RESET}"
 }
 ```
 
@@ -5075,6 +6291,80 @@ tf-val-all() {
             echo -e "🚨 Validation failed for $1"
         fi
     ' _ "{}"
+}
+```
+
+### 📂 Infrastructure: Conftest (OPA Policy Testing)
+
+
+#### `mt-conftest`
+
+> Conftest: Test files against OPA/Rego policies, or run the policies'
+
+```bash
+#######################################
+# Conftest: Test files against OPA/Rego policies, or run the policies'
+# own unit tests with -v.
+# Usage: mt-conftest [-p <policy_dir>] [-n <namespace>] [-v] [<file>...]
+# Arguments:
+#   <file>...                  Files to test (required unless -v)
+# Options:
+#   -p, --policy <dir>         Policy directory (default: policy)
+#   -n, --namespace <name>     Only evaluate this Rego namespace
+#   -v, --verify               Run 'conftest verify' (policy unit tests)
+#   -h, --help                 Show this help
+# Returns:
+#   conftest's exit code
+#######################################
+mt-conftest() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local policy_dir="$CONFTEST_DEFAULT_POLICY_DIR" namespace="" verify=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -p | --policy)
+        policy_dir="$2"
+        shift 2 || shift
+        ;;
+      -n | --namespace)
+        namespace="$2"
+        shift 2 || shift
+        ;;
+      -v | --verify)
+        verify=1
+        shift
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  if ! command -v conftest > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 conftest is not installed.${C_RESET}"
+    return 1
+  fi
+  if [ ! -d "$policy_dir" ]; then
+    echo -e "${CB_RED}🚨 Policy directory '$policy_dir' not found.${C_RESET}"
+    return 1
+  fi
+
+  if [ "$verify" -eq 1 ]; then
+    conftest verify --policy "$policy_dir"
+    return $?
+  fi
+
+  if [ "$#" -eq 0 ]; then
+    echo "Usage: mt-conftest [-p <policy_dir>] [-n <namespace>] [-v] <file>..." >&2
+    return 1
+  fi
+
+  local -a namespace_args=()
+  [ -n "$namespace" ] && namespace_args=(--namespace "$namespace")
+  conftest test --policy "$policy_dir" "${namespace_args[@]}" "$@"
 }
 ```
 
@@ -5738,7 +7028,7 @@ mt-hub() {
 # System: Interactive AI-powered Repository Dashboard. An unfiltered
 # --index run also prunes cache entries for repos no longer found on
 # disk (moved, renamed, or deleted) before indexing.
-# Usage: mt-radar [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>] [--infra]] [--infra [-t <type>] [-r <name>]] [--show-infra <repo>] [--preview <repo>] [--scan-gcp -r <repo> [--gcp-project <id>]]
+# Usage: mt-radar [--index [-b] [-f] [-u] [-t <type>] [-r <name>] [-p <provider>] [--infra]] [--infra [-t <type>] [-r <name>]] [--show-infra <repo>] [--preview <repo>] [--scan-gcp -r <repo> [--gcp-project <id>]] [--iam -r <repo> [-p <provider>] [--gcp-project <id>]] [--show-iam <repo>]
 # Options:
 #   --index                    Scan and build the AI metadata cache
 #   -b, --bg, --background     Run the index scan as a background job (with --index)
@@ -5773,8 +7063,26 @@ mt-hub() {
 #                              red = none, amber = partial). Existence-based only, not a real
 #                              `terraform plan` drift check. Requires -r/--repo; on-demand
 #                              only, never run automatically by --index/--infra
-#   --gcp-project <id>         GCP project to scan against (with --scan-gcp). Defaults to
-#                              gcloud's own active project (`gcloud config get-value project`)
+#   --gcp-project <id>         GCP project to scan against (with --scan-gcp; defaults to
+#                              gcloud's own active project) or to read current IAM from
+#                              (with --iam; no default -- omitted means no current-IAM
+#                              comparison)
+#   --iam                      Analyze one repo's Terraform via the configured AI provider
+#                              and cache a structured recommended GCP service account/
+#                              least-privilege role report into a separate cache
+#                              (.vcs_iam.json). With --gcp-project, the project's live
+#                              service-account role grants are read too, and each granted
+#                              role is labeled required/not-needed/excessive. Real AI
+#                              cost/latency, unlike --infra -- requires -r/--repo;
+#                              on-demand only, never run automatically by --index/--infra
+#   --suggest-projects         List the GCP projects a repo deploys to, mined from its
+#                              own Terraform, tfvars, YAML/JSON config, CI pipelines and
+#                              gcloud calls (literal project IDs only), with an inferred
+#                              environment (dev/stage/prod). Feeds the project picker
+#                              for --scan-gcp/--iam. Requires -r/--repo; with -j/--json
+#                              prints [{project, environment, references, sources}]
+#   --show-iam <repo>          Show the cached IAM analysis for one repo (by absolute path
+#                              or bare repo name) and exit
 #   --preview <repo>           Show cached metadata for one repo (by absolute path or
 #                              bare repo name) and exit
 #   --search <term>            Search the indexed cache (name, description, category,
@@ -5802,6 +7110,11 @@ mt-radar() {
   local infra_cache_file="$CACHE_DIR/.vcs_infra.json"
   [ ! -f "$infra_cache_file" ] && echo "{}" > "$infra_cache_file"
 
+  local iam_cache_file="$CACHE_DIR/.vcs_iam.json"
+  [ ! -f "$iam_cache_file" ] && echo "{}" > "$iam_cache_file"
+
+  local search_dir="${VCS_ROOT:-$HOME/vcs}"
+
   local do_index=false
   local run_bg=false
   local force_index=false
@@ -5815,6 +7128,9 @@ mt-radar() {
   local show_infra_repo=""
   local run_scan_gcp=false
   local gcp_project_override=""
+  local run_iam=false
+  local show_iam_repo=""
+  local run_suggest_projects=false
 
   # Argument parsing
   while [[ "$#" -gt 0 ]]; do
@@ -5857,6 +7173,12 @@ mt-radar() {
         gcp_project_override="$2"
         shift
         ;;
+      --iam) run_iam=true ;;
+      --suggest-projects) run_suggest_projects=true ;;
+      --show-iam)
+        show_iam_repo="$2"
+        shift
+        ;;
       -j | --json) json_mode=true ;;
       -h | --help)
         mt-help "${FUNCNAME[0]}"
@@ -5877,6 +7199,93 @@ mt-radar() {
 
   if [ -n "$show_infra_repo" ]; then
     __mt_radar_infra_show "$show_infra_repo" "$infra_cache_file" "$json_mode"
+    return 0
+  fi
+
+  if [ -n "$show_iam_repo" ]; then
+    __mt_radar_iam_show "$show_iam_repo" "$iam_cache_file" "$json_mode"
+    return 0
+  fi
+
+  if [ "$run_suggest_projects" = true ]; then
+    if [ -z "$filter_repo" ]; then
+      echo -e "${CB_RED}🚨 --suggest-projects requires -r/--repo <name>.${C_RESET}"
+      return 1
+    fi
+
+    local suggest_repo_path suggest_candidate
+    while IFS= read -r suggest_candidate; do
+      [ "$(basename "$suggest_candidate")" = "$filter_repo" ] && suggest_repo_path="$suggest_candidate" && break
+    done < <(__mt_radar_find_repos "$search_dir")
+    if [ -z "$suggest_repo_path" ]; then
+      echo -e "${CB_RED}🚨 No repository named \"${filter_repo}\" found under ${search_dir}.${C_RESET}"
+      return 1
+    fi
+
+    local suggestions
+    suggestions=$(__mt_radar_gcp_suggest_projects "$suggest_repo_path")
+    if [ "$json_mode" = true ]; then
+      echo "$suggestions"
+    elif [ "$(echo "$suggestions" | jq 'length')" -eq 0 ]; then
+      echo -e "${CB_YELLOW}⚠️  No GCP project IDs found in \"${filter_repo}\".${C_RESET}"
+    else
+      echo "$suggestions" | jq -r '.[] | "  \(.project)\t\(.environment)\t\(.references) ref(s)\t\(.sources | join(", "))"' | column -t -s $'\t'
+    fi
+    return 0
+  fi
+
+  if [ "$run_iam" = true ]; then
+    if [ -z "$filter_repo" ]; then
+      echo -e "${CB_RED}🚨 --iam requires -r/--repo <name>.${C_RESET}"
+      return 1
+    fi
+
+    local iam_repo_path candidate_path
+    while IFS= read -r candidate_path; do
+      [ "$(basename "$candidate_path")" = "$filter_repo" ] && iam_repo_path="$candidate_path" && break
+    done < <(__mt_radar_find_repos "$search_dir")
+    if [ -z "$iam_repo_path" ]; then
+      echo -e "${CB_RED}🚨 No repository named \"${filter_repo}\" found under ${search_dir}.${C_RESET}"
+      return 1
+    fi
+
+    echo -e "${CB_BLUE}🤖 Analyzing ${filter_repo}'s Terraform for IAM requirements...${C_RESET}"
+    local iam_json iam_status
+    iam_json=$(__mt_radar_iam_analyze_repo "$iam_repo_path" "$provider_override" "$gcp_project_override")
+    iam_status=$(echo "$iam_json" | jq -r '.status')
+
+    if [ "$iam_status" = "no-terraform" ]; then
+      # Written to cache (unlike --infra's bulk scan, which silently skips
+      # no-terraform repos to avoid bloating .vcs_infra.json with one entry
+      # per non-Terraform repo) -- this is a single, on-demand, user-
+      # requested analysis, so --show-iam must be able to report back
+      # "no-terraform" specifically. Without this, a repeat --show-iam
+      # falls through to the cache-miss "not-analyzed" case instead,
+      # which looks identical to having never run --iam at all.
+      __mt_radar_iam_write_cache_entry "$iam_cache_file" "$iam_repo_path" "$iam_json"
+      echo -e "${CB_YELLOW}⚠️  No Terraform found in \"${filter_repo}\".${C_RESET}"
+      return 0
+    fi
+    if [ "$iam_status" = "error" ]; then
+      # Also written to cache, same reasoning as the no-terraform branch
+      # above -- a bare `return 1` here is otherwise invisible to a caller
+      # like the VS Code companion that only reads --show-iam back after a
+      # `bash -ic "...; echo MARKER"`-wrapped run (whose own exit code is
+      # always 0, since the wrapping echo is the last command), leaving no
+      # other way to distinguish "the query failed" from "never run".
+      __mt_radar_iam_write_cache_entry "$iam_cache_file" "$iam_repo_path" "$iam_json"
+      echo -e "${CB_RED}🚨 IAM analysis failed for \"${filter_repo}\": $(echo "$iam_json" | jq -r '.message // "unknown error"')${C_RESET}"
+      return 1
+    fi
+
+    __mt_radar_iam_write_cache_entry "$iam_cache_file" "$iam_repo_path" "$iam_json"
+
+    if [ "$json_mode" = true ]; then
+      echo "$iam_json"
+    else
+      echo -e "${CB_GREEN}✅ IAM analysis complete: ${filter_repo}${C_RESET}\n"
+      __mt_radar_iam_show "$iam_repo_path" "$iam_cache_file" false
+    fi
     return 0
   fi
 
@@ -5914,7 +7323,7 @@ mt-radar() {
 
     echo -e "${CB_BLUE}🔍 Scanning ${filter_repo}'s Terraform resources against GCP project '${scan_project}'...${C_RESET}"
     local scan_result
-    scan_result=$(__mt_radar_gcp_scan_repo "$infra_entry" "$scan_project")
+    scan_result=$(__mt_radar_gcp_scan_repo "$infra_entry" "$scan_project" "$filter_repo")
     __mt_radar_infra_write_gcp_scan "$infra_cache_file" "$resolved_repo_path" "$scan_result"
 
     if [ "$json_mode" = true ]; then
@@ -5924,8 +7333,6 @@ mt-radar() {
     fi
     return 0
   fi
-
-  local search_dir="${VCS_ROOT:-$HOME/vcs}"
 
   if [ "$do_index" = true ]; then
     if [ "$run_bg" = true ]; then
@@ -6141,13 +7548,18 @@ mt-config() {
 # MyTools: Generate a detailed technical Markdown dump of all functions and aliases
 # Usage: mt-dump [OPTIONS]
 # Options:
-#   -d, --dir <path>       Specify export directory (default: ~/.bash.d/docs)
-#   --private              Include private/internal framework functions (starting with _ or __)
+#   -d, --dir <path>       Specify export directory (default: docs/ in the framework
+#                          repo checkout, else ~/.bash.d/docs)
+#   --internal             Include internal framework helper functions (starting with _ or __)
+#   --private              Deprecated alias for --internal
 #   -h, --help             Show this help menu
+# Notes:
+#   Anything under 40-private/ or lib/private/ is never written to the output.
 #######################################
 mt-dump() {
-  local export_dir="$HOME/.bash.d/docs"
-  local include_private=false
+  local export_dir
+  export_dir=$(__mt_dump_default_dir)
+  local include_internal=false
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -6155,15 +7567,15 @@ mt-dump() {
         export_dir="$2"
         shift
         ;;
-      --private)
-        include_private=true
+      --internal | --private)
+        include_internal=true
         ;;
       -h | --help)
         mt-help "${FUNCNAME[0]}"
         return 0
         ;;
       *)
-        echo "Usage: mt-dump [-d <export_dir>] [--private]"
+        echo "Usage: mt-dump [-d <export_dir>] [--internal]"
         return 1
         ;;
     esac
@@ -6193,7 +7605,7 @@ HDR
     echo "" >> "$out_file"
     echo "## 🔗 Shell Aliases" >> "$out_file"
     echo "" >> "$out_file"
-    awk -F'\t' '$1 == "alias" { printf "- **`%s`** *(%s)*: %s\n", $3, $2, $4 }' "$tsv_index" >> "$out_file"
+    __mt_dump_public_rows "$tsv_index" | awk -F'\t' '$1 == "alias" { printf "- **`%s`** *(%s)*: %s\n", $3, $2, $4 }' >> "$out_file"
     echo "" >> "$out_file"
     echo "---" >> "$out_file"
     echo "" >> "$out_file"
@@ -6224,26 +7636,26 @@ HDR
       echo "" >> "$out_file"
 
       local src_file
-      src_file=$(grep -rlE "^${name}\(\)[ \t]*\{" "$HOME/.bash.d/" 2> /dev/null | head -n 1)
+      src_file=$(grep -rlE --exclude-dir=40-private --exclude-dir=private "^${name}\(\)[ \t]*\{" "$HOME/.bash.d/" 2> /dev/null | head -n 1)
       if [ -n "$src_file" ]; then
         # shellcheck disable=SC2129
         echo "\`\`\`bash" >> "$out_file"
         awk -v target="$name" -f "$HOME/.bash.d/lib/awk/mt_help.awk" "$src_file" >> "$out_file"
         echo "\`\`\`" >> "$out_file"
       fi
-    done < <(sort -t$'\t' -k2,2 -k3,3 "$tsv_index")
+    done < <(__mt_dump_public_rows "$tsv_index" | sort -t$'\t' -k2,2 -k3,3)
   fi
 
-  if [ "$include_private" = true ]; then
+  if [ "$include_internal" = true ]; then
     # shellcheck disable=SC2129
     echo "" >> "$out_file"
     echo "---" >> "$out_file"
     echo "" >> "$out_file"
-    echo "## 🔒 Internal Framework Helpers (Private Functions)" >> "$out_file"
+    echo "## 🔒 Internal Framework Helpers (Internal Functions)" >> "$out_file"
     echo "" >> "$out_file"
-    echo "Private functions prefixed with \`_\` or \`__\` used internally by the framework." >> "$out_file"
+    echo "Internal functions prefixed with \`_\` or \`__\` used internally by the framework." >> "$out_file"
 
-    find -L "$HOME/.bash.d" -type f -name "*.sh" -exec grep -HnE "^_{1,2}[a-zA-Z0-9_-]+\(\)[ \t]*\{" {} + | while read -r line; do
+    find -L "$HOME/.bash.d" -type f -name "*.sh" -not -path "*/40-private/*" -not -path "*/lib/private/*" -exec grep -HnE "^_{1,2}[a-zA-Z0-9_-]+\(\)[ \t]*\{" {} + | while read -r line; do
       local fpath
       fpath=$(echo "$line" | cut -d: -f1)
       local func_name
@@ -7213,6 +8625,54 @@ mt-cmd-history() {
 }
 ```
 
+### 📂 Python Development Helpers
+
+
+#### `uv-pytest`
+
+> Dev: Python - Run a uv project's pytest suite with coverage from the
+
+```bash
+#######################################
+# Dev: Python - Run a uv project's pytest suite with coverage from the
+# locked environment (uv sync --frozen, then pytest --cov).
+# Usage: uv-pytest [pytest-args...]
+# Arguments:
+#   pytest-args   Extra arguments passed straight to pytest
+# Options:
+#   -h, --help    Show this help menu
+# Returns:
+#   pytest's exit code; 1 if uv is missing, there is no uv.lock in the
+#   current directory, or the environment sync fails
+# Outputs:
+#   pytest and coverage output on STDOUT
+#######################################
+uv-pytest() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  if ! command -v uv > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 uv is not installed (https://docs.astral.sh/uv/).${C_RESET}"
+    return 1
+  fi
+  if [ ! -f "$UV_LOCKFILE" ]; then
+    echo -e "${CB_RED}🚨 No ${UV_LOCKFILE} in $(pwd). Run from a uv project root.${C_RESET}"
+    return 1
+  fi
+
+  echo -e "${CB_BLUE}📦 Syncing locked environment...${C_RESET}"
+  if ! uv sync --frozen; then
+    echo -e "${CB_RED}🚨 uv sync --frozen failed.${C_RESET}"
+    return 1
+  fi
+
+  echo -e "${CB_BLUE}🧪 Running pytest with coverage...${C_RESET}"
+  uv run --frozen pytest --cov "$@"
+}
+```
+
 ### 📂 Secrets Management
 
 
@@ -7509,7 +8969,8 @@ mt-secrets() {
 # state), the sync repo's git state (stuck branches, open/stale PRs, an
 # in-progress merge, uncommitted changes), config.yaml schema drift, and
 # whether the active AI provider's configured model is still listed by
-# that provider's API. Report-only: never modifies anything, just names
+# that provider's API, and whether the active gcloud token is usable.
+# Report-only: never modifies anything, just names
 # the command that would fix each issue found (mt-get-update,
 # mt-push-update, mt-migrate-config, gh auth login, mt-set-claude-model /
 # mt-set-gemini-model, ...).
@@ -7551,6 +9012,8 @@ mt-doctor() {
   __mt_doctor_check_config_schema
   [ "$__mt_doctor_json" = "true" ] || echo
   __mt_doctor_check_ai_model
+  [ "$__mt_doctor_json" = "true" ] || echo
+  __mt_doctor_check_gcloud_auth
 
   if [ "$__mt_doctor_json" = "true" ]; then
     printf '%s\n' "${__mt_doctor_results[@]}" | jq -s --argjson issues "$__mt_doctor_issues" '{issues: $issues, checks: .}'
@@ -8202,6 +9665,158 @@ terraform() {
 }
 ```
 
+### 📂 Utilities: Authenticated HTTP Client
+
+
+#### `mt-http`
+
+> HTTP: Make an authenticated HTTP request with curl. Credentials are passed
+
+```bash
+#######################################
+# HTTP: Make an authenticated HTTP request with curl. Credentials are passed
+# to curl on stdin (never argv) and masked from every message printed.
+# Usage: mt-http [OPTIONS] <url>
+# Arguments:
+#   <url>                 Request URL
+# Options:
+#   -X, --method <verb>   HTTP method (default: GET, or POST when a body is given)
+#   -H, --header <h>      Extra header "Name: value" (repeatable)
+#   -d, --data <body>     Request body; prefix with @ to read from a file
+#   -q, --query <k=v>     URL-encoded query parameter (repeatable, GET only)
+#   -u, --user <u:p>      HTTP basic auth
+#   -b, --bearer <token>  Bearer token auth
+#   --raw                 Do not pretty-print JSON responses
+#   -v, --verbose         Print method, redacted URL and status to stderr
+#   -h, --help            Show this help
+# Returns:
+#   0 on 2xx/3xx, 2 on bad usage, 3 on transport failure (DNS, TLS, timeout:
+#   10s connect, 60s total),
+#   4 on an HTTP 4xx/5xx response (status and body printed to stderr)
+# Outputs:
+#   Response body on stdout
+#######################################
+mt-http() {
+  local method="" body="" has_body=false user="" bearer="" raw=false verbose=false url=""
+  local -a headers=() queries=()
+
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -X | --method)
+        method="${2:-}"
+        shift
+        ;;
+      -H | --header)
+        headers+=("${2:-}")
+        shift
+        ;;
+      -d | --data)
+        body="${2:-}"
+        has_body=true
+        shift
+        ;;
+      -q | --query)
+        queries+=("${2:-}")
+        shift
+        ;;
+      -u | --user)
+        user="${2:-}"
+        shift
+        ;;
+      -b | --bearer)
+        bearer="${2:-}"
+        shift
+        ;;
+      --raw) raw=true ;;
+      -v | --verbose) verbose=true ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return "$MT_HTTP_EXIT_USAGE"
+        ;;
+      *) url="$1" ;;
+    esac
+    shift
+  done
+
+  if [ -z "$url" ]; then
+    echo "Usage: mt-http [OPTIONS] <url>" >&2
+    return "$MT_HTTP_EXIT_USAGE"
+  fi
+  if [ -n "$user" ] && [ -n "$bearer" ]; then
+    echo -e "${CB_RED}❌ Use either --user or --bearer, not both.${C_RESET}" >&2
+    return "$MT_HTTP_EXIT_USAGE"
+  fi
+  if [ "$has_body" = true ] && [ "${#queries[@]}" -gt 0 ]; then
+    echo -e "${CB_RED}❌ --query cannot be combined with --data.${C_RESET}" >&2
+    return "$MT_HTTP_EXIT_USAGE"
+  fi
+  [ -z "$method" ] && { [ "$has_body" = true ] && method="POST" || method="GET"; }
+
+  local -a curl_args=(--silent --show-error --location --request "$method" --config -
+    --connect-timeout "$MT_HTTP_CONNECT_TIMEOUT_SECONDS" --max-time "$MT_HTTP_MAX_TIME_SECONDS")
+  local header query
+  for header in "${headers[@]}"; do
+    curl_args+=(--header "$header")
+  done
+  if [ "${#queries[@]}" -gt 0 ]; then
+    curl_args+=(--get)
+    for query in "${queries[@]}"; do
+      curl_args+=(--data-urlencode "$query")
+    done
+  fi
+  [ "$has_body" = true ] && curl_args+=(--data-binary "$body")
+
+  local auth_config="" escaped_credential
+  if [ -n "$user" ]; then
+    escaped_credential=$(__mt_http_config_escape "$user") || return "$MT_HTTP_EXIT_USAGE"
+    auth_config="user = \"${escaped_credential}\""
+  fi
+  if [ -n "$bearer" ]; then
+    escaped_credential=$(__mt_http_config_escape "$bearer") || return "$MT_HTTP_EXIT_USAGE"
+    auth_config="header = \"Authorization: Bearer ${escaped_credential}\""
+  fi
+
+  local work_dir body_file err_file status curl_rc=0
+  work_dir=$(mktemp -d)
+  body_file="$work_dir/body"
+  err_file="$work_dir/err"
+  local -a secrets=("$user" "$bearer" "${user#*:}")
+
+  [ "$verbose" = true ] && echo -e "${CB_BLUE}🌐 ${method} $(__mt_http_redact "${secrets[@]}" <<< "$url")${C_RESET}" >&2
+
+  status=$(printf '%s\n' "$auth_config" | curl "${curl_args[@]}" --output "$body_file" --write-out '%{http_code}' -- "$url" 2> "$err_file") || curl_rc=$?
+
+  if [ "$curl_rc" -ne 0 ]; then
+    echo -e "${CB_RED}🚨 Request failed before a response was received (curl exit ${curl_rc}):${C_RESET}" >&2
+    __mt_http_redact "${secrets[@]}" < "$err_file" >&2
+    rm -rf "$work_dir"
+    return "$MT_HTTP_EXIT_TRANSPORT"
+  fi
+  [ "$verbose" = true ] && echo -e "${CB_BLUE}↩️  HTTP ${status}${C_RESET}" >&2
+
+  local rc=0
+  if [ "$status" -ge 400 ]; then
+    echo -e "${CB_RED}🚨 HTTP ${status}${C_RESET}" >&2
+    __mt_http_hint "$status" "$url" "$user" >&2
+    rc="$MT_HTTP_EXIT_STATUS"
+  fi
+
+  local out_stream=1
+  [ "$rc" -ne 0 ] && out_stream=2
+  if [ "$raw" = false ] && command -v jq > /dev/null 2>&1 && jq -e . "$body_file" > /dev/null 2>&1; then
+    jq . "$body_file" | __mt_http_redact "${secrets[@]}" >&"$out_stream"
+  else
+    __mt_http_redact "${secrets[@]}" < "$body_file" >&"$out_stream"
+  fi
+  rm -rf "$work_dir"
+  return "$rc"
+}
+```
+
 ### 📂 Utilities: Background Job Registry
 
 
@@ -8656,6 +10271,121 @@ mt-logs() {
 }
 ```
 
+### 📂 Utilities: Framework Test Runner
+
+
+#### `mt-test-all`
+
+> Testing: Run the framework's full test suite -- bats (tests/bash/)
+
+```bash
+#######################################
+# Testing: Run the framework's full test suite -- bats (tests/bash/)
+# then pytest (tests/python/) -- from the repo root, and report a
+# combined result. Both suites always run, even if the first fails.
+# Usage: mt-test-all [-b] [-p]
+# Options:
+#   -b, --bats-only     Run only the bats suite
+#   -p, --pytest-only   Run only the pytest suite
+#   -h, --help          Show this help
+# Returns:
+#   0 if every selected suite passed, 1 otherwise
+#######################################
+mt-test-all() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local run_bats=1 run_pytest=1
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -b | --bats-only)
+        run_pytest=0
+        shift
+        ;;
+      -p | --pytest-only)
+        run_bats=0
+        shift
+        ;;
+      *)
+        echo "Usage: mt-test-all [-b] [-p]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  local repo_root
+  repo_root=$(git -C "$(dirname "$(readlink -f "$HOME/.bash.d")")" rev-parse --show-toplevel 2> /dev/null)
+  if [ -z "$repo_root" ] || [ ! -d "$repo_root/tests" ]; then
+    echo -e "${CB_RED}🚨 Framework repo checkout with a tests/ directory not found.${C_RESET}"
+    return 1
+  fi
+
+  local failed=0
+  if [ "$run_bats" -eq 1 ]; then
+    echo -e "${CB_BLUE}🧪 bats tests/bash/${C_RESET}"
+    bats "$repo_root/tests/bash/" || failed=1
+  fi
+  if [ "$run_pytest" -eq 1 ]; then
+    echo -e "${CB_BLUE}🧪 pytest tests/python/${C_RESET}"
+    python3 -m pytest "$repo_root/tests/python/" -q || failed=1
+  fi
+
+  if [ "$failed" -eq 1 ]; then
+    mt-log ERROR "mt-test-all: one or more suites failed"
+    echo -e "${CB_RED}❌ Test suite failed.${C_RESET}"
+    return 1
+  fi
+  echo -e "${CB_GREEN}✅ All selected suites passed.${C_RESET}"
+}
+```
+
+### 📂 Utilities: HTML Structure Checker
+
+
+#### `mt-html-check`
+
+> HTML: Validate a local HTML file for unbalanced tags and broken
+
+```bash
+#######################################
+# HTML: Validate a local HTML file for unbalanced tags and broken
+# internal anchors (href="#id" with no matching id/name).
+# Usage: mt-html-check <file.html>...
+# Arguments:
+#   <file.html>   One or more HTML files to check
+# Options:
+#   -h, --help    Show this help
+# Returns:
+#   0 if every file is clean, 1 if any problem was found
+# Outputs:
+#   One "file:line: problem" line per issue
+#######################################
+mt-html-check() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  if [ "$#" -eq 0 ]; then
+    echo "Usage: mt-html-check <file.html>..." >&2
+    return 1
+  fi
+
+  local html_file failed=0
+  for html_file in "$@"; do
+    python3 "$HTML_CHECK_SCRIPT" "$html_file" || failed=1
+  done
+
+  if [ "$failed" -eq 1 ]; then
+    echo -e "${CB_RED}❌ HTML problems found.${C_RESET}"
+    return 1
+  fi
+  echo -e "${CB_GREEN}✅ HTML structure OK.${C_RESET}"
+}
+```
+
 ### 📂 Utilities: Temporary HTTP File Server
 
 
@@ -8722,7 +10452,7 @@ mt-http-server() {
           return 1
         fi
         port="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -w | --wsl-bridge)
         expose_wsl=true
@@ -8746,7 +10476,7 @@ mt-http-server() {
           return 1
         fi
         idle_timeout="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --no-idle-timeout)
         idle_timeout=0
@@ -9024,6 +10754,520 @@ mt-server-manager() {
     "Tail Logs (live)" __mt_server_manager_tail_logs \
     "Server Options (wizard)" __mt_server_manager_options \
     "Manage via mt-jobs" __mt_server_manager_jobs
+}
+```
+
+### 📂 Version Control: Bitbucket Cloud API Helpers
+
+
+#### `bb-pr`
+
+> Bitbucket: Show a pull request's metadata, diff, diffstat or comments
+
+```bash
+#######################################
+# Bitbucket: Show a pull request's metadata, diff, diffstat or comments
+# Usage: bb-pr [-r <workspace/repo>] [--diff|--diffstat|--comments] <pr-number>
+# Arguments:
+#   <pr-number>          Pull request number
+# Options:
+#   -r, --repo <w/r>     Repository (default: the current directory's Bitbucket remote)
+#   --diff               Print the full unified diff
+#   --diffstat           Print status, lines added/removed and path per file
+#   --comments           Print every comment with its file and line
+#   -h, --help           Show this help menu
+# Returns:
+#   0 on success, 1 on bad usage or missing credentials, mt-http's code on API failure
+# Outputs:
+#   Summary, diff, diffstat or comments on stdout, with terminal control
+#   characters removed
+#######################################
+bb-pr() {
+  local repo="" mode="summary" pr_number=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -r | --repo)
+        repo="${2:-}"
+        shift
+        ;;
+      --diff) mode="diff" ;;
+      --diffstat) mode="diffstat" ;;
+      --comments) mode="comments" ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) pr_number="$1" ;;
+    esac
+    shift
+  done
+
+  if [[ ! "$pr_number" =~ ^[0-9]+$ ]]; then
+    echo "Usage: bb-pr [-r <workspace/repo>] [--diff|--diffstat|--comments] <pr-number>" >&2
+    return 1
+  fi
+  repo=$(__mt_bb_resolve_repo "$repo") || return 1
+  local pr_path="repositories/${repo}/pullrequests/${pr_number}"
+
+  local data
+  case "$mode" in
+    summary)
+      data=$(__mt_bb_api "$pr_path" --raw) || return $?
+      jq -r -f "$BITBUCKET_JQ_DIR/bb_pr_summary.jq" <<< "$data" | __mt_strip_control_chars
+      ;;
+    diff)
+      data=$(__mt_bb_api "${pr_path}/diff" --raw) || return $?
+      __mt_strip_control_chars <<< "$data"
+      ;;
+    diffstat)
+      data=$(__mt_bb_collect "${pr_path}/diffstat") || return $?
+      jq -r -f "$BITBUCKET_JQ_DIR/bb_pr_diffstat.jq" <<< "$data" | __mt_strip_control_chars
+      ;;
+    comments)
+      data=$(__mt_bb_collect "${pr_path}/comments") || return $?
+      jq -r -f "$BITBUCKET_JQ_DIR/bb_pr_comments.jq" <<< "$data" | __mt_strip_control_chars
+      ;;
+  esac
+}
+```
+
+### 📂 Version Control: Bitbucket Pipelines, Environments and Variables
+
+
+#### `bb-env`
+
+> Bitbucket: List or create deployment environments
+
+```bash
+#######################################
+# Bitbucket: List or create deployment environments
+# Usage: bb-env [-r <workspace/repo>] list | create <name> [--type Test|Staging|Production]
+# Arguments:
+#   list                 List environments
+#   create <name>        Create an environment
+# Options:
+#   -r, --repo <w/r>     Repository (default: the current directory's Bitbucket remote)
+#   --type <type>        Environment type for create: Test, Staging or Production (default: Test)
+#   -h, --help           Show this help menu
+# Returns:
+#   0 on success, 1 on bad usage or missing credentials, mt-http's code on API failure
+# Outputs:
+#   "name<TAB>type<TAB>uuid" per environment for list
+#######################################
+bb-env() {
+  local repo="" action="" env_name="" env_type="${BITBUCKET_ENV_TYPES[0]}"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -r | --repo)
+        repo="${2:-}"
+        shift
+        ;;
+      --type)
+        env_type="${2:-}"
+        shift
+        ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      list | create)
+        if [ -z "$action" ]; then action="$1"; else env_name="$1"; fi
+        ;;
+      *) env_name="$1" ;;
+    esac
+    shift
+  done
+
+  local valid_type=false candidate
+  for candidate in "${BITBUCKET_ENV_TYPES[@]}"; do
+    [ "$candidate" = "$env_type" ] && valid_type=true
+  done
+  if [ "$valid_type" = false ]; then
+    echo -e "${CB_RED}❌ --type must be one of: ${BITBUCKET_ENV_TYPES[*]}${C_RESET}" >&2
+    return 1
+  fi
+  if [ "$action" != "list" ] && { [ "$action" != "create" ] || [ -z "$env_name" ]; }; then
+    echo "Usage: bb-env [-r <w/r>] list | create <name> [--type Test|Staging|Production]" >&2
+    return 1
+  fi
+  repo=$(__mt_bb_resolve_repo "$repo") || return 1
+
+  local data
+  if [ "$action" = "list" ]; then
+    data=$(__mt_bb_collect "repositories/${repo}/environments/") || return $?
+    jq -r '.[] | "\(.name)\t\(.environment_type.name // "-")\t\(.uuid)"' <<< "$data" | __mt_strip_control_chars
+    return 0
+  fi
+
+  local body body_file rc=0
+  body=$(jq -nc --arg name "$env_name" --arg type "$env_type" '{type: "deployment_environment", name: $name, environment_type: {type: "deployment_environment_type", name: $type}}')
+  body_file=$(__mt_bb_body_file "$body") || return 1
+  __mt_bb_api "repositories/${repo}/environments/" -H "Content-Type: application/json" -d "@${body_file}" --raw > /dev/null || rc=$?
+  rm -rf "$(dirname "$body_file")"
+  [ "$rc" -eq 0 ] && echo -e "${CB_GREEN}✅ Created ${env_type} environment '${env_name}'.${C_RESET}"
+  return "$rc"
+}
+```
+
+#### `bb-pipelines`
+
+> Bitbucket: List recent pipeline runs, show a run's steps, or print a
+
+```bash
+#######################################
+# Bitbucket: List recent pipeline runs, show a run's steps, or print a
+# step's log tail with credentials redacted
+# Usage: bb-pipelines [-r <workspace/repo>] [-n <count>] [<build#|uuid> [--log <step#|uuid>] [--tail <lines>]]
+# Arguments:
+#   <build#|uuid>        Pipeline build number or UUID (omit to list recent runs)
+# Options:
+#   -r, --repo <w/r>     Repository (default: the current directory's Bitbucket remote)
+#   -n, --count <n>      Number of runs to list (default: 10)
+#   --log <step>         Print the log of a step, by 1-based number or UUID
+#   --tail <lines>       Lines of log to keep (default: 100)
+#   -h, --help           Show this help menu
+# Returns:
+#   0 on success, 1 on bad usage or missing credentials, mt-http's code on API failure
+# Outputs:
+#   Runs or steps as tab-separated lines; logs as redacted text
+#######################################
+bb-pipelines() {
+  local repo="" count="$BITBUCKET_PIPELINES_DEFAULT_COUNT" ref="" log_step="" tail_lines="$BITBUCKET_LOG_DEFAULT_TAIL"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -r | --repo)
+        repo="${2:-}"
+        shift
+        ;;
+      -n | --count)
+        count="${2:-}"
+        shift
+        ;;
+      --log)
+        log_step="${2:-}"
+        shift
+        ;;
+      --tail)
+        tail_lines="${2:-}"
+        shift
+        ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) ref="$1" ;;
+    esac
+    shift
+  done
+  if [[ ! "$count" =~ ^[0-9]+$ ]] || [[ ! "$tail_lines" =~ ^[0-9]+$ ]]; then
+    echo -e "${CB_RED}❌ --count and --tail must be whole numbers.${C_RESET}" >&2
+    return 1
+  fi
+  if [ -n "$log_step" ] && [ -z "$ref" ]; then
+    echo "Usage: bb-pipelines [-r <w/r>] <build#|uuid> --log <step#|uuid>" >&2
+    return 1
+  fi
+  repo=$(__mt_bb_resolve_repo "$repo") || return 1
+
+  local data
+  if [ -z "$ref" ]; then
+    data=$(__mt_bb_api "repositories/${repo}/pipelines/" --raw -q "pagelen=${count}" -q "sort=-created_on") || return $?
+    jq -r -f "$BITBUCKET_JQ_DIR/bb_pipelines_list.jq" <<< "$data" | __mt_strip_control_chars
+    return 0
+  fi
+
+  local pipeline_uuid steps
+  pipeline_uuid=$(__mt_bb_resolve_pipeline "$repo" "$ref") || return $?
+  steps=$(__mt_bb_collect "repositories/${repo}/pipelines/${pipeline_uuid}/steps/") || return $?
+
+  if [ "$steps" = "[]" ]; then
+    data=$(__mt_bb_api "repositories/${repo}/pipelines/${pipeline_uuid}" --raw) || return $?
+    jq -r -f "$BITBUCKET_JQ_DIR/bb_pipeline_no_steps.jq" <<< "$data" | __mt_strip_control_chars
+    return 0
+  fi
+  if [ -z "$log_step" ]; then
+    jq -r -f "$BITBUCKET_JQ_DIR/bb_pipeline_steps.jq" <<< "$steps" | __mt_strip_control_chars
+    return 0
+  fi
+
+  local step_uuid="$log_step"
+  if [[ "$log_step" =~ ^[0-9]+$ ]]; then
+    step_uuid=$(jq -r --argjson n "$log_step" '.[$n - 1].uuid // empty' <<< "$steps")
+    if [ -z "$step_uuid" ]; then
+      echo -e "${CB_RED}🚨 Pipeline has no step number ${log_step}.${C_RESET}" >&2
+      return 1
+    fi
+  fi
+  step_uuid=$(__mt_bb_encode_uuid "$step_uuid")
+  data=$(__mt_bb_api "repositories/${repo}/pipelines/${pipeline_uuid}/steps/${step_uuid}/log" --raw) || return $?
+  tail -n "$tail_lines" <<< "$data" | sed -E -f "$BITBUCKET_REDACT_SED" | __mt_strip_control_chars
+}
+```
+
+#### `bb-var`
+
+> Bitbucket: List or add pipeline variables, repository-wide or per environment.
+
+```bash
+#######################################
+# Bitbucket: List or add pipeline variables, repository-wide or per environment.
+# Secured values are never shown, and new values are read from stdin or a
+# silent prompt -- never taken from the command line.
+# Usage: bb-var [-r <workspace/repo>] [-e <environment>] list | add [--secured] <KEY>
+# Arguments:
+#   list                 List variables
+#   add <KEY>            Add a variable; the value is read from stdin, or prompted
+# Options:
+#   -r, --repo <w/r>     Repository (default: the current directory's Bitbucket remote)
+#   -e, --env <name>     Use the variables of this deployment environment
+#   --secured            Mark the new variable as secured
+#   -h, --help           Show this help menu
+# Returns:
+#   0 on success, 1 on bad usage or missing credentials, mt-http's code on API failure
+# Outputs:
+#   "key<TAB>value<TAB>uuid" per variable for list; secured values print as (secured)
+#######################################
+bb-var() {
+  local repo="" env_name="" action="" key="" secured=false
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -r | --repo)
+        repo="${2:-}"
+        shift
+        ;;
+      -e | --env)
+        env_name="${2:-}"
+        shift
+        ;;
+      --secured) secured=true ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      list | add)
+        if [ -z "$action" ]; then action="$1"; else key="$1"; fi
+        ;;
+      *) key="$1" ;;
+    esac
+    shift
+  done
+  if [ "$action" != "list" ] && { [ "$action" != "add" ] || [ -z "$key" ]; }; then
+    echo "Usage: bb-var [-r <w/r>] [-e <env>] list | add [--secured] <KEY>" >&2
+    return 1
+  fi
+  repo=$(__mt_bb_resolve_repo "$repo") || return 1
+
+  local variables_path="repositories/${repo}/pipelines_config/variables"
+  if [ -n "$env_name" ]; then
+    local env_uuid
+    env_uuid=$(__mt_bb_environment_uuid "$repo" "$env_name") || return $?
+    variables_path="repositories/${repo}/deployments_config/environments/${env_uuid}/variables"
+  fi
+
+  local data
+  if [ "$action" = "list" ]; then
+    data=$(__mt_bb_collect "${variables_path}") || return $?
+    jq -r '.[] | "\(.key)\t\(if .secured then "(secured)" else (.value // "") end)\t\(.uuid)"' <<< "$data" | __mt_strip_control_chars
+    return 0
+  fi
+
+  local value
+  if [ -t 0 ]; then
+    read -r -s -p "Value for ${key}: " value < /dev/tty
+    echo
+  else
+    IFS= read -r value
+  fi
+
+  local body body_file rc=0
+  body=$(jq -nc --arg key "$key" --arg value "$value" --argjson secured "$secured" '{key: $key, value: $value, secured: $secured}')
+  body_file=$(__mt_bb_body_file "$body") || return 1
+  __mt_bb_api "${variables_path}" -H "Content-Type: application/json" -d "@${body_file}" --raw > /dev/null || rc=$?
+  rm -rf "$(dirname "$body_file")"
+  [ "$rc" -eq 0 ] && echo -e "${CB_GREEN}✅ Added variable ${key}${C_RESET}"
+  return "$rc"
+}
+```
+
+### 📂 Version Control: Confluence Cloud Read Helpers
+
+
+#### `conf-folder`
+
+> Confluence: List a folder's direct children (pages, folders, ...)
+
+```bash
+#######################################
+# Confluence: List a folder's direct children (pages, folders, ...)
+# Usage: conf-folder <folder-id|folder-url>
+# Arguments:
+#   <folder-id|folder-url>   Numeric folder ID or a URL containing /folder/<id>
+# Options:
+#   -h, --help               Show this help menu
+# Returns:
+#   0 on success, 1 on bad usage or missing configuration, mt-http's code on API failure
+# Outputs:
+#   One "type<TAB>id<TAB>title" line per child on stdout
+#######################################
+conf-folder() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  if [ -z "$1" ]; then
+    echo "Usage: conf-folder <folder-id|folder-url>" >&2
+    return 1
+  fi
+
+  local folder_id next page children="[]" pages=0
+  folder_id=$(__mt_conf_extract_id "$1") || return 1
+  __mt_conf_prepare || return 1
+  next="/wiki/api/v2/folders/${folder_id}/direct-children?limit=${CONFLUENCE_PAGE_LIMIT}"
+
+  while [ -n "$next" ] && [ "$pages" -lt "$CONFLUENCE_MAX_PAGES" ]; do
+    page=$(__mt_conf_api "$next" --raw) || return $?
+    children=$(jq -c --argjson more "$(jq -c '.results // []' <<< "$page")" '. + $more' <<< "$children")
+    next=$(jq -r '._links.next // empty' <<< "$page")
+    pages=$((pages + 1))
+  done
+  if [ -n "$next" ]; then
+    echo -e "${CB_YELLOW}⚠️  Results truncated after ${CONFLUENCE_MAX_PAGES} pages.${C_RESET}" >&2
+  fi
+  jq -r -f "$CONFLUENCE_JQ_DIR/conf_children.jq" <<< "$children" | __mt_strip_control_chars
+}
+```
+
+#### `conf-get`
+
+> Confluence: Read a page as plain text (or raw storage-format HTML)
+
+```bash
+#######################################
+# Confluence: Read a page as plain text (or raw storage-format HTML)
+# Usage: conf-get [--storage] <page-id|page-url>
+# Arguments:
+#   <page-id|page-url>   Numeric page ID or a URL containing /pages/<id>
+# Options:
+#   --storage            Print the raw storage-format body instead of text
+#   -h, --help           Show this help menu
+# Returns:
+#   0 on success, 1 on bad usage or missing configuration, mt-http's code on API failure
+# Outputs:
+#   Page title followed by the body on stdout, with terminal control
+#   characters removed
+#######################################
+conf-get() {
+  local raw_storage=false target=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      --storage) raw_storage=true ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) target="$1" ;;
+    esac
+    shift
+  done
+  if [ -z "$target" ]; then
+    echo "Usage: conf-get [--storage] <page-id|page-url>" >&2
+    return 1
+  fi
+
+  local page_id page title body
+  page_id=$(__mt_conf_extract_id "$target") || return 1
+  __mt_conf_prepare || return 1
+  page=$(__mt_conf_api "/wiki/api/v2/pages/${page_id}" --raw -q "body-format=storage") || return $?
+  title=$(jq -r '.title' <<< "$page")
+  body=$(jq -r '.body.storage.value // ""' <<< "$page")
+
+  echo "# ${title}" | __mt_strip_control_chars
+  echo
+  if [ "$raw_storage" = true ]; then
+    __mt_strip_control_chars <<< "$body"
+  else
+    python3 "$CONFLUENCE_TEXT_SCRIPT" <<< "$body" | __mt_strip_control_chars
+  fi
+}
+```
+
+#### `conf-search`
+
+> Confluence: Search with a text term or a raw CQL query
+
+```bash
+#######################################
+# Confluence: Search with a text term or a raw CQL query
+# Usage: conf-search [-s <space-key>] [--cql] <text|cql>
+# Arguments:
+#   <text|cql>           Text to search for, or a CQL query with --cql
+# Options:
+#   -s, --space <key>    Restrict a text search to one space
+#   --cql                Treat the argument as a CQL query
+#   -h, --help           Show this help menu
+# Returns:
+#   0 on success, 1 on bad usage or missing configuration, mt-http's code on API failure
+# Outputs:
+#   One "type<TAB>id<TAB>title<TAB>space" line per hit on stdout
+#######################################
+conf-search() {
+  local space="" use_cql=false query=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -s | --space)
+        space="${2:-}"
+        shift
+        ;;
+      --cql) use_cql=true ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) query="$1" ;;
+    esac
+    shift
+  done
+  if [ -z "$query" ]; then
+    echo "Usage: conf-search [-s <space-key>] [--cql] <text|cql>" >&2
+    return 1
+  fi
+
+  local cql="$query" escaped
+  if [ "$use_cql" = false ]; then
+    escaped="${query//\\/\\\\}"
+    escaped="${escaped//\"/\\\"}"
+    cql="text ~ \"${escaped}\""
+    [ -n "$space" ] && cql="space = \"${space}\" AND ${cql}"
+  fi
+
+  local result
+  __mt_conf_prepare || return 1
+  result=$(__mt_conf_api "/wiki/rest/api/search" --raw -q "cql=${cql}" -q "limit=${CONFLUENCE_SEARCH_LIMIT}") || return $?
+  jq -r -f "$CONFLUENCE_JQ_DIR/conf_search.jq" <<< "$result" | __mt_strip_control_chars
 }
 ```
 
@@ -9439,6 +11683,64 @@ git-default-rebase() {
 }
 ```
 
+#### `git-diff-all`
+
+> Git: Show every uncommitted change (staged, unstaged and untracked files)
+
+```bash
+#######################################
+# Git: Show every uncommitted change (staged, unstaged and untracked files)
+# as one diff against HEAD. Uses a scratch copy of the index, so the real
+# index and working tree are never modified.
+# Usage: git-diff-all [--stat] [-- <pathspec>...]
+# Options:
+#   --stat       Show a diffstat instead of the full diff
+#   -h, --help   Show this help menu
+# Arguments:
+#   pathspec     Limit the diff to these paths
+# Returns:
+#   0 on success, 1 outside a git repository or on a git failure
+# Outputs:
+#   Unified diff (or diffstat) on STDOUT; untracked files honour .gitignore
+#######################################
+git-diff-all() {
+  local diff_flag=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      --stat) diff_flag="--stat" ;;
+      --)
+        shift
+        break
+        ;;
+      *) break ;;
+    esac
+    shift
+  done
+
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 Not inside a git repository.${C_RESET}"
+    return 1
+  fi
+
+  local scratch_index real_index base_ref rc=0
+  scratch_index=$(mktemp -u)
+  real_index=$(git rev-parse --git-path index)
+  [ -f "$real_index" ] && cp "$real_index" "$scratch_index"
+  base_ref=$(git rev-parse --verify --quiet HEAD || git hash-object -t tree /dev/null)
+
+  GIT_INDEX_FILE="$scratch_index" git ls-files --others --exclude-standard -z -- "$@" |
+    GIT_INDEX_FILE="$scratch_index" xargs -0 -r git add --intent-to-add --
+  GIT_INDEX_FILE="$scratch_index" git diff ${diff_flag:+"$diff_flag"} "$base_ref" -- "$@" || rc=1
+
+  rm -f "$scratch_index" "$scratch_index.lock"
+  return "$rc"
+}
+```
+
 #### `git-new-feature`
 
 > Git: Create and checkout a new feature branch
@@ -9567,11 +11869,13 @@ git-push-all() {
 
 #### `git-raise-pr`
 
-> Git: Push current branch and raise a Pull Request (GitHub/GitLab/Bitbucket)
+> Git: Push current branch and raise a Pull Request (GitHub/GitLab/Bitbucket).
 
 ```bash
 #######################################
-# Git: Push current branch and raise a Pull Request (GitHub/GitLab/Bitbucket)
+# Git: Push current branch and raise a Pull Request (GitHub/GitLab/Bitbucket).
+# GitHub uses the gh CLI; Bitbucket uses the API when credentials are set
+# (reusing an already-open PR for the branch); everything else opens the browser.
 # Usage: git-raise-pr [-b target_branch] [-t pr_title] [-m pr_body]
 # Options:
 #   -b <branch>   Target branch to merge into (defaults to default branch)
@@ -9631,6 +11935,137 @@ git-raise-pr() {
 
   __git_raise_pr_push_branch || return 1
   __git_raise_pr_create_or_open
+}
+```
+
+#### `git-review-prs`
+
+> Git: List the open pull requests for the current repo, or show the
+
+```bash
+#######################################
+# Git: List the open pull requests for the current repo, or show the
+# diff of one PR / the current branch against its base branch -- the
+# review companion to git-review-start.
+# Usage: git-review-prs [-n <pr>] [-b [<base>]] [-s]
+# Options:
+#   -n, --pr <number>    Show this pull request's diff (via gh)
+#   -b, --base <branch>  Show HEAD's diff against this branch (merge-base diff);
+#                        defaults to the repo's default branch when omitted
+#   -s, --stat           Show a diffstat instead of the full diff
+#   -h, --help           Show this help
+# With no -n or -b, lists open pull requests.
+# Returns:
+#   0 on success, 1 on usage errors or when not in a git repository
+#######################################
+git-review-prs() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local pr_number="" base_branch="" use_base=0 stat_only=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -n | --pr)
+        pr_number="$2"
+        shift 2 || shift
+        ;;
+      -b | --base)
+        use_base=1
+        if [ -n "${2:-}" ] && [[ "$2" != -* ]]; then
+          base_branch="$2"
+          shift
+        fi
+        shift
+        ;;
+      -s | --stat)
+        stat_only=1
+        shift
+        ;;
+      *)
+        echo "Usage: git-review-prs [-n <pr>] [-b [<base>]] [-s]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 Not inside a git repository.${C_RESET}"
+    return 1
+  fi
+
+  if [ -n "$pr_number" ]; then
+    if [ "$stat_only" -eq 1 ]; then
+      gh pr diff "$pr_number" --name-only
+    else
+      gh pr diff "$pr_number"
+    fi
+    return $?
+  fi
+
+  if [ "$use_base" -eq 1 ]; then
+    if [ -z "$base_branch" ]; then
+      base_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null)
+      base_branch="${base_branch:-origin/main}"
+    fi
+    if [ "$stat_only" -eq 1 ]; then
+      git diff --stat "${base_branch}...HEAD"
+    else
+      git diff "${base_branch}...HEAD"
+    fi
+    return $?
+  fi
+
+  echo -e "${CB_BLUE}🔀 Open Pull Requests${C_RESET}"
+  gh pr list
+}
+```
+
+#### `git-review-start`
+
+> Git: Quick orientation for starting a code review -- current branch
+
+```bash
+#######################################
+# Git: Quick orientation for starting a code review -- current branch
+# and uncommitted-file status plus a clean file tree, so there's no
+# need to fall back to raw 'git status' and 'find'/tree-clean's own eza
+# call separately before reading through a repo's structure.
+# Usage: git-review-start [-d <depth>]
+# Options:
+#   -d, --depth <n>   Tree depth passed to eza --tree (default: 3)
+#######################################
+git-review-start() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local depth=3
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -d | --depth)
+        depth="$2"
+        shift 2 || shift
+        ;;
+      *)
+        echo "Usage: git-review-start [-d <depth>]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 Not inside a git repository.${C_RESET}"
+    return 1
+  fi
+
+  echo -e "${CB_BLUE}🌿 Branch & Status${C_RESET}"
+  git status --short --branch
+
+  echo -e "\n${CB_BLUE}🌳 File Tree (depth ${depth})${C_RESET}"
+  eza --tree --level "$depth" -I ".git|node_modules|__pycache__|.terraform|venv|.venv|.mt_cache*|target"
 }
 ```
 
@@ -9806,6 +12241,133 @@ mt-git-clone() {
 }
 ```
 
+#### `mt-grep-repos`
+
+> Git: Search file contents and/or file names across every local repo
+
+```bash
+#######################################
+# Git: Search file contents and/or file names across every local repo
+# under VCS_ROOT, optionally narrowed to a scope/provider/workspace/
+# project -- a multi-repo replacement for hand-rolled 'grep -rIl' +
+# 'find' loops. Skips .git, node_modules, .terraform and virtualenvs.
+# Usage: mt-grep-repos [-s work|personal] [-p provider] [-w workspace]
+#                      [-pr project] [-g <glob>] [-l] [-N <name-glob>]
+#                      [<pattern>]
+# Arguments:
+#   <pattern>                     Extended regex to search file contents for
+# Options:
+#   -s, --scope <work|personal>   Only search repos under this scope
+#   -p, --provider <name>         Only search repos under this provider (work scope only)
+#   -w, --workspace <name>        Only search repos under this workspace (work scope only)
+#   -pr, --project <name>         Only search repos under this project (work scope) or this exact repo (personal scope)
+#   -g, --glob <glob>             Only search files whose name matches this glob (e.g. '*.tf')
+#   -l, --files-only              Print matching file paths only, not matching lines
+#   -N, --name <name-glob>        List files whose name matches this glob (no <pattern> needed)
+#   -h, --help                    Show this help
+# Globals:
+#   VCS_ROOT
+# Returns:
+#   0 if anything matched, 1 otherwise
+#######################################
+mt-grep-repos() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local scope="" provider="" workspace="" project="" glob="" name_glob="" files_only=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -s | --scope)
+        scope="${2,,}"
+        if [[ "$scope" != "work" && "$scope" != "personal" ]]; then
+          echo "mt-grep-repos: --scope must be 'work' or 'personal'" >&2
+          return 1
+        fi
+        shift 2 || shift
+        ;;
+      -p | --provider)
+        provider="$2"
+        shift 2 || shift
+        ;;
+      -w | --workspace)
+        workspace="$2"
+        shift 2 || shift
+        ;;
+      -pr | --project)
+        project="$2"
+        shift 2 || shift
+        ;;
+      -g | --glob)
+        glob="$2"
+        shift 2 || shift
+        ;;
+      -N | --name)
+        name_glob="$2"
+        shift 2 || shift
+        ;;
+      -l | --files-only)
+        files_only=1
+        shift
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  local pattern="${1:-}"
+  if [ -z "$pattern" ] && [ -z "$name_glob" ]; then
+    echo "Usage: mt-grep-repos [filters] [-g <glob>] [-l] [-N <name-glob>] [<pattern>]" >&2
+    return 1
+  fi
+
+  local search_dir="${VCS_ROOT:-$HOME/vcs}"
+  if [ ! -d "$search_dir" ]; then
+    echo -e "${CB_RED}🚨 Error: VCS root directory '$search_dir' not found.${C_RESET}"
+    return 1
+  fi
+
+  local -a prune_dirs=(.git node_modules .terraform .venv venv __pycache__)
+  local -a grep_args=(-rIE --color=never)
+  local prune_dir
+  for prune_dir in "${prune_dirs[@]}"; do
+    grep_args+=(--exclude-dir="$prune_dir")
+  done
+  [ -n "$glob" ] && grep_args+=(--include="$glob")
+  if [ "$files_only" -eq 1 ]; then
+    grep_args+=(-l)
+  else
+    grep_args+=(-n)
+  fi
+
+  local repo_path found=0
+  while IFS= read -r repo_path; do
+    [ -z "$repo_path" ] && continue
+    __mt_vcs_matches_filter "$repo_path" "$scope" "$provider" "$workspace" "$project" || continue
+    if [ -n "$name_glob" ]; then
+      local name_hits
+      name_hits=$(find "$repo_path" \( -name .git -o -name node_modules -o -name .terraform -o -name .venv -o -name venv -o -name __pycache__ \) -prune -o -type f -name "$name_glob" -print)
+      if [ -n "$name_hits" ]; then
+        echo "$name_hits"
+        found=1
+      fi
+    fi
+    if [ -n "$pattern" ]; then
+      local content_hits
+      content_hits=$(grep "${grep_args[@]}" -e "$pattern" "$repo_path" 2> /dev/null)
+      if [ -n "$content_hits" ]; then
+        echo "$content_hits"
+        found=1
+      fi
+    fi
+  done < <(__mt_vcs_find_repos "$search_dir")
+
+  [ "$found" -eq 1 ]
+}
+```
+
 #### `mt-repos`
 
 > Git: Scan VCS root and list all local repositories, optionally
@@ -9842,19 +12404,19 @@ mt-repos() {
           echo "mt-repos: --scope must be 'work' or 'personal'" >&2
           return 1
         fi
-        shift 2
+        shift 2 || shift
         ;;
       -p | --provider)
         provider="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -w | --workspace)
         workspace="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -pr | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         echo "Usage: mt-repos [-s work|personal] [-p provider] [-w workspace] [-pr project]" >&2
@@ -9924,6 +12486,97 @@ mt-repos() {
 
   echo ""
   rm -f "$tmp_out"
+}
+```
+
+#### `mt-repos-run`
+
+> Git: Run a git subcommand across every repo matching mt-repos' own
+
+```bash
+#######################################
+# Git: Run a git subcommand across every repo matching mt-repos' own
+# scope/provider/workspace/project filters (see __mt_vcs_matches_filter)
+# -- a targeted tracked-file check ('ls-files -- path'), a one-line
+# HEAD summary ('log -1 --format=%H'), or any other read query, without
+# a manual loop over mt-repos' own output. Read-only by convention: this
+# doesn't guard against a destructive git subcommand -- it's exactly as
+# dangerous as running that subcommand yourself in each matched repo.
+# Usage: mt-repos-run [-s work|personal] [-p provider] [-w workspace]
+#                     [-pr project] -- <git-subcommand> [args...]
+# Options:
+#   -s, --scope <work|personal>   Only run in repos under this scope
+#   -p, --provider <name>         Only run in repos under this provider (work scope only)
+#   -w, --workspace <name>        Only run in repos under this workspace (work scope only)
+#   -pr, --project <name>         Only run in repos under this project (work scope) or this exact repo (personal scope)
+#   -h, --help                    Show this help
+# Globals:
+#   VCS_ROOT
+#######################################
+mt-repos-run() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local scope="" provider="" workspace="" project=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -s | --scope)
+        scope="${2,,}"
+        if [[ "$scope" != "work" && "$scope" != "personal" ]]; then
+          echo "mt-repos-run: --scope must be 'work' or 'personal'" >&2
+          return 1
+        fi
+        shift 2 || shift
+        ;;
+      -p | --provider)
+        provider="$2"
+        shift 2 || shift
+        ;;
+      -w | --workspace)
+        workspace="$2"
+        shift 2 || shift
+        ;;
+      -pr | --project)
+        project="$2"
+        shift 2 || shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      *)
+        echo "Usage: mt-repos-run [-s work|personal] [-p provider] [-w workspace] [-pr project] -- <git-subcommand> [args...]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [ "$#" -eq 0 ]; then
+    echo "Usage: mt-repos-run [-s work|personal] [-p provider] [-w workspace] [-pr project] -- <git-subcommand> [args...]" >&2
+    return 1
+  fi
+
+  local search_dir="${VCS_ROOT:-$HOME/vcs}"
+  if [ ! -d "$search_dir" ]; then
+    echo -e "${CB_RED}🚨 Error: VCS root directory '$search_dir' not found.${C_RESET}"
+    return 1
+  fi
+
+  local repo_path matched=0
+  while IFS= read -r repo_path; do
+    [ -z "$repo_path" ] && continue
+    __mt_vcs_matches_filter "$repo_path" "$scope" "$provider" "$workspace" "$project" || continue
+    ((++matched))
+    echo -e "${CB_CYAN}▶ $(basename "$repo_path")${C_RESET}"
+    git -C "$repo_path" "$@"
+    echo
+  done < <(__mt_vcs_find_repos "$search_dir")
+
+  if [ "$matched" -eq 0 ]; then
+    echo -e "${CB_YELLOW}⚠️  No repositories matched the given filters.${C_RESET}"
+  fi
 }
 ```
 
@@ -10041,7 +12694,7 @@ mt-get-update() {
     case "$1" in
       -v)
         target_version="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -V | --verbose)
         verbose=true
@@ -10242,7 +12895,7 @@ mt-push-update() {
     case "$1" in
       -i | --issue)
         issue_num="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -s | --shellcheck)
         run_shellcheck=true
@@ -10323,6 +12976,107 @@ mt-push-update() {
   __git_sync_copy_files "$repo_dir"
 
   (__mt_push_update_commit_and_raise_pr) || return 1
+}
+```
+
+### 📂 Version Control (Git) - Remote-Ref Inspection
+
+
+#### `git-remote-diff`
+
+> Git: Diff two refs -- typically two remote-tracking branches -- without
+
+```bash
+#######################################
+# Git: Diff two refs -- typically two remote-tracking branches -- without
+# checking either out locally. Uses the three-dot form ('refA...refB',
+# changes on refB since it diverged from refA), which is what a code
+# review comparing a feature branch against its base almost always
+# means, not a literal two-ref diff ('refA..refB').
+# Usage: git-remote-diff <refA> <refB> [-- <path>...]
+#
+# Examples:
+#   git-remote-diff origin/master origin/feature/x
+#   git-remote-diff origin/master origin/feature/x -- src/
+#######################################
+git-remote-diff() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local ref_a="$1" ref_b="$2"
+  if [[ -z "$ref_a" || -z "$ref_b" ]]; then
+    echo "Usage: git-remote-diff <refA> <refB> [-- <path>...]" >&2
+    return 1
+  fi
+  shift 2 || shift
+
+  git diff "${ref_a}...${ref_b}" "$@"
+}
+```
+
+#### `git-remote-grep`
+
+> Git: Count pattern matches across one or more refs without checking
+
+```bash
+#######################################
+# Git: Count pattern matches across one or more refs without checking
+# any of them out -- a thin, discoverable wrapper over
+# 'git grep -c <pattern> <ref>...'.
+# Usage: git-remote-grep <pattern> <ref> [<ref>...]
+#
+# Examples:
+#   git-remote-grep TODO origin/master origin/feature/x
+#######################################
+git-remote-grep() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local pattern="$1"
+  if [[ -z "$pattern" ]]; then
+    echo "Usage: git-remote-grep <pattern> <ref> [<ref>...]" >&2
+    return 1
+  fi
+  shift
+
+  if [[ "$#" -eq 0 ]]; then
+    echo "Usage: git-remote-grep <pattern> <ref> [<ref>...]" >&2
+    return 1
+  fi
+
+  git grep -c "$pattern" "$@"
+}
+```
+
+#### `git-remote-show`
+
+> Git: Show a file's content as of a specific ref without checking that
+
+```bash
+#######################################
+# Git: Show a file's content as of a specific ref without checking that
+# ref out -- a thin, discoverable wrapper over 'git show <ref>:<path>'.
+# Usage: git-remote-show <ref>:<path>
+#
+# Examples:
+#   git-remote-show origin/feature/x:src/main.py
+#######################################
+git-remote-show() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  if [[ -z "$1" ]]; then
+    echo "Usage: git-remote-show <ref>:<path>" >&2
+    return 1
+  fi
+
+  git show "$1"
 }
 ```
 

@@ -70,7 +70,7 @@ jobs:
               echo "::error::TECHNICAL_REFERENCE.md documents '${name}' with no tracked definition"
               missing=1
             fi
-          done < <(grep -oP '^#### `\K[^`]+' .bash.d/docs/TECHNICAL_REFERENCE.md)
+          done < <(grep -oP '^#### `\K[^`]+' docs/TECHNICAL_REFERENCE.md)
           exit "$missing"
 
       - name: Verify Dockerfile (Hadolint)

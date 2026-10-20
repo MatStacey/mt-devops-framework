@@ -18,7 +18,7 @@ Shortcuts for common commands and CLI replacements.
 | `mci` | Dev: Maven - Clean and Install |
 | `pip-load` | Dev: Python - Install pip requirements |
 | `pip-save` | Dev: Python - Save pip requirements |
-| `ruff-fmt` | Dev: Python - Format Python files and imports using Ruff (recursive) |
+| `ruff-fmt` | Dev: Python - Format Python files and imports using Ruff (recursive, rewrites files; see ruff-check) |
 | `sh-fmt-all` | Dev: Shell - Format all shell scripts in current directory (recursive) |
 | `shfmtlw` | Dev: Shell - Format all shell scripts in current directory (recursive) (Alias) |
 | `venv-make` | Dev: Python - Create & active Python venv |
@@ -250,6 +250,7 @@ Complex bash functions, framework utilities, and automated workflows.
 ### GCP: Configuration & Authentication
 | Command | Description |
 |---|---|
+| `gcl-auth-check` | GCP: Check whether the active gcloud account has a usable token. Unlike |
 | `gcl-config` | GCP: List active configuration properties |
 | `gcl-export-vars` | GCP: Export PROJECT_ID and PROJECT_NUMBER env vars to shell |
 | `gcl-get` | GCP: Print an active gcloud configuration property |
@@ -275,6 +276,14 @@ Complex bash functions, framework utilities, and automated workflows.
 | `gcl-projects-list` | GCP: List projects, optionally filtered by name and/or parent folder |
 | `gcl-redis-describe` | GCP: Describe a single Memorystore Redis instance |
 | `gcl-run-describe` | GCP: Describe a single Cloud Run service |
+
+### GCP: Read-Only Inspection Wrappers
+| Command | Description |
+|---|---|
+| `gcl-bq-query` | GCP: Run a read-only BigQuery query. Only a single SELECT/WITH statement |
+| `gcl-gcs-summary` | GCP: Summarise a GCS location -- one line per immediate prefix with its |
+| `gcl-run-log-summary` | GCP: Count Cloud Run log lines by message template. Numbers, IDs, UUIDs, |
+| `gcl-wif-describe` | GCP: Describe a Workload Identity Pool and list its providers. Read-only. |
 
 ### GCP: Resources & Services
 | Command | Description |
@@ -314,6 +323,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | Command | Description |
 |---|---|
 | `google-fmt` | Formats Python, Shell, and Java source according to Google Style Guides. |
+| `ruff-check` | Dev: Python - Lint and format-check with Ruff without modifying any file. |
 
 ### Helm (Kubernetes Package Manager) Tools
 | Command | Description |
@@ -407,6 +417,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-apply` | System: Safely execute or write clipboard code without terminal paste truncation |
 | `mt-cmd-history` | System: Display history of executed framework commands |
 
+### Python Development Helpers
+| Command | Description |
+|---|---|
+| `uv-pytest` | Dev: Python - Run a uv project's pytest suite with coverage from the |
+
 ### Secrets Management
 | Command | Description |
 |---|---|
@@ -465,6 +480,11 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `terraform` | Terraform: Core wrapper (preserves args) |
 
+### Utilities: Authenticated HTTP Client
+| Command | Description |
+|---|---|
+| `mt-http` | HTTP: Make an authenticated HTTP request with curl. Credentials are passed |
+
 ### Utilities: Background Job Registry
 | Command | Description |
 |---|---|
@@ -482,15 +502,15 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-log` | System: Centralized logging for MyTools |
 | `mt-logs` | System: View, filter, and manage framework logs |
 
-### Utilities: HTML Structure Checker
-| Command | Description |
-|---|---|
-| `mt-html-check` | HTML: Validate a local HTML file for unbalanced tags and broken |
-
 ### Utilities: Framework Test Runner
 | Command | Description |
 |---|---|
 | `mt-test-all` | Testing: Run the framework's full test suite -- bats (tests/bash/) |
+
+### Utilities: HTML Structure Checker
+| Command | Description |
+|---|---|
+| `mt-html-check` | HTML: Validate a local HTML file for unbalanced tags and broken |
 
 ### Utilities: Temporary HTTP File Server
 | Command | Description |
@@ -498,6 +518,25 @@ Complex bash functions, framework utilities, and automated workflows.
 | `mt-http-server` | System: Host the current directory over a temporary HTTP server. Only |
 | `mt-serve` | Utilities: Host the current directory over a temporary HTTP server |
 | `mt-server-manager` | Utilities: Interactive menu to manage the single mt-http-server |
+
+### Version Control: Bitbucket Cloud API Helpers
+| Command | Description |
+|---|---|
+| `bb-pr` | Bitbucket: Show a pull request's metadata, diff, diffstat or comments |
+
+### Version Control: Bitbucket Pipelines, Environments and Variables
+| Command | Description |
+|---|---|
+| `bb-env` | Bitbucket: List or create deployment environments |
+| `bb-pipelines` | Bitbucket: List recent pipeline runs, show a run's steps, or print a |
+| `bb-var` | Bitbucket: List or add pipeline variables, repository-wide or per environment. |
+
+### Version Control: Confluence Cloud Read Helpers
+| Command | Description |
+|---|---|
+| `conf-folder` | Confluence: List a folder's direct children (pages, folders, ...) |
+| `conf-get` | Confluence: Read a page as plain text (or raw storage-format HTML) |
+| `conf-search` | Confluence: Search with a text term or a raw CQL query |
 
 ### Version Control (Git) - AI Workflows
 | Command | Description |
@@ -513,11 +552,12 @@ Complex bash functions, framework utilities, and automated workflows.
 | `git-clean-merged` | Git: Delete local and remote branches merged into the default branch |
 | `git-create-repo` | Git: Create a new GitHub repository for the current directory and wire |
 | `git-default-rebase` | Git: Fetch upstream origin and rebase current branch onto default branch |
+| `git-diff-all` | Git: Show every uncommitted change (staged, unstaged and untracked files) |
 | `git-new-feature` | Git: Create and checkout a new feature branch |
 | `git-nuke` | Git: Hard reset local branch to upstream state and wipe untracked files |
 | `git-pretty-log` | Git: Print a clean, color-coded, single-line log graph |
 | `git-push-all` | Git: Stage all files, commit with provided message, and push |
-| `git-raise-pr` | Git: Push current branch and raise a Pull Request (GitHub/GitLab/Bitbucket) |
+| `git-raise-pr` | Git: Push current branch and raise a Pull Request (GitHub/GitLab/Bitbucket). |
 | `git-review-prs` | Git: List the open pull requests for the current repo, or show the |
 | `git-review-start` | Git: Quick orientation for starting a code review -- current branch |
 | `git-view-remote` | Git: Open current repository remote URL in default web browser |

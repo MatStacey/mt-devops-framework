@@ -3,7 +3,7 @@
 # Bats: mt-suggest in .bash.d/03-mytools/10-backlog.sh
 # ------------------------------------------
 # mt-suggest is the framework's backlog-capture command (see
-# TEAM_INTEGRATION.md): file a workflow-gap issue against the
+# docs/TEAM_INTEGRATION.md): file a workflow-gap issue against the
 # framework's own repo from wherever the gap was actually noticed.
 # These tests cover only the fully-argument-given (non-interactive)
 # path -- the prompt fallbacks need a real controlling terminal

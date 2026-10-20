@@ -63,3 +63,14 @@ SRC
   run mt-dump -d "$export_dir" --private
   [ "$status" -eq 0 ]
 }
+
+@test "default output directory is docs/ in the repo checkout" {
+  mkdir -p "$BATS_TEST_TMPDIR/checkout/.git"
+  DOTFILES_DIR="$BATS_TEST_TMPDIR/checkout" run __mt_dump_default_dir
+  [ "$output" = "$BATS_TEST_TMPDIR/checkout/docs" ]
+}
+
+@test "default output directory falls back to ~/.bash.d/docs without a checkout" {
+  DOTFILES_DIR="" SYNC_REPO_DIR="" run __mt_dump_default_dir
+  [ "$output" = "$HOME/.bash.d/docs" ]
+}

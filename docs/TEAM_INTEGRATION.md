@@ -91,12 +91,12 @@ subagent quietly falls back to raw shell commands without anyone noticing.
    [open `workflow-gap` issues](https://github.com/MatStacey/mt-devops-framework/issues?q=is%3Aopen+label%3Aworkflow-gap)
    without needing anyone to stop and triage in the moment.
 3. **Triage** -- during the recurring self-audit (see
-   [CONTRIBUTING.md](CONTRIBUTING.md#recurring-self-audit), roughly
+   [CONTRIBUTING.md](../CONTRIBUTING.md#recurring-self-audit), roughly
    quarterly): close what's already been solved, promote genuinely
    valuable ones into properly scoped `bug`/`enhancement` issues, drop
    what turned out not to matter.
 4. **Build** -- prioritized issues get implemented the normal way (see
-   [CONTRIBUTING.md](CONTRIBUTING.md)), and the next time anyone hits that
+   [CONTRIBUTING.md](../CONTRIBUTING.md)), and the next time anyone hits that
    same gap, the framework already covers it.
 
 The loop only works if step 1 actually happens in the moment instead of

@@ -773,6 +773,23 @@ mt-status() {
 }
 
 #######################################
+# MyTools: Print the default output directory for mt-dump: docs/ inside the
+# framework repo checkout when there is one, otherwise ~/.bash.d/docs.
+# Globals:
+#   DOTFILES_DIR, SYNC_REPO_DIR
+# Outputs:
+#   Directory path on stdout
+#######################################
+__mt_dump_default_dir() {
+  local repo_dir="${DOTFILES_DIR:-${SYNC_REPO_DIR:-}}"
+  if [ -n "$repo_dir" ] && [ -d "$repo_dir/.git" ]; then
+    echo "$repo_dir/docs"
+  else
+    echo "$HOME/.bash.d/docs"
+  fi
+}
+
+#######################################
 # MyTools: Print mytools TSV rows whose source file is not under 40-private/ or lib/private/
 # Usage: __mt_dump_public_rows <tsv_file>
 # Arguments:
@@ -788,7 +805,8 @@ __mt_dump_public_rows() {
 # MyTools: Generate a detailed technical Markdown dump of all functions and aliases
 # Usage: mt-dump [OPTIONS]
 # Options:
-#   -d, --dir <path>       Specify export directory (default: ~/.bash.d/docs)
+#   -d, --dir <path>       Specify export directory (default: docs/ in the framework
+#                          repo checkout, else ~/.bash.d/docs)
 #   --internal             Include internal framework helper functions (starting with _ or __)
 #   --private              Deprecated alias for --internal
 #   -h, --help             Show this help menu
@@ -796,7 +814,8 @@ __mt_dump_public_rows() {
 #   Anything under 40-private/ or lib/private/ is never written to the output.
 #######################################
 mt-dump() {
-  local export_dir="$HOME/.bash.d/docs"
+  local export_dir
+  export_dir=$(__mt_dump_default_dir)
   local include_internal=false
 
   while [[ "$#" -gt 0 ]]; do
