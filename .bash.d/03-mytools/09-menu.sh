@@ -328,6 +328,9 @@ __mt_menu_tf_replace() { __mt_menu_prompt_arg "Terraform resource address" tf-re
 __mt_menu_tf_yaml() { __mt_menu_prompt_arg "YAML var file path" tf-yaml; }
 __mt_menu_conftest() { __mt_menu_prompt_arg "File(s) to test against policy/" mt-conftest; }
 __mt_menu_conftest_verify() { mt-conftest --verify; }
+__mt_menu_bb_pipelines() { bb-pipelines; }
+__mt_menu_bb_env() { bb-env list; }
+__mt_menu_bb_var() { bb-var list; }
 __mt_menu_bb_pr() { __mt_menu_prompt_arg "Bitbucket PR number" bb-pr; }
 __mt_menu_conf_get() { __mt_menu_prompt_arg "Confluence page ID or URL" conf-get; }
 __mt_menu_conf_search() { __mt_menu_prompt_arg "Confluence search text" conf-search; }
@@ -768,6 +771,9 @@ __mt_menu_git_repos() {
     "List Open Pull Requests (git-review-prs)" git-review-prs \
     "Diff All Uncommitted Changes incl. Untracked (git-diff-all)" git-diff-all \
     "Show Bitbucket Pull Request (bb-pr)" __mt_menu_bb_pr \
+    "List Bitbucket Pipeline Runs (bb-pipelines)" __mt_menu_bb_pipelines \
+    "List Bitbucket Environments (bb-env)" __mt_menu_bb_env \
+    "List Bitbucket Variables (bb-var)" __mt_menu_bb_var \
     "Read Confluence Page (conf-get)" __mt_menu_conf_get \
     "Search Confluence (conf-search)" __mt_menu_conf_search
 }

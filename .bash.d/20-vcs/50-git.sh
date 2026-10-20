@@ -696,6 +696,18 @@ ${pr_body}"
 
     __git_raise_pr_confirm_open_browser && __open_url "$pr_url"
   else
+    if [[ "$origin_url" == *bitbucket.org* ]]; then
+      local bitbucket_repo bitbucket_pr_url
+      echo -e "${CB_BLUE}🛠️  Creating Pull Request via Bitbucket API...${C_RESET}"
+      bitbucket_repo=$(__mt_bb_resolve_repo)
+      if bitbucket_pr_url=$(__mt_bb_create_pull_request "$bitbucket_repo" "$current_branch" "$target_branch" "$pr_title" "$pr_body") && [ -n "$bitbucket_pr_url" ]; then
+        echo -e "${CB_GREEN}✅ Pull Request ready:${C_RESET}"
+        echo "$bitbucket_pr_url"
+        __git_raise_pr_confirm_open_browser && __open_url "$bitbucket_pr_url"
+        return 0
+      fi
+      echo -e "${CB_YELLOW}⚠️  Bitbucket API request failed. Falling back to the browser...${C_RESET}"
+    fi
     echo -e "${CB_YELLOW}⚠️  'gh' CLI not found or using non-GitHub repository. Opening browser to create PR manually...${C_RESET}"
 
     local web_url="$origin_url"
@@ -723,7 +735,9 @@ ${pr_body}"
 }
 
 #######################################
-# Git: Push current branch and raise a Pull Request (GitHub/GitLab/Bitbucket)
+# Git: Push current branch and raise a Pull Request (GitHub/GitLab/Bitbucket).
+# GitHub uses the gh CLI; Bitbucket uses the API when credentials are set
+# (reusing an already-open PR for the branch); everything else opens the browser.
 # Usage: git-raise-pr [-b target_branch] [-t pr_title] [-m pr_body]
 # Options:
 #   -b <branch>   Target branch to merge into (defaults to default branch)
