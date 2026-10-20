@@ -10,7 +10,6 @@ GCL_LOG_DEFAULT_LIMIT=1000
 GCL_LOG_DEFAULT_FRESHNESS="1d"
 GCL_LOG_TEMPLATE_MAX_LENGTH=160
 GCL_LOG_TEMPLATE_SED="$HOME/.bash.d/lib/sed/log_template.sed"
-GCL_BQ_FORBIDDEN_KEYWORDS="INSERT|UPDATE|DELETE|MERGE|DROP|CREATE|ALTER|TRUNCATE|GRANT|REVOKE|CALL|EXPORT|LOAD|EXECUTE"
 
 #######################################
 # GCP: Verify the gcloud token is usable before a read-only call
@@ -38,10 +37,10 @@ __mt_gcl_report_failure() {
   err=$(__mt_strip_control_chars <<< "$2")
   if grep -qiE 'permission|access denied|forbidden|\b403\b' <<< "$err"; then
     permissions=$(grep -oE '[a-z]+(\.[a-zA-Z]+)+\.(create|get|list|use|update|delete|getIamPolicy)[A-Za-z]*' <<< "$err" | sort -u | paste -sd, -)
-    echo -e "${CB_RED}🚫 Permission denied for ${context}${permissions:+ (missing: ${permissions})} as $(gcl-get-user 2> /dev/null).${C_RESET}" >&2
+    printf '%b🚫 Permission denied for %s%s as %s.%b\n' "$CB_RED" "$context" "${permissions:+ (missing: ${permissions})}" "$(gcl-get-user 2> /dev/null)" "$C_RESET" >&2
     return "$GCL_EXIT_DENIED"
   fi
-  echo -e "${CB_RED}🚨 ${context} failed:${C_RESET} ${err}" >&2
+  printf '%b🚨 %s failed:%b %s\n' "$CB_RED" "$context" "$C_RESET" "$err" >&2
   return 1
 }
 
@@ -118,8 +117,10 @@ gcl-gcs-summary() {
 }
 
 #######################################
-# GCP: Count Cloud Run log lines by message template (numbers, IDs, emails
-# and quoted strings collapsed), without printing any payload.
+# GCP: Count Cloud Run log lines by message template. Numbers, IDs, UUIDs,
+# emails, URLs, long tokens and quoted strings are masked, but the remaining
+# text of each distinct template (first 160 characters) is printed, so treat
+# the output as log content, not as payload-free.
 # Usage: gcl-run-log-summary <service> [-p <project>] [--limit <n>] [--freshness <dur>] [--severity <level>]
 # Arguments:
 #   <service>              Cloud Run service name
@@ -203,11 +204,13 @@ gcl-run-log-summary() {
 
 #######################################
 # GCP: Run a read-only BigQuery query. Only a single SELECT/WITH statement
-# is accepted, and permission failures name the missing permission.
+# is accepted (the statement must start with the keyword and contain no
+# semicolon), and permission failures name the missing permission. For a
+# hard guarantee, run under an account limited to bigquery.dataViewer + jobUser.
 # Usage: gcl-bq-query [-p <project>] [--json] "<sql>"
 # Arguments:
-#   <sql>                A single SELECT or WITH statement (standard SQL) with no
-#                        comments or semicolons other than one trailing semicolon
+#   <sql>                A single SELECT or WITH statement (standard SQL); the only
+#                        semicolon allowed is one trailing semicolon
 # Options:
 #   -p, --project <id>   Project to run (and bill) the job in (default: the active gcloud project)
 #   --json               Print the result as JSON instead of a table
@@ -243,16 +246,12 @@ gcl-bq-query() {
   statement="${sql%"${sql##*[![:space:]]}"}"
   statement="${statement%;}"
   statement="${statement%"${statement##*[![:space:]]}"}"
-  if ! grep -qiE '^[[:space:]]*(select|with)[[:space:]]' <<< "$statement"; then
+  if [[ ! "$statement" =~ ^[[:space:]]*([Ss][Ee][Ll][Ee][Cc][Tt]|[Ww][Ii][Tt][Hh])([[:space:]]|\() ]]; then
     echo -e "${CB_RED}🚫 Only SELECT or WITH statements are allowed.${C_RESET}" >&2
     return 1
   fi
-  if [[ "$statement" == *\;* || "$statement" == *--* || "$statement" == *\#* || "$statement" == */\** ]]; then
-    echo -e "${CB_RED}🚫 Rejected: multiple statements or SQL comments (; -- # /*) are not allowed.${C_RESET}" >&2
-    return 1
-  fi
-  if grep -qiE "\\b(${GCL_BQ_FORBIDDEN_KEYWORDS})\\b" <<< "$statement"; then
-    echo -e "${CB_RED}🚫 Rejected: data-changing keyword (${GCL_BQ_FORBIDDEN_KEYWORDS//|/, }).${C_RESET}" >&2
+  if [[ "$statement" == *\;* ]]; then
+    echo -e "${CB_RED}🚫 Rejected: multiple statements (semicolon) are not allowed.${C_RESET}" >&2
     return 1
   fi
   __mt_gcl_preflight || return $?

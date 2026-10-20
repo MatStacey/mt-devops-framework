@@ -174,14 +174,15 @@ gcl-org-policies() {
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -p | --project)
-        project_id="$2"
-        shift 2
+        project_id="${2:-}"
+        shift
         ;;
       *)
         echo "Usage: gcl-org-policies [-p <project>]" >&2
         return 1
         ;;
     esac
+    shift
   done
   [ -z "$project_id" ] && project_id=$(gcl-get-project)
 

@@ -36,7 +36,7 @@ setup() {
     [ -n "${STUB_FAIL:-}" ] && return 4
     case "$last" in
       */pipelines/%7Bnosteps%7D/steps/\?*) echo '{"values":[]}' ;;
-      */steps/*/log) printf 'line1\nDB_PASSWORD=hunter2\nAuthorization: Bearer abc.def\nline4\x1b[31m\nline5\n' ;;
+      */steps/*/log) printf 'line1\nDB_PASSWORD=hunter2\nAuthorization: Bearer abc.def\nline4\x1b[31m\nline5\nexport API_TOKEN="q1w2"\npassword: '"'"'p3p4'"'"'\n{"password": "j5j6"}\n' ;;
       */steps/\?*) echo '{"values":[{"uuid":"{s1}","name":"Build","state":{"result":{"name":"SUCCESSFUL"}},"duration_in_seconds":12},{"uuid":"{s2}","name":"Deploy","state":{"result":{"name":"FAILED"}},"duration_in_seconds":30}]}' ;;
       */pipelines/42) echo '{"uuid":"{p1}","build_number":42}' ;;
       */pipelines/%7Bnosteps%7D) echo '{"state":{"name":"COMPLETED","result":{"name":"FAILED","error":{"message":"Step is empty"}}}}' ;;
@@ -78,13 +78,21 @@ setup() {
 }
 
 @test "step logs are redacted, tailed and stripped of control characters" {
-  run bb-pipelines -r ws/r 42 --log 2 --tail 4
+  run bb-pipelines -r ws/r 42 --log 2 --tail 7
   [[ "$output" != *hunter2* ]]
   [[ "$output" != *abc.def* ]]
   [[ "$output" != *line1* ]]
   [[ "$output" != *$'\033'* ]]
   [[ "$output" == *"DB_PASSWORD=***"* ]]
   [[ "$output" == *line5* ]]
+}
+
+@test "quoted and JSON-style secrets are redacted in step logs" {
+  run bb-pipelines -r ws/r 42 --log 2 --tail 10
+  [[ "$output" != *q1w2* ]]
+  [[ "$output" != *p3p4* ]]
+  [[ "$output" != *j5j6* ]]
+  [[ "$output" == *'API_TOKEN="***"'* ]]
 }
 
 @test "an unknown step number is an error" {

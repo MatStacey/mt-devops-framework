@@ -7,6 +7,8 @@
 MT_HTTP_EXIT_USAGE=2
 MT_HTTP_EXIT_TRANSPORT=3
 MT_HTTP_EXIT_STATUS=4
+MT_HTTP_CONNECT_TIMEOUT_SECONDS=10
+MT_HTTP_MAX_TIME_SECONDS=60
 MT_HTTP_ATLASSIAN_GATEWAY="https://api.atlassian.com/ex/confluence/<cloudId>"
 
 #######################################
@@ -23,6 +25,24 @@ __mt_http_redact() {
     [ -n "$secret" ] && text="${text//"$secret"/***}"
   done
   sed -E 's#(://)[^/@[:space:]]+@#\1***@#' <<< "$text" | __mt_strip_control_chars
+}
+
+#######################################
+# HTTP: Escape a value for a double-quoted curl config entry
+# Arguments:
+#   $1 - Raw value
+# Returns:
+#   0 and the escaped value on stdout; 1 if the value contains a newline or
+#   carriage return (which would let it inject extra config lines)
+#######################################
+__mt_http_config_escape() {
+  local value="$1"
+  if [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+    echo -e "${CB_RED}❌ Credentials must not contain newlines.${C_RESET}" >&2
+    return 1
+  fi
+  value="${value//\\/\\\\}"
+  echo "${value//\"/\\\"}"
 }
 
 #######################################
@@ -53,13 +73,14 @@ __mt_strip_control_chars() {
 #   -v, --verbose         Print method, redacted URL and status to stderr
 #   -h, --help            Show this help
 # Returns:
-#   0 on 2xx/3xx, 2 on bad usage, 3 on transport failure (DNS, TLS, timeout),
+#   0 on 2xx/3xx, 2 on bad usage, 3 on transport failure (DNS, TLS, timeout:
+#   10s connect, 60s total),
 #   4 on an HTTP 4xx/5xx response (status and body printed to stderr)
 # Outputs:
 #   Response body on stdout
 #######################################
 mt-http() {
-  local method="" body="" user="" bearer="" raw=false verbose=false url=""
+  local method="" body="" has_body=false user="" bearer="" raw=false verbose=false url=""
   local -a headers=() queries=()
 
   while [ "$#" -gt 0 ]; do
@@ -78,6 +99,7 @@ mt-http() {
         ;;
       -d | --data)
         body="${2:-}"
+        has_body=true
         shift
         ;;
       -q | --query)
@@ -111,13 +133,14 @@ mt-http() {
     echo -e "${CB_RED}❌ Use either --user or --bearer, not both.${C_RESET}" >&2
     return "$MT_HTTP_EXIT_USAGE"
   fi
-  if [ -n "$body" ] && [ "${#queries[@]}" -gt 0 ]; then
+  if [ "$has_body" = true ] && [ "${#queries[@]}" -gt 0 ]; then
     echo -e "${CB_RED}❌ --query cannot be combined with --data.${C_RESET}" >&2
     return "$MT_HTTP_EXIT_USAGE"
   fi
-  [ -z "$method" ] && { [ -n "$body" ] && method="POST" || method="GET"; }
+  [ -z "$method" ] && { [ "$has_body" = true ] && method="POST" || method="GET"; }
 
-  local -a curl_args=(--silent --show-error --location --request "$method" --config -)
+  local -a curl_args=(--silent --show-error --location --request "$method" --config -
+    --connect-timeout "$MT_HTTP_CONNECT_TIMEOUT_SECONDS" --max-time "$MT_HTTP_MAX_TIME_SECONDS")
   local header query
   for header in "${headers[@]}"; do
     curl_args+=(--header "$header")
@@ -128,11 +151,17 @@ mt-http() {
       curl_args+=(--data-urlencode "$query")
     done
   fi
-  [ -n "$body" ] && curl_args+=(--data-binary "$body")
+  [ "$has_body" = true ] && curl_args+=(--data-binary "$body")
 
-  local auth_config=""
-  [ -n "$user" ] && auth_config="user = \"${user//\"/\\\"}\""
-  [ -n "$bearer" ] && auth_config="header = \"Authorization: Bearer ${bearer//\"/\\\"}\""
+  local auth_config="" escaped_credential
+  if [ -n "$user" ]; then
+    escaped_credential=$(__mt_http_config_escape "$user") || return "$MT_HTTP_EXIT_USAGE"
+    auth_config="user = \"${escaped_credential}\""
+  fi
+  if [ -n "$bearer" ]; then
+    escaped_credential=$(__mt_http_config_escape "$bearer") || return "$MT_HTTP_EXIT_USAGE"
+    auth_config="header = \"Authorization: Bearer ${escaped_credential}\""
+  fi
 
   local work_dir body_file err_file status curl_rc=0
   work_dir=$(mktemp -d)

@@ -13,21 +13,18 @@ CONFLUENCE_TEXT_SCRIPT="$HOME/.bash.d/lib/python/confluence_text.py"
 __MT_CONFLUENCE_GATEWAY_URL=""
 
 #######################################
-# Confluence: Print the scoped-token gateway base URL for CONFLUENCE_SITE,
-# resolving the site's cloud ID once per shell. Scoped tokens return 401
-# against the site URL, so every request goes through this gateway.
+# Confluence: Resolve the scoped-token gateway base URL for CONFLUENCE_SITE
+# into __MT_CONFLUENCE_GATEWAY_URL, looking up the site's cloud ID once per
+# shell. Scoped tokens return 401 against the site URL, so every request goes
+# through this gateway. Must be called directly (not via command substitution)
+# so the cached value survives in the calling shell.
 # Returns:
 #   0 on success, 1 if CONFLUENCE_SITE is unset or the cloud ID lookup fails
 # Globals:
-#   CONFLUENCE_SITE, __MT_CONFLUENCE_GATEWAY_URL
-# Outputs:
-#   Gateway base URL on stdout
+#   CONFLUENCE_SITE, __MT_CONFLUENCE_GATEWAY_URL (written)
 #######################################
 __mt_conf_gateway() {
-  if [ -n "$__MT_CONFLUENCE_GATEWAY_URL" ]; then
-    echo "$__MT_CONFLUENCE_GATEWAY_URL"
-    return 0
-  fi
+  [ -n "$__MT_CONFLUENCE_GATEWAY_URL" ] && return 0
   if [ -z "${CONFLUENCE_SITE:-}" ]; then
     echo -e "${CB_RED}🚨 CONFLUENCE_SITE is not set (e.g. yourorg.atlassian.net). Add it to ~/secrets/secrets.sh.${C_RESET}" >&2
     return 1
@@ -41,7 +38,20 @@ __mt_conf_gateway() {
     return 1
   fi
   __MT_CONFLUENCE_GATEWAY_URL="${CONFLUENCE_GATEWAY_HOST}/${cloud_id}"
-  echo "$__MT_CONFLUENCE_GATEWAY_URL"
+}
+
+#######################################
+# Confluence: Check credentials and resolve the gateway in the caller's shell
+# so later requests (made inside command substitutions) reuse the cached URL.
+# Returns:
+#   0 when ready, 1 when credentials or CONFLUENCE_SITE are missing or the lookup fails
+#######################################
+__mt_conf_prepare() {
+  if [ -z "${CONFLUENCE_EMAIL:-}" ] || [ -z "${CONFLUENCE_API_TOKEN:-}" ]; then
+    echo -e "${CB_RED}🚨 CONFLUENCE_EMAIL / CONFLUENCE_API_TOKEN are not set in ~/secrets/secrets.sh.${C_RESET}" >&2
+    return 1
+  fi
+  __mt_conf_gateway
 }
 
 #######################################
@@ -56,15 +66,15 @@ __mt_conf_gateway() {
 #   CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN, SECRETS_MANAGER
 #######################################
 __mt_conf_api() {
-  local target="$1" gateway
+  local target="$1"
   shift
   if [ -z "${CONFLUENCE_EMAIL:-}" ] || [ -z "${CONFLUENCE_API_TOKEN:-}" ]; then
     echo -e "${CB_RED}🚨 CONFLUENCE_EMAIL / CONFLUENCE_API_TOKEN are not set in ~/secrets/secrets.sh.${C_RESET}" >&2
     return 1
   fi
   if [[ "$target" != https://* ]]; then
-    gateway=$(__mt_conf_gateway) || return 1
-    target="${gateway}${target}"
+    __mt_conf_gateway || return 1
+    target="${__MT_CONFLUENCE_GATEWAY_URL}${target}"
   fi
 
   local rc=0
@@ -130,6 +140,7 @@ conf-get() {
 
   local page_id page title body
   page_id=$(__mt_conf_extract_id "$target") || return 1
+  __mt_conf_prepare || return 1
   page=$(__mt_conf_api "/wiki/api/v2/pages/${page_id}" --raw -q "body-format=storage") || return $?
   title=$(jq -r '.title' <<< "$page")
   body=$(jq -r '.body.storage.value // ""' <<< "$page")
@@ -167,6 +178,7 @@ conf-folder() {
 
   local folder_id next page children="[]" pages=0
   folder_id=$(__mt_conf_extract_id "$1") || return 1
+  __mt_conf_prepare || return 1
   next="/wiki/api/v2/folders/${folder_id}/direct-children?limit=${CONFLUENCE_PAGE_LIMIT}"
 
   while [ -n "$next" ] && [ "$pages" -lt "$CONFLUENCE_MAX_PAGES" ]; do
@@ -175,6 +187,9 @@ conf-folder() {
     next=$(jq -r '._links.next // empty' <<< "$page")
     pages=$((pages + 1))
   done
+  if [ -n "$next" ]; then
+    echo -e "${CB_YELLOW}⚠️  Results truncated after ${CONFLUENCE_MAX_PAGES} pages.${C_RESET}" >&2
+  fi
   jq -r -f "$CONFLUENCE_JQ_DIR/conf_children.jq" <<< "$children" | __mt_strip_control_chars
 }
 
@@ -227,6 +242,7 @@ conf-search() {
   fi
 
   local result
+  __mt_conf_prepare || return 1
   result=$(__mt_conf_api "/wiki/rest/api/search" --raw -q "cql=${cql}" -q "limit=${CONFLUENCE_SEARCH_LIMIT}") || return $?
   jq -r -f "$CONFLUENCE_JQ_DIR/conf_search.jq" <<< "$result" | __mt_strip_control_chars
 }

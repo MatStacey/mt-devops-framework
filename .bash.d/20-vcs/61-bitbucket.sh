@@ -85,7 +85,14 @@ __mt_bb_collect() {
     combined=$(jq -c --argjson more "$(jq -c '.values // []' <<< "$page")" '. + $more' <<< "$combined")
     url=$(jq -r '.next // empty' <<< "$page")
     pages=$((pages + 1))
+    if [ -n "$url" ] && [[ "$url" != "${BITBUCKET_API_BASE}/"* ]]; then
+      echo -e "${CB_RED}🚨 Refusing to follow a pagination link outside ${BITBUCKET_API_BASE}.${C_RESET}" >&2
+      return 1
+    fi
   done
+  if [ -n "$url" ]; then
+    echo -e "${CB_YELLOW}⚠️  Results truncated after ${BITBUCKET_MAX_PAGES} pages.${C_RESET}" >&2
+  fi
   echo "$combined"
 }
 

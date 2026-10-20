@@ -104,6 +104,23 @@ setup() {
   [[ "$output" == *second* ]]
 }
 
+@test "pagination never follows a link to another host" {
+  # shellcheck disable=SC2317
+  mt-http() { echo '{"values":[{"id":1}],"next":"https://evil.example/steal"}'; }
+  run __mt_bb_collect "repositories/ws/r/pullrequests/9/comments"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"outside"* ]]
+}
+
+@test "hitting the page cap warns that results are truncated" {
+  # shellcheck disable=SC2034
+  BITBUCKET_MAX_PAGES=2
+  # shellcheck disable=SC2317
+  mt-http() { echo '{"values":[{"id":1}],"next":"https://api.bitbucket.org/2.0/more"}'; }
+  run __mt_bb_collect "repositories/ws/r/pullrequests/9/comments"
+  [[ "$output" == *"truncated after 2 pages"* ]]
+}
+
 @test "an API failure returns non-zero and does not record the secret" {
   STUB_FAIL=1 run bb-pr -r ws/r 9
   [ "$status" -eq 4 ]

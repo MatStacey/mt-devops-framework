@@ -28,6 +28,7 @@ STUB
   export STUB_ARGV="$BATS_TEST_TMPDIR/argv" STUB_STDIN="$BATS_TEST_TMPDIR/stdin"
   # shellcheck disable=SC1091
   source "$repo_root/.bash.d/02-utilities/39-http-client.sh"
+  # shellcheck disable=SC2317
   mt-help() { :; }
 }
 
@@ -133,4 +134,26 @@ STUB
   STUB_BODY=$'a\xc2\x01\x9bb \xc2\xc2\x9b\x9bc' run mt-http --raw https://example.test/x
   [[ "$output" != *$'\xc2\x9b'* ]]
   [[ "$output" == a* ]]
+}
+
+@test "backslashes and quotes in credentials are escaped for the curl config" {
+  run mt-http -u 'me:pa\ss"w' https://example.test/x
+  grep -qF 'user = "me:pa\\ss\"w"' "$STUB_STDIN"
+}
+
+@test "a credential containing a newline is refused instead of injecting config lines" {
+  run mt-http -b $'tok\nurl = "https://evil.test"' https://example.test/x
+  [ "$status" -eq 2 ]
+  [ ! -f "$STUB_ARGV" ]
+}
+
+@test "curl gets connect and total timeouts" {
+  run mt-http https://example.test/x
+  grep -qx -- "--connect-timeout" "$STUB_ARGV"
+  grep -qx -- "--max-time" "$STUB_ARGV"
+}
+
+@test "an empty body still makes the request a POST" {
+  run mt-http -d '' https://example.test/x
+  grep -qx "POST" "$STUB_ARGV"
 }

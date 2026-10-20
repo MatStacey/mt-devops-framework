@@ -92,6 +92,13 @@ setup() {
   [ "$(cat "$SECRETS_MANAGER.called")" = "touch CONFLUENCE_API_TOKEN" ]
 }
 
+@test "the cloud ID is looked up once, not on every request" {
+  conf-get 12345 > /dev/null
+  conf-get 12345 > /dev/null
+  conf-get 12345 > /dev/null
+  [ "$(grep -c tenant_info "$HTTP_LOG")" -eq 1 ]
+}
+
 @test "conf-folder follows pagination" {
   run conf-folder 99
   [[ "$output" == *$'page\t1\tFirst'* ]]
