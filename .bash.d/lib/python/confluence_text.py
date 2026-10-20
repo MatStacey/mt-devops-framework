@@ -26,6 +26,13 @@ PARAGRAPH_TAGS = frozenset(
 )
 HEADING_PREFIX = {f"h{level}": "#" * level + " " for level in range(1, 7)}
 CELL_TAGS = frozenset({"td", "th"})
+SUPPRESSED_TAGS = frozenset({"ac:parameter", "ac:task-id", "ac:task-status"})
+TASK_STATUS_TAG = "ac:task-status"
+TASK_DONE = "complete"
+CHECKBOX_DONE = "[x] "
+CHECKBOX_OPEN = "[ ] "
+CDATA_OPEN = "[CDATA["
+CDATA_CLOSE = "]]"
 CELL_SEPARATOR = " | "
 LIST_BULLET = "- "
 
@@ -37,43 +44,84 @@ class StorageTextExtractor(HTMLParser):
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
         self.cells_in_row = 0
+        self.cell_depth = 0
+        self.suppress_depth = 0
+        self.task_status = ""
+        self.in_task_status = False
+        self.trailing_newlines = 0
+
+    def _emit(self, text: str) -> None:
+        """Append text and track how many newlines the output now ends with."""
+        if not text:
+            return
+        self.parts.append(text)
+        stripped = text.rstrip("\n")
+        if stripped:
+            self.trailing_newlines = len(text) - len(stripped)
+        else:
+            self.trailing_newlines += len(text)
 
     def _ensure_breaks(self, count: int) -> None:
         """End the current line and leave `count` newlines in total at the tail."""
-        tail = "".join(self.parts[-3:])
-        trailing = len(tail) - len(tail.rstrip("\n"))
         if self.parts:
-            self.parts.append("\n" * max(0, count - trailing))
+            self._emit("\n" * max(0, count - self.trailing_newlines))
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in SUPPRESSED_TAGS:
+            self.suppress_depth += 1
+            if tag == TASK_STATUS_TAG:
+                self.task_status = ""
+                self.in_task_status = True
+            return
         if tag in PARAGRAPH_TAGS:
-            self._ensure_breaks(2)
+            if not self.cell_depth:
+                self._ensure_breaks(2)
         elif tag in LINE_TAGS:
             self._ensure_breaks(1)
         if tag in HEADING_PREFIX:
-            self.parts.append(HEADING_PREFIX[tag])
+            self._emit(HEADING_PREFIX[tag])
         elif tag == "li":
-            self.parts.append(LIST_BULLET)
+            self._emit(LIST_BULLET)
         elif tag == "tr":
             self.cells_in_row = 0
         elif tag in CELL_TAGS:
             if self.cells_in_row:
-                self.parts.append(CELL_SEPARATOR)
+                self._emit(CELL_SEPARATOR)
             self.cells_in_row += 1
+            self.cell_depth += 1
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in PARAGRAPH_TAGS:
-            self._ensure_breaks(2)
+        if tag in SUPPRESSED_TAGS:
+            self.suppress_depth = max(0, self.suppress_depth - 1)
+            if tag == TASK_STATUS_TAG:
+                self.in_task_status = False
+                done = self.task_status.strip() == TASK_DONE
+                self._emit(CHECKBOX_DONE if done else CHECKBOX_OPEN)
+            return
+        if tag in CELL_TAGS:
+            self.cell_depth = max(0, self.cell_depth - 1)
+        elif tag in PARAGRAPH_TAGS:
+            if not self.cell_depth:
+                self._ensure_breaks(2)
         elif tag in LINE_TAGS:
             self._ensure_breaks(1)
 
     def handle_data(self, data: str) -> None:
-        self.parts.append(data)
+        if self.suppress_depth:
+            if self.in_task_status:
+                self.task_status += data
+            return
+        self._emit(data)
 
     def unknown_decl(self, data: str) -> None:
         """Keep the content of CDATA sections (code macro bodies)."""
         if data.startswith("CDATA["):
-            self.parts.append(data[len("CDATA[") :])
+            self._emit(data[len("CDATA[") :])
+
+    def handle_comment(self, data: str) -> None:
+        """Newer CPython parses CDATA outside foreign content as a bogus comment."""
+        if data.startswith(CDATA_OPEN) and data.endswith(CDATA_CLOSE):
+            self._emit(data[len(CDATA_OPEN) : -len(CDATA_CLOSE)])
 
     def text(self) -> str:
         """Return the extracted text with trailing whitespace trimmed per line."""

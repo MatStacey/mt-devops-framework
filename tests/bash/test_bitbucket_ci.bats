@@ -35,8 +35,11 @@ setup() {
     done
     [ -n "${STUB_FAIL:-}" ] && return 4
     case "$last" in
-      */steps/*/log) printf 'line1\nDB_PASSWORD=hunter2\nAuthorization: Bearer abc.def\nline4\x1b[31m\nline5\n' ;;
+      */pipelines/%7Bnosteps%7D/steps/\?*) echo '{"values":[]}' ;;
+      */steps/*/log) printf 'line1\nDB_PASSWORD=hunter2\nAuthorization: Bearer abc.def\nline4\x1b[31m\nline5\nexport API_TOKEN="q1w2"\npassword: '"'"'p3p4'"'"'\n{"password": "j5j6"}\n' ;;
       */steps/\?*) echo '{"values":[{"uuid":"{s1}","name":"Build","state":{"result":{"name":"SUCCESSFUL"}},"duration_in_seconds":12},{"uuid":"{s2}","name":"Deploy","state":{"result":{"name":"FAILED"}},"duration_in_seconds":30}]}' ;;
+      */pipelines/42) echo '{"uuid":"{p1}","build_number":42}' ;;
+      */pipelines/%7Bnosteps%7D) echo '{"state":{"name":"COMPLETED","result":{"name":"FAILED","error":{"message":"Step is empty"}}}}' ;;
       */pipelines/) echo '{"values":[{"uuid":"{p1}","build_number":42,"state":{"result":{"name":"FAILED"}},"target":{"ref_name":"main"},"creator":{"display_name":"Al"},"created_on":"t"}]}' ;;
       */environments/\?*) echo '{"values":[{"uuid":"{e1}","name":"Staging","environment_type":{"name":"Staging"}}]}' ;;
       */variables\?*) echo '{"values":[{"uuid":"{v1}","key":"PLAIN","value":"visible","secured":false},{"uuid":"{v2}","key":"SECRET","secured":true}]}' ;;
@@ -66,7 +69,7 @@ setup() {
   run bb-pipelines -r ws/r 42
   [[ "$output" == *$'1\tSUCCESSFUL\tBuild\t12s\t{s1}'* ]]
   [[ "$output" == *$'2\tFAILED\tDeploy\t30s\t{s2}'* ]]
-  grep -q "q=build_number=42" "$HTTP_LOG"
+  grep -q "pipelines/42" "$HTTP_LOG"
 }
 
 @test "pipeline and step UUID braces are URL-encoded" {
@@ -75,13 +78,21 @@ setup() {
 }
 
 @test "step logs are redacted, tailed and stripped of control characters" {
-  run bb-pipelines -r ws/r 42 --log 2 --tail 4
+  run bb-pipelines -r ws/r 42 --log 2 --tail 7
   [[ "$output" != *hunter2* ]]
   [[ "$output" != *abc.def* ]]
   [[ "$output" != *line1* ]]
   [[ "$output" != *$'\033'* ]]
   [[ "$output" == *"DB_PASSWORD=***"* ]]
   [[ "$output" == *line5* ]]
+}
+
+@test "quoted and JSON-style secrets are redacted in step logs" {
+  run bb-pipelines -r ws/r 42 --log 2 --tail 10
+  [[ "$output" != *q1w2* ]]
+  [[ "$output" != *p3p4* ]]
+  [[ "$output" != *j5j6* ]]
+  [[ "$output" == *'API_TOKEN="***"'* ]]
 }
 
 @test "an unknown step number is an error" {
@@ -198,4 +209,11 @@ raise_pr_setup() {
   run __git_raise_pr_create_or_open
   [[ "$output" == *"API request failed"* ]]
   [[ "$(cat "$opened_log")" == *"bitbucket.org/ws/r/pull-requests/new?source=feat&dest=main"* ]]
+}
+
+@test "a pipeline with no steps reports its result and error instead of nothing" {
+  run bb-pipelines -r ws/r '{nosteps}'
+  [ "$status" -eq 0 ]
+  [[ "$output" == *FAILED* ]]
+  [[ "$output" == *"Step is empty"* ]]
 }

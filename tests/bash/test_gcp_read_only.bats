@@ -127,12 +127,19 @@ STUB
 }
 
 @test "bq query rejects data-changing and multi-statement SQL without calling bq" {
-  for sql in "DELETE FROM t WHERE 1=1" "SELECT 1; DROP TABLE t" "SELECT 1 UNION ALL SELECT 2; SELECT 3" "CREATE TABLE x AS SELECT 1" "INSERT INTO t SELECT 1" "SELECT '--', 1; DROP TABLE t" "SELECT 1 /* x */" "SELECT 1 # x" "SELECT 1 -- x" $'SELECT 1;\nSELECT 2'; do
+  for sql in "DELETE FROM t WHERE 1=1" "SELECT 1; DROP TABLE t" "SELECT 1 UNION ALL SELECT 2; SELECT 3" "CREATE TABLE x AS SELECT 1" "INSERT INTO t SELECT 1" "SELECT '--', 1; DROP TABLE t" $'SELECT 1;\nSELECT 2' $'UNDROP SCHEMA p.d\nselect 1' $'-- hi\nDROP TABLE t'; do
     run gcl-bq-query "$sql"
     [ "$status" -eq 1 ]
   done
   run grep -q "^bq " "$CALLS"
   [ "$status" -ne 0 ]
+}
+
+@test "bq query accepts multi-line SELECT/WITH and ordinary identifiers" {
+  for sql in $'SELECT\n  load, created FROM t' $'WITH\n a AS (SELECT 1)\nSELECT * FROM a' "SELECT 1 -- note" "select x from t where y LIKE '%#%'"; do
+    run gcl-bq-query "$sql"
+    [ "$status" -eq 0 ]
+  done
 }
 
 @test "bq permission failure names bigquery.jobs.create and returns 5" {
@@ -170,4 +177,17 @@ STUB
   run gcl-bq-query "SELECT 1 ;  "
   [ "$status" -eq 0 ]
   grep -qx "bq query --project_id=proj-1 --use_legacy_sql=false --format=pretty SELECT 1" "$CALLS"
+}
+
+@test "literal backslash escapes in error text are not expanded into control characters" {
+  run __mt_gcl_report_failure "ctx" 'name \033[2J and \e]0;x\a'
+  [[ "$output" != *$'\033'* ]]
+  [[ "$output" == *'\033[2J'* ]]
+}
+
+@test "log templates mask URLs and long tokens" {
+  run bash -c 'printf "%s\n" "GET https://x.example/a?k=abc fetched token QWxhZGRpbjpvcGVuIHNlc2FtZQ12345 ok" | sed -E -f "$1"' _ "$repo_root/.bash.d/lib/sed/log_template.sed"
+  [[ "$output" == *URL* ]]
+  [[ "$output" == *TOKEN* ]]
+  [[ "$output" != *QWxhZ* ]]
 }
