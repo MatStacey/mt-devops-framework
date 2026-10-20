@@ -487,6 +487,11 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `mt-html-check` | HTML: Validate a local HTML file for unbalanced tags and broken |
 
+### Utilities: Framework Test Runner
+| Command | Description |
+|---|---|
+| `mt-test-all` | Testing: Run the framework's full test suite -- bats (tests/bash/) |
+
 ### Utilities: Temporary HTTP File Server
 | Command | Description |
 |---|---|
