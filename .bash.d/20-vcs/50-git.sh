@@ -1463,3 +1463,55 @@ git-review-prs() {
   echo -e "${CB_BLUE}🔀 Open Pull Requests${C_RESET}"
   gh pr list
 }
+
+#######################################
+# Git: Show every uncommitted change (staged, unstaged and untracked files)
+# as one diff against HEAD. Uses a scratch copy of the index, so the real
+# index and working tree are never modified.
+# Usage: git-diff-all [--stat] [-- <pathspec>...]
+# Options:
+#   --stat       Show a diffstat instead of the full diff
+#   -h, --help   Show this help menu
+# Arguments:
+#   pathspec     Limit the diff to these paths
+# Returns:
+#   0 on success, 1 outside a git repository or on a git failure
+# Outputs:
+#   Unified diff (or diffstat) on STDOUT; untracked files honour .gitignore
+#######################################
+git-diff-all() {
+  local diff_flag=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      --stat) diff_flag="--stat" ;;
+      --)
+        shift
+        break
+        ;;
+      *) break ;;
+    esac
+    shift
+  done
+
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 Not inside a git repository.${C_RESET}"
+    return 1
+  fi
+
+  local scratch_index real_index base_ref rc=0
+  scratch_index=$(mktemp -u)
+  real_index=$(git rev-parse --git-path index)
+  [ -f "$real_index" ] && cp "$real_index" "$scratch_index"
+  base_ref=$(git rev-parse --verify --quiet HEAD || git hash-object -t tree /dev/null)
+
+  GIT_INDEX_FILE="$scratch_index" git ls-files --others --exclude-standard -z -- "$@" |
+    GIT_INDEX_FILE="$scratch_index" xargs -0 -r git add --intent-to-add --
+  GIT_INDEX_FILE="$scratch_index" git diff ${diff_flag:+"$diff_flag"} "$base_ref" -- "$@" || rc=1
+
+  rm -f "$scratch_index" "$scratch_index.lock"
+  return "$rc"
+}
