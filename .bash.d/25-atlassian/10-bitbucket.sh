@@ -2,7 +2,7 @@
 # ------------------------------------------
 # Version Control: Bitbucket Cloud API Helpers
 # ------------------------------------------
-# ~/.bash.d/20-vcs/61-bitbucket.sh
+# ~/.bash.d/25-atlassian/10-bitbucket.sh
 
 BITBUCKET_API_BASE="https://api.bitbucket.org/2.0"
 BITBUCKET_PAGE_LENGTH=100

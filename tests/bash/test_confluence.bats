@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # ------------------------------------------
-# Bats: Confluence helpers in .bash.d/20-vcs/62-confluence.sh
+# Bats: Confluence helpers in .bash.d/25-atlassian/20-confluence.sh
 # ------------------------------------------
 # mt-http is replaced by a function that logs its arguments and serves
 # fixtures chosen by URL, so no network or real credentials are used.
@@ -13,7 +13,7 @@ setup() {
   # shellcheck disable=SC1091
   source "$repo_root/.bash.d/02-utilities/39-http-client.sh"
   # shellcheck disable=SC1091
-  source "$repo_root/.bash.d/20-vcs/62-confluence.sh"
+  source "$repo_root/.bash.d/25-atlassian/20-confluence.sh"
   export CONFLUENCE_EMAIL="me@example.test" CONFLUENCE_API_TOKEN="tok-123" CONFLUENCE_SITE="acme.atlassian.net"
   SECRETS_MANAGER="$BATS_TEST_TMPDIR/secrets_stub.py"
   printf 'import sys\nopen(sys.argv[0] + ".called", "w").write(" ".join(sys.argv[1:]))\n' > "$SECRETS_MANAGER"

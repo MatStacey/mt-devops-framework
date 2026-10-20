@@ -44,7 +44,8 @@ find -L "$HOME/.bash.d" -type f -name "*.sh" ... | sort
 
 Since `find | sort` is plain lexical ordering, the numbered directory
 prefixes (`00-system/`, `01-ui/`, `02-utilities/`, `03-mytools/`, `10-infra/`,
-`20-vcs/`, `30-ai/`, `40-private/`) *are* the load order, not just a naming
+`20-vcs/`, `25-atlassian/`, `30-ai/`, `40-private/`) *are* the load order, not just a
+naming
 convention. `00-system/00-config.sh` runs first and exports the globals
 (`CONFIG_FILE`, `SECRETS_DIR`, colors aren't loaded yet at that point, etc.)
 that later files depend on -- if you add a new module, pick a number that

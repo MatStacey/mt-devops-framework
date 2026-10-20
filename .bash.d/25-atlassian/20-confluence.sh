@@ -2,7 +2,7 @@
 # ------------------------------------------
 # Version Control: Confluence Cloud Read Helpers
 # ------------------------------------------
-# ~/.bash.d/20-vcs/62-confluence.sh
+# ~/.bash.d/25-atlassian/20-confluence.sh
 
 CONFLUENCE_GATEWAY_HOST="https://api.atlassian.com/ex/confluence"
 CONFLUENCE_PAGE_LIMIT=50

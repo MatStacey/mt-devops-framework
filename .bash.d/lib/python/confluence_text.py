@@ -5,7 +5,7 @@ Confluence storage-format to plain-text converter for the MT DevOps Framework.
 Reads Confluence storage-format XHTML on stdin and prints readable plain
 text: headings, paragraphs, list items, table rows and code blocks keep
 their line structure, and macro bodies (ac:* / ri:* elements) contribute
-their text content. Backs conf-get (20-vcs/62-confluence.sh).
+their text content. Backs conf-get (25-atlassian/20-confluence.sh).
 
 Usage:
     confluence_text.py < storage.html
