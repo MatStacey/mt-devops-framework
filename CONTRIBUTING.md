@@ -111,3 +111,8 @@ the `workflow-gap` label (`gh issue list --label workflow-gap` or the
 [issue list itself](https://github.com/MatStacey/mt-devops-framework/issues?q=is%3Aopen+label%3Aworkflow-gap)):
 close anything already solved, promote real ones into properly scoped
 feature/bug issues, and fold the rest into whatever comes out of the audit.
+
+The output of such a pass belongs in [BACKLOG.md](BACKLOG.md) -- the current
+prioritised plan, with per-item resolution steps and the conventions an
+implementer (human or agent) needs. Update it as items land rather than
+letting it go stale alongside the issue list it was meant to tame.
