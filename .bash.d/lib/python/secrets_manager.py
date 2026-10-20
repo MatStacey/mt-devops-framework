@@ -24,7 +24,7 @@ Usage:
 
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import config_manager
 import yaml
@@ -82,7 +82,7 @@ def _today():
     plain dates (no time-of-day meaning), so UTC just gives a single,
     deterministic reference point rather than depending on the host's
     local timezone."""
-    return datetime.now(tz=timezone.utc).date()
+    return datetime.now(tz=UTC).date()
 
 
 def _is_configured(name):
@@ -101,7 +101,7 @@ def _expiry_status(expiry_str):
     if not expiry_str:
         return "none", None
     try:
-        expiry = datetime.strptime(expiry_str, "%Y-%m-%d").replace(tzinfo=timezone.utc).date()
+        expiry = datetime.strptime(expiry_str, "%Y-%m-%d").replace(tzinfo=UTC).date()
     except ValueError:
         return "none", None
     days = (expiry - _today()).days
