@@ -103,7 +103,8 @@ __mt_bb_collect() {
 # Returns:
 #   0 on success, 1 on bad usage or missing credentials, mt-http's code on API failure
 # Outputs:
-#   Summary, diff, diffstat or comments on stdout
+#   Summary, diff, diffstat or comments on stdout, with terminal control
+#   characters removed
 #######################################
 bb-pr() {
   local repo="" mode="summary" pr_number=""
@@ -140,16 +141,19 @@ bb-pr() {
   case "$mode" in
     summary)
       data=$(__mt_bb_api "$pr_path" --raw) || return $?
-      jq -r -f "$BITBUCKET_JQ_DIR/bb_pr_summary.jq" <<< "$data"
+      jq -r -f "$BITBUCKET_JQ_DIR/bb_pr_summary.jq" <<< "$data" | __mt_strip_control_chars
       ;;
-    diff) __mt_bb_api "${pr_path}/diff" --raw ;;
+    diff)
+      data=$(__mt_bb_api "${pr_path}/diff" --raw) || return $?
+      __mt_strip_control_chars <<< "$data"
+      ;;
     diffstat)
       data=$(__mt_bb_collect "${pr_path}/diffstat") || return $?
-      jq -r -f "$BITBUCKET_JQ_DIR/bb_pr_diffstat.jq" <<< "$data"
+      jq -r -f "$BITBUCKET_JQ_DIR/bb_pr_diffstat.jq" <<< "$data" | __mt_strip_control_chars
       ;;
     comments)
       data=$(__mt_bb_collect "${pr_path}/comments") || return $?
-      jq -r -f "$BITBUCKET_JQ_DIR/bb_pr_comments.jq" <<< "$data"
+      jq -r -f "$BITBUCKET_JQ_DIR/bb_pr_comments.jq" <<< "$data" | __mt_strip_control_chars
       ;;
   esac
 }

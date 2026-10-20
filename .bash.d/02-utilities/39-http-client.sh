@@ -26,6 +26,16 @@ __mt_http_redact() {
 }
 
 #######################################
+# HTTP: Strip terminal control characters (ESC, CR, NUL, ...) from stdin,
+# keeping tabs and newlines, so untrusted remote text cannot drive the terminal.
+# Outputs:
+#   Sanitised text on stdout
+#######################################
+__mt_strip_control_chars() {
+  LC_ALL=C tr -d '\000-\010\013-\037\177'
+}
+
+#######################################
 # HTTP: Make an authenticated HTTP request with curl. Credentials are passed
 # to curl on stdin (never argv) and masked from every message printed.
 # Usage: mt-http [OPTIONS] <url>

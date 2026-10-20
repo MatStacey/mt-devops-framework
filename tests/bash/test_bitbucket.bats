@@ -11,6 +11,8 @@ setup() {
   mkdir -p "$HOME/.bash.d"
   ln -s "$repo_root/.bash.d/lib" "$HOME/.bash.d/lib"
   # shellcheck disable=SC1091
+  source "$repo_root/.bash.d/02-utilities/39-http-client.sh"
+  # shellcheck disable=SC1091
   source "$repo_root/.bash.d/20-vcs/61-bitbucket.sh"
   export BITBUCKET_EMAIL="me@example.test" BITBUCKET_API_KEY="key-123"
   SECRETS_MANAGER="$BATS_TEST_TMPDIR/secrets_stub.py"
@@ -25,7 +27,7 @@ setup() {
     echo "$*" >> "$HTTP_LOG"
     [ -n "${STUB_FAIL:-}" ] && return 4
     case "$last" in
-      */diff) echo "diff --git a/f b/f" ;;
+      */diff) printf 'diff --git a/f b/f\n+\033]0;pwned\007evil\r\n' ;;
       */diffstat*) echo '{"values":[{"status":"modified","lines_added":3,"lines_removed":1,"new":{"path":"src/a.py"}}]}' ;;
       */comments*page=2*) echo '{"values":[{"id":2,"deleted":false,"user":{"display_name":"Bo"},"content":{"raw":"second"},"created_on":"t2"}]}' ;;
       */comments*) echo '{"values":[{"id":1,"deleted":false,"user":{"display_name":"Al"},"inline":{"path":"src/a.py","to":7},"content":{"raw":"first"},"created_on":"t1"}],"next":"https://api.bitbucket.org/2.0/repositories/ws/r/pullrequests/9/comments?page=2"}' ;;
@@ -111,4 +113,11 @@ setup() {
 @test "a non-numeric PR number is a usage error" {
   run bb-pr -r ws/r abc
   [ "$status" -eq 1 ]
+}
+
+@test "terminal control characters are stripped from diffs" {
+  run bb-pr -r ws/r --diff 9
+  [[ "$output" != *$'\033'* ]]
+  [[ "$output" != *$'\r'* ]]
+  [[ "$output" == *"evil"* ]]
 }
