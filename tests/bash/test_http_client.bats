@@ -113,6 +113,7 @@ STUB
 }
 
 @test "terminal control characters are stripped from error bodies and curl errors" {
+  # shellcheck disable=SC2034
   CB_RED="" CB_YELLOW="" C_RESET=""
   STUB_STATUS=500 STUB_BODY=$'bad\033]0;x\007\xc2\x9b31m body' run mt-http https://example.test/x
   [[ "$output" != *$'\033'* ]]
