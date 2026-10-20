@@ -1,13 +1,13 @@
 """Tests for lib/python/secrets_manager.py's pure status/config-check logic."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import secrets_manager
 
 
 def _date_str(days_from_today):
     return (
-        datetime.now(timezone.utc).date() + timedelta(days=days_from_today)
+        datetime.now(UTC).date() + timedelta(days=days_from_today)
     ).isoformat()
 
 
