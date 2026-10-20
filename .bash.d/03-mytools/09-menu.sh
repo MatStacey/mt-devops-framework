@@ -329,6 +329,7 @@ __mt_menu_tf_yaml() { __mt_menu_prompt_arg "YAML var file path" tf-yaml; }
 __mt_menu_conftest() { __mt_menu_prompt_arg "File(s) to test against policy/" mt-conftest; }
 __mt_menu_conftest_verify() { mt-conftest --verify; }
 __mt_menu_html_check() { __mt_menu_prompt_arg "HTML file path" mt-html-check; }
+__mt_menu_http() { __mt_menu_prompt_arg "URL to request" mt-http; }
 __mt_menu_grep_repos() { __mt_menu_prompt_arg "Pattern to search for across all repos" mt-grep-repos; }
 
 __mt_menu_docker_reboot() { __mt_menu_prompt_arg "Container or Compose project name" docker-reboot; }
@@ -883,7 +884,8 @@ __mt_menu_utilities_inspection() {
     "Audit VCS Root (mt-vcs-audit)" mt-vcs-audit \
     "Show Command History (mt-cmd-history)" mt-cmd-history \
     "Run/Save Clipboard Code (mt-apply)" mt-apply \
-    "Check HTML Tags & Anchors (mt-html-check)" __mt_menu_html_check
+    "Check HTML Tags & Anchors (mt-html-check)" __mt_menu_html_check \
+    "Make an HTTP Request (mt-http)" __mt_menu_http
 }
 
 #######################################
