@@ -30,13 +30,13 @@ import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 BITBUCKET_API = "https://api.bitbucket.org/2.0"
 
 
 def _today():
-    return datetime.now(tz=timezone.utc).date()
+    return datetime.now(tz=UTC).date()
 
 
 def _bitbucket_auth_header():
@@ -135,7 +135,7 @@ def _parse_from_date(value):
         sys.exit(1)
     day, month, year = cleaned[0:2], cleaned[2:4], cleaned[4:8]
     try:
-        return datetime(int(year), int(month), int(day), tzinfo=timezone.utc).date()
+        return datetime(int(year), int(month), int(day), tzinfo=UTC).date()
     except ValueError as e:
         print(f"clone_wizard.py: invalid --from-date '{value}': {e}", file=sys.stderr)
         sys.exit(1)
@@ -148,7 +148,7 @@ def _parse_year(value):
         print(f"clone_wizard.py: invalid --year '{value}' -- expected a 4-digit year", file=sys.stderr)
         sys.exit(1)
     try:
-        return datetime(year, 1, 1, tzinfo=timezone.utc).date()
+        return datetime(year, 1, 1, tzinfo=UTC).date()
     except ValueError as e:
         print(f"clone_wizard.py: invalid --year '{value}': {e}", file=sys.stderr)
         sys.exit(1)
