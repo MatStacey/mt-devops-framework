@@ -645,6 +645,7 @@ __mt_menu_gcp_project() {
     "List gcloud Config (gcl-config)" gcl-config \
     "Export Project Vars (gcl-export-vars)" gcl-export-vars \
     "Show Project Number (gcl-get-project-number)" gcl-get-project-number \
+    "Check gcloud Token (gcl-auth-check)" gcl-auth-check \
     "gcloud Auth Login (gcp-login)" gcp-login \
     "gcloud ADC Login (gcp-login-adc)" gcp-login-adc \
     "Update gcloud CLI (gcl-update)" gcl-update
