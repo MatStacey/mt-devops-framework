@@ -478,6 +478,7 @@ __mt_menu_setup_terminal() {
 __mt_menu_setup_maintenance() {
   __mt_menu_submenu "🔧 Maintenance & View" \
     "Run Diagnostics (mt-doctor)" mt-doctor \
+    "Run Full Test Suite (mt-test-all)" mt-test-all \
     "Reload Config + Refresh Caches (mt-hard-reload)" __mt_menu_hard_reload \
     "Reload Config from Disk (mt-load-config)" mt-load-config \
     "Clean Up Legacy config.yaml Keys (mt-migrate-config)" mt-migrate-config \
