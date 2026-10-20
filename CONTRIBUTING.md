@@ -9,14 +9,30 @@ a different concept from what's on this page.
 ## Getting a change into a PR
 
 If you already have the framework installed, the fastest path is its own
-tooling: edit files under `~/.bash.d/` (not the repo clone), then run
-`mt-push-update`. It formats, lints, commits, pushes to your fork, and opens
-the PR for you -- see the README section linked above if you haven't run
-`mt-become-collaborator` yet.
+tooling. On a machine cut over with `mt-migrate-symlink`, `~/.bash.d` *is* the
+repo checkout's `.bash.d/`, so edit there and run `mt-push-update`. On an older
+machine where `~/.bash.d` is a separate deployed copy, edit `~/.bash.d/` (not the
+repo clone) and `mt-push-update` syncs it across. Either way it formats, lints,
+commits, pushes to your fork, and opens the PR for you -- see the README section
+linked above if you haven't run `mt-become-collaborator` yet.
 
 If you don't have the framework installed, or you're changing something
 outside `.bash.d/` (`install.sh`, `.github/workflows/`, this file), just use
 a normal git workflow: fork, branch, commit, push, open a PR against `main`.
+
+## Repository layout
+
+| Path | Purpose |
+| --- | --- |
+| `.bash.d/` | The framework itself -- everything here is deployed to `~/.bash.d`. |
+| `docs/` | Longer-form documentation (`TEAM_INTEGRATION.md`) and the generated `TECHNICAL_REFERENCE.md`. |
+| `tests/` | `bats` suites for bash (`tests/bash/`) and `pytest` for Python (`tests/python/`). |
+| `COMMANDS.md` | Generated command index; kept at the repo root because the VS Code extension pack reads it from there. |
+| `install.sh`, `install-wizard.sh`, `.bashrc` | Installation entry points. |
+| `Dockerfile`, `.devcontainer/` | The Dev Container image and configuration. |
+
+`COMMANDS.md` and `docs/TECHNICAL_REFERENCE.md` are generated (`mt-push-update`
+and `mt-dump`) -- never edit them by hand.
 
 ## Module load order
 
@@ -69,6 +85,9 @@ python3 -m pytest tests/python/ -v
 bats tests/bash/
 ```
 
+`mt-test-all` runs the pytest and bats suites together (add `--lint` for
+`shellcheck`/`shfmt`/`ruff`) and prints one summary.
+
 `shellcheck`, `shfmt`, `ruff`, and `bats` are all in `dependencies.sh` --
 run `bootstrap` to install anything missing. If your platform's package
 manager doesn't ship a recent enough `bats`, vendor it locally instead of
@@ -112,7 +131,6 @@ the `workflow-gap` label (`gh issue list --label workflow-gap` or the
 close anything already solved, promote real ones into properly scoped
 feature/bug issues, and fold the rest into whatever comes out of the audit.
 
-The output of such a pass belongs in [BACKLOG.md](BACKLOG.md) -- the current
-prioritised plan, with per-item resolution steps and the conventions an
-implementer (human or agent) needs. Update it as items land rather than
-letting it go stale alongside the issue list it was meant to tame.
+Keep the triage in the issue tracker itself (labels and milestones) rather than
+in a checked-in plan file -- a document that mirrors the issue list goes stale
+the moment an issue changes.

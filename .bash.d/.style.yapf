@@ -1,5 +1,0 @@
-[style]
-based_on_style = google
-column_limit = 88
-spaces_before_comment = 2
-split_all_top_level_comma_separated_values = true

@@ -10,11 +10,14 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
-- Fixed the Dev Container's `install-vsix.sh` to also sideload the **MT DevOps Framework Companion** VS Code extension, not just the extension pack -- it had never been updated to install it since that extension was introduced. Refactored into a reusable `install_vsix` function so a failure installing one package no longer aborts the other.
-- Added `-j` / `--json` support to `mt-doctor` and `docker-ls` for structured, machine-readable JSON output.
-- Refactored `mt-doctor` internal check functions to aggregate diagnostic results via `jq` when running in JSON mode.
-- Added a subtle terminal-background warning (`mt-toggle-display --prod-bg-warning`) that tints the actual terminal background red whenever the active GCP project name looks like production, disabled by default.
-- Added `-e` / `--enhancement` flag to `mt-suggest` to explicitly mark suggestions as enhancements and bypass the interactive prompt.
+- Hardened the new Atlassian/GCP/HTTP commands after a code review and live runs: request timeouts and safer credential handling in `mt-http`, a tighter read-only guard for `gcl-bq-query`, fuller secret redaction in `bb-pipelines --log`, and Confluence table/macro conversion fixes. Option parsers across the framework no longer loop forever on a trailing flag with no value.
+- Added Bitbucket tooling: `bb-pr` (PR metadata, diff, diffstat, comments), `bb-pipelines` (runs, steps, redacted log tails), and `bb-env`/`bb-var` (deployment environments and pipeline variables). `git-raise-pr` now creates the pull request through the Bitbucket API instead of only opening a browser.
+- Added Confluence reading: `conf-get` (page as plain text), `conf-folder` and `conf-search`, via the scoped-token gateway.
+- Added read-only GCP wrappers: `gcl-gcs-summary`, `gcl-run-log-summary`, `gcl-bq-query` and `gcl-wif-describe`, plus `gcl-auth-check` (also reported by `mt-doctor`) to detect an expired gcloud login before a long task fails.
+- Added `mt-http`, an authenticated HTTP client that keeps credentials off the command line and out of every message.
+- Added developer helpers: `ruff-check` (read-only lint), `uv-pytest`, `git-diff-all` (tracked and untracked changes in one diff) and `mt-test-all`.
+- `mt-dump` no longer writes private (`40-private/`, `lib/private/`) commands into the generated reference; `--private` is now `--internal`. Documentation moved into a top-level `docs/` folder.
+- Added `-j` / `--json` support to `mt-doctor` and `docker-ls` for machine-readable output.
 
 ---
 
@@ -34,7 +37,7 @@ Before installing this terminal environment, ensure your local workstation meets
 * **Cross-Platform Compatibility:** Native OS detection dynamically maps clipboard (`pbcopy`, `clip.exe`), file explorer (`open`, `explorer.exe`), and package manager (`brew`, `apt`) utilities based on your host architecture.
 * **Zero-Lag Dynamic Prompt:** Real-time, color-coded Git status, Kubernetes context, and GCP project/account tracking optimized for minimal latency by prioritizing native file reads over subshells where possible. Includes OSC 8 clickable hyperlinking for Git branches and GCP consoles.
 * **Asynchronous Update Checks:** Silently checks for system package updates, as well as upstream terminal profile updates, in the background on a configurable TTL timer without blocking terminal initialization.
-* **Decoupled Python Configuration:** A dedicated standalone Python manager (`lib/python/config_manager.py`) reads `~/.bash.d/config/config.yaml` to dynamically inject customizable directory paths, model/provider settings, and remote repository URLs directly into the shell environment.
+* **Decoupled Python Configuration:** A dedicated standalone Python manager (`lib/python/config_manager.py`) reads `config.yaml` (in `${XDG_CONFIG_HOME:-~/.config}/mt-devops-framework/`) to dynamically inject customizable directory paths, model/provider settings, and remote repository URLs directly into the shell environment.
 * **Secrets Manager with Lifecycle Tracking:** API keys and tokens are never stored in `config.yaml`. They live in `~/secrets/secrets.sh` — a plain `export VAR="value"` file outside the dotfiles repo entirely, sourced automatically on shell startup. The interactive `mt-secrets` menu manages Gemini, Claude, Bitbucket, and Docker Hub credentials, tracking created/expiry/last-used dates per secret with color-coded expired/expiring/active status.
 * **Modular Theme Engine:** Color themes are fully externalized into standalone files under `~/.bash.d/config/themes/`, allowing custom aesthetic definitions and instant switching (`mt-set-theme`).
 * **Automated Bootstrapping:** Built-in `bootstrap` function automatically resolves and installs required APT/Homebrew packages, Python linters (`ruff`, `checkov`), formatters (`yapf`, `shfmt`), modern CLI binaries (`yq`, `eza`, `batcat`, `zoxide`), and heavier infrastructure tooling on demand -- Terraform, the Google Cloud CLI, `kubectl`, GitHub CLI, Ookla Speedtest, and Claude Code.
@@ -45,6 +48,10 @@ Before installing this terminal environment, ensure your local workstation meets
 * **AI-Powered VCS Insight:** `mt-radar` builds an AI- and heuristic-driven dashboard of every repo under `VCS_ROOT` -- auto-detecting CI/CD provider, build tool, test framework, and stack, plus an AI-generated one-line description -- browsable via a live fzf preview pane.
 * **Self-Healing Lifecycle Tooling:** `mt-doctor` gives a report-only health check (version drift, sync config, Git state); `mt-migrate-symlink` performs a one-time cutover to a single symlinked copy of the framework so `~/.bash.d` and the repo checkout can never drift apart; `mt-uninstall` offers a full, backup-first removal wizard.
 * **Ad Hoc Utilities:** `mt-http-server` serves a directory over HTTP with optional Basic Auth and a WSL LAN bridge (Windows portproxy + firewall rule); `mt-backup`/`mt-restore` handle zip/rar/tar archives; `mt-speedtest` wraps the Ookla CLI; and `mt-jobs` tracks every framework command that's been backgrounded.
+* **Atlassian Tooling:** `bb-pr`, `bb-pipelines`, `bb-env`/`bb-var` and a Bitbucket-aware `git-raise-pr` cover pull requests, pipeline runs/logs, deployment environments and variables from the terminal; `conf-get`, `conf-folder` and `conf-search` read Confluence pages and search spaces. Secured values and credentials are never printed. Required secrets are listed under [Secrets](#-secrets).
+* **Read-Only GCP Inspection:** `gcl-auth-check` (is my login still valid?), `gcl-gcs-summary`, `gcl-run-log-summary` (log lines counted by template), `gcl-bq-query` (single `SELECT`/`WITH` only) and `gcl-wif-describe`. Permission denials are reported as such, with the missing permission named.
+* **Authenticated HTTP:** `mt-http` is a curl-style client with basic/bearer auth, JSON pretty-printing, timeouts, and credential masking on every output path.
+* **Developer Workflow Helpers:** `mt-test-all` (bats + pytest, optional lint), `ruff-check`, `uv-pytest`, `git-diff-all`, `git-review-prs`, `mt-grep-repos`, `mt-conftest` and `mt-html-check`.
 * **Repo Scaffolding:** `mt-blueprint` bootstraps a new repository from templates, injecting a CI/CD pipeline that matches your configured `CICD_PROVIDER`.
 
 ---
@@ -115,7 +122,7 @@ mt-become-collaborator
 
 This forks the repository to your own GitHub account and points `mt-push-update` at your fork automatically, so your changes land as Pull Requests against the upstream repo instead of failing to push directly. It also offers to run `gh auth login` for you if the GitHub CLI isn't authenticated yet.
 
-To make a change: edit files under `~/.bash.d/` directly (not the repo clone at `~/vcs/personal/mt-devops-framework/` -- `mt-push-update` syncs one-way from `~/.bash.d/` into that repo, so edits belong in the former, not the latter), then run:
+To make a change: on a machine cut over with `mt-migrate-symlink` (check with `mt-doctor`), `~/.bash.d` is a symlink into the repo checkout, so edit either path -- there is only one copy. On an older machine where `~/.bash.d` is a separate deployed copy, edit `~/.bash.d/` directly and not the repo clone, because `mt-push-update` syncs one-way from `~/.bash.d/` into the repo. Then run:
 
 ```bash
 mt-push-update
@@ -147,24 +154,48 @@ When launched, the Dev Container automatically builds the base image, installs a
 
 ---
 
-## 📂 Directory Structure
+## 📂 Repository Structure
+
+| Path | Description |
+| --- | --- |
+| `.bash.d/` | The framework itself; deployed to `~/.bash.d`. Modules are loaded in directory-number order (see below). |
+| `docs/` | `TEAM_INTEGRATION.md` and the generated `TECHNICAL_REFERENCE.md`. |
+| `tests/` | `bats` suites for bash (`tests/bash/`) and `pytest` for Python (`tests/python/`). |
+| `COMMANDS.md` | Generated index of every alias and function (kept at the repo root for the VS Code extension pack). |
+| `install.sh`, `install-wizard.sh`, `.bashrc` | Installation entry points. |
+| `Dockerfile`, `.devcontainer/` | Dev Container image and configuration. |
+| `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE` | Contribution guide, vulnerability reporting policy, MIT license. |
+
+### Modules in `.bash.d/`
 
 | Module | Description |
 | --- | --- |
 | `00-system/` | OS detection, path definitions, package management, the `mt-setup` wizard, the `mt-secrets` credential manager (expiry/last-used tracking), async update checks, `mt-doctor` health diagnostics, and the `mt-uninstall` removal wizard. |
 | `01-ui/` | Color variables and the dynamic terminal prompt. |
-| `02-utilities/` | General purpose aliases, Docker handlers (including auto-versioned image build/tag/push to Google Artifact Registry and Docker Hub), path launchers, centralized `mt-log`, an ad hoc `mt-http-server` (with WSL LAN bridging and Basic Auth), `mt-backup`/`mt-restore` archive tooling, `mt-speedtest`, and the `mt-jobs` background job manager. |
-| `03-mytools/` | The core documentation engine, your LLM context extractors, the `mt-menu` interactive command center, and `mt-blueprint` repo scaffolding. |
-| `10-infra/` | GCP authentication/project switchers, concurrent Terraform validation plus AI-driven IAM analysis (`tf-ai-iam`), interactive Kubernetes tooling (context/GKE cluster switching, log tailing, guarded destructive ops), Helm release management, local Minikube cluster lifecycle tooling, and a Docker-to-Helm deploy bridge (`docker-deploy`) that runs freshly built images on whichever cluster -- GKE or minikube -- is currently active. |
-| `20-vcs/` | Git wrappers, AI-assisted feature-grouped commit automation (`git-ai-push-all`), profile syncing (including the one-time `mt-migrate-symlink` cutover), the AI/heuristic `mt-radar` insight dashboard, bulk repo cloning (`mt-clone`) and updating (`mt-bulk-update`), and web launching. |
+| `02-utilities/` | General purpose aliases, Docker handlers (including auto-versioned image build/tag/push to Google Artifact Registry and Docker Hub), path launchers, centralized `mt-log`, `mt-http-server` (with WSL LAN bridging and Basic Auth), `mt-http` (authenticated HTTP client), `mt-backup`/`mt-restore`, `mt-speedtest`, `mt-jobs`, `mt-test-all` and `mt-html-check`. |
+| `03-mytools/` | The core documentation engine, your LLM context extractors, the `mt-menu` interactive command center, `mt-blueprint` repo scaffolding, `mt-suggest` backlog capture, and Python helpers (`ruff-check`, `uv-pytest`). |
+| `10-infra/` | GCP authentication/project switchers (`gcl-auth-check`), read-only GCP inspection wrappers, concurrent Terraform validation plus AI-driven IAM analysis (`tf-ai-iam`), `mt-conftest`, interactive Kubernetes tooling, Helm release management, local Minikube lifecycle tooling, and a Docker-to-Helm deploy bridge (`docker-deploy`). |
+| `20-vcs/` | Git wrappers (including `git-diff-all`, `git-review-prs`, and a `git-raise-pr` that creates GitHub and Bitbucket PRs), AI-assisted commit automation (`git-ai-push-all`), profile syncing (including the one-time `mt-migrate-symlink` cutover), the `mt-radar` insight dashboard, bulk repo cloning/updating/searching, GCP project discovery and IAM advice, and the Bitbucket (`bb-*`) and Confluence (`conf-*`) helpers. |
 | `30-ai/` | API integrations for Google Gemini, Anthropic Claude, local OpenAI-compatible endpoints, and debugging tools (`mt-ai-debug`). |
-| `40-private/` | *(User-created, optional)* Local-only scripts, functions, and aliases -- sourced automatically like any other module, but excluded from `mt-push-update` sync and never overwritten by `mt-get-update`. |
-| `config/` | Core YAML files, AI configurations (`config/ai/`), secure `.env` caching, `.syncignore`, and themes (`config/themes/`). |
-| `lib/` | Categorized subdirectories for `awk/`, `python/`, and `windows/` helper scripts, alongside `templates/`. `lib/private/` *(user-created, optional)* mirrors `40-private/` for non-bash supporting assets. |
+| `40-private/` | *(User-created, optional)* Local-only scripts, functions, and aliases -- sourced automatically like any other module, but excluded from `mt-push-update` sync, from generated documentation, and never overwritten by `mt-get-update`. |
+| `config/` | Framework-shipped, git-tracked assets: AI configuration and prompts (`config/ai/`), export schemas, themes (`config/themes/`) and `dependencies.sh`. User settings live outside the tree, in `${XDG_CONFIG_HOME:-~/.config}/mt-devops-framework/`. |
+| `lib/` | Helper files by language -- `awk/`, `jq/`, `python/`, `sed/`, `windows/` -- plus `templates/`, `blueprints/` and `registry/`. `lib/private/` *(user-created, optional)* mirrors `40-private/` for non-bash supporting assets. |
 
-**Looking for a specific command?** [`COMMANDS.md`](COMMANDS.md) is a lean, auto-regenerated index of every alias and function (kept current by `mt-push-update`). [`.bash.d/docs/TECHNICAL_REFERENCE.md`](.bash.d/docs/TECHNICAL_REFERENCE.md) is the full generated reference with descriptions for everything, produced on demand by `mt-dump`.
+**Looking for a specific command?** [`COMMANDS.md`](COMMANDS.md) is a lean, auto-regenerated index of every alias and function (kept current by `mt-push-update`). [`docs/TECHNICAL_REFERENCE.md`](docs/TECHNICAL_REFERENCE.md) is the full generated reference with descriptions for everything, produced on demand by `mt-dump` (private modules are never included).
 
-**Rolling this out across a team?** [`TEAM_INTEGRATION.md`](TEAM_INTEGRATION.md) has a copy-paste `CLAUDE.md` instruction block for making this framework the default terminal tooling on every implementation project, plus the `mt-suggest` backlog loop for capturing workflow gaps as they're found instead of quietly working around them.
+**Rolling this out across a team?** [`docs/TEAM_INTEGRATION.md`](docs/TEAM_INTEGRATION.md) has a copy-paste `CLAUDE.md` instruction block for making this framework the default terminal tooling on every implementation project, plus the `mt-suggest` backlog loop for capturing workflow gaps as they're found instead of quietly working around them.
+
+---
+
+## 🔐 Secrets
+
+Credentials are plain `export` lines in `~/secrets/secrets.sh` (never in `config.yaml` or the repo). The `mt-add-*` commands write them for you and `mt-secrets` tracks expiry and last use.
+
+| Variable(s) | Used by | Set with |
+| --- | --- | --- |
+| `GEMINI_API_KEY`, `CLAUDE_API_KEY` | `ai`, AI-assisted commits and summaries | `mt-add-gemini-key`, `mt-add-claude-key` |
+| `BITBUCKET_EMAIL`, `BITBUCKET_API_KEY` | `bb-*`, `git-raise-pr`, `mt-clone` | `mt-add-bitbucket-secret` |
+| `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN`, `CONFLUENCE_SITE` (e.g. `yourorg.atlassian.net`) | `conf-*` | add the three `export` lines by hand |
 
 ---
 
