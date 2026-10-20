@@ -14,7 +14,7 @@ MT_HTTP_ATLASSIAN_GATEWAY="https://api.atlassian.com/ex/confluence/<cloudId>"
 # Arguments:
 #   $@ - Secret strings to mask
 # Outputs:
-#   Masked text on stdout
+#   Masked text on stdout, with terminal control characters removed
 #######################################
 __mt_http_redact() {
   local text secret
@@ -22,7 +22,18 @@ __mt_http_redact() {
   for secret in "$@"; do
     [ -n "$secret" ] && text="${text//"$secret"/***}"
   done
-  sed -E 's#(://)[^/@[:space:]]+@#\1***@#' <<< "$text"
+  sed -E 's#(://)[^/@[:space:]]+@#\1***@#' <<< "$text" | __mt_strip_control_chars
+}
+
+#######################################
+# HTTP: Strip terminal control characters (C0 including ESC and CR, DEL, and
+# the C1 range U+0080-U+009F) from stdin, keeping tabs and newlines, so
+# untrusted remote text cannot drive the terminal.
+# Outputs:
+#   Sanitised text on stdout
+#######################################
+__mt_strip_control_chars() {
+  perl -pe 's/[\x00-\x08\x0B-\x1F\x7F]//g; 1 while s/\xC2[\x80-\x9F]//g'
 }
 
 #######################################

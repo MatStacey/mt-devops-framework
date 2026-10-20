@@ -111,3 +111,26 @@ STUB
   run mt-http -d x -q a=b https://example.test/x
   [ "$status" -eq 2 ]
 }
+
+@test "terminal control characters are stripped from error bodies and curl errors" {
+  # shellcheck disable=SC2034
+  CB_RED="" CB_YELLOW="" C_RESET=""
+  STUB_STATUS=500 STUB_BODY=$'bad\033]0;x\007\xc2\x9b31m body' run mt-http https://example.test/x
+  [[ "$output" != *$'\033'* ]]
+  [[ "$output" != *$'\xc2\x9b'* ]]
+  [[ "$output" == *body* ]]
+  STUB_EXIT=6 STUB_ERR=$'dns \033[31mfail' run mt-http https://example.test/x
+  [[ "$output" != *$'\033'* ]]
+}
+
+@test "malformed UTF-8 in a response does not break output" {
+  STUB_BODY=$'ok \xff\xfe tail' run mt-http --raw https://example.test/x
+  [ "$status" -eq 0 ]
+  [[ "$output" == *tail* ]]
+}
+
+@test "control characters cannot be spliced into a C1 sequence" {
+  STUB_BODY=$'a\xc2\x01\x9bb \xc2\xc2\x9b\x9bc' run mt-http --raw https://example.test/x
+  [[ "$output" != *$'\xc2\x9b'* ]]
+  [[ "$output" == a* ]]
+}
