@@ -1225,6 +1225,127 @@ mt-repos-run() {
 }
 
 #######################################
+# Git: Search file contents and/or file names across every local repo
+# under VCS_ROOT, optionally narrowed to a scope/provider/workspace/
+# project -- a multi-repo replacement for hand-rolled 'grep -rIl' +
+# 'find' loops. Skips .git, node_modules, .terraform and virtualenvs.
+# Usage: mt-grep-repos [-s work|personal] [-p provider] [-w workspace]
+#                      [-pr project] [-g <glob>] [-l] [-N <name-glob>]
+#                      [<pattern>]
+# Arguments:
+#   <pattern>                     Extended regex to search file contents for
+# Options:
+#   -s, --scope <work|personal>   Only search repos under this scope
+#   -p, --provider <name>         Only search repos under this provider (work scope only)
+#   -w, --workspace <name>        Only search repos under this workspace (work scope only)
+#   -pr, --project <name>         Only search repos under this project (work scope) or this exact repo (personal scope)
+#   -g, --glob <glob>             Only search files whose name matches this glob (e.g. '*.tf')
+#   -l, --files-only              Print matching file paths only, not matching lines
+#   -N, --name <name-glob>        List files whose name matches this glob (no <pattern> needed)
+#   -h, --help                    Show this help
+# Globals:
+#   VCS_ROOT
+# Returns:
+#   0 if anything matched, 1 otherwise
+#######################################
+mt-grep-repos() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local scope="" provider="" workspace="" project="" glob="" name_glob="" files_only=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -s | --scope)
+        scope="${2,,}"
+        if [[ "$scope" != "work" && "$scope" != "personal" ]]; then
+          echo "mt-grep-repos: --scope must be 'work' or 'personal'" >&2
+          return 1
+        fi
+        shift 2
+        ;;
+      -p | --provider)
+        provider="$2"
+        shift 2
+        ;;
+      -w | --workspace)
+        workspace="$2"
+        shift 2
+        ;;
+      -pr | --project)
+        project="$2"
+        shift 2
+        ;;
+      -g | --glob)
+        glob="$2"
+        shift 2
+        ;;
+      -N | --name)
+        name_glob="$2"
+        shift 2
+        ;;
+      -l | --files-only)
+        files_only=1
+        shift
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  local pattern="${1:-}"
+  if [ -z "$pattern" ] && [ -z "$name_glob" ]; then
+    echo "Usage: mt-grep-repos [filters] [-g <glob>] [-l] [-N <name-glob>] [<pattern>]" >&2
+    return 1
+  fi
+
+  local search_dir="${VCS_ROOT:-$HOME/vcs}"
+  if [ ! -d "$search_dir" ]; then
+    echo -e "${CB_RED}🚨 Error: VCS root directory '$search_dir' not found.${C_RESET}"
+    return 1
+  fi
+
+  local -a prune_dirs=(.git node_modules .terraform .venv venv __pycache__)
+  local -a grep_args=(-rIE --color=never)
+  local prune_dir
+  for prune_dir in "${prune_dirs[@]}"; do
+    grep_args+=(--exclude-dir="$prune_dir")
+  done
+  [ -n "$glob" ] && grep_args+=(--include="$glob")
+  if [ "$files_only" -eq 1 ]; then
+    grep_args+=(-l)
+  else
+    grep_args+=(-n)
+  fi
+
+  local repo_path found=0
+  while IFS= read -r repo_path; do
+    [ -z "$repo_path" ] && continue
+    __mt_vcs_matches_filter "$repo_path" "$scope" "$provider" "$workspace" "$project" || continue
+    if [ -n "$name_glob" ]; then
+      local name_hits
+      name_hits=$(find "$repo_path" \( -name .git -o -name node_modules -o -name .terraform -o -name .venv -o -name venv -o -name __pycache__ \) -prune -o -type f -name "$name_glob" -print)
+      if [ -n "$name_hits" ]; then
+        echo "$name_hits"
+        found=1
+      fi
+    fi
+    if [ -n "$pattern" ]; then
+      local content_hits
+      content_hits=$(grep "${grep_args[@]}" -e "$pattern" "$repo_path" 2> /dev/null)
+      if [ -n "$content_hits" ]; then
+        echo "$content_hits"
+        found=1
+      fi
+    fi
+  done < <(__mt_vcs_find_repos "$search_dir")
+
+  [ "$found" -eq 1 ]
+}
+
+#######################################
 # Git: Quick orientation for starting a code review -- current branch
 # and uncommitted-file status plus a clean file tree, so there's no
 # need to fall back to raw 'git status' and 'find'/tree-clean's own eza
@@ -1263,4 +1384,82 @@ git-review-start() {
 
   echo -e "\n${CB_BLUE}🌳 File Tree (depth ${depth})${C_RESET}"
   eza --tree --level "$depth" -I ".git|node_modules|__pycache__|.terraform|venv|.venv|.mt_cache*|target"
+}
+
+#######################################
+# Git: List the open pull requests for the current repo, or show the
+# diff of one PR / the current branch against its base branch -- the
+# review companion to git-review-start.
+# Usage: git-review-prs [-n <pr>] [-b [<base>]] [-s]
+# Options:
+#   -n, --pr <number>    Show this pull request's diff (via gh)
+#   -b, --base <branch>  Show HEAD's diff against this branch (merge-base diff);
+#                        defaults to the repo's default branch when omitted
+#   -s, --stat           Show a diffstat instead of the full diff
+#   -h, --help           Show this help
+# With no -n or -b, lists open pull requests.
+# Returns:
+#   0 on success, 1 on usage errors or when not in a git repository
+#######################################
+git-review-prs() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local pr_number="" base_branch="" use_base=0 stat_only=0
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -n | --pr)
+        pr_number="$2"
+        shift 2
+        ;;
+      -b | --base)
+        use_base=1
+        if [ -n "${2:-}" ] && [[ "$2" != -* ]]; then
+          base_branch="$2"
+          shift
+        fi
+        shift
+        ;;
+      -s | --stat)
+        stat_only=1
+        shift
+        ;;
+      *)
+        echo "Usage: git-review-prs [-n <pr>] [-b [<base>]] [-s]" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if ! git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 Not inside a git repository.${C_RESET}"
+    return 1
+  fi
+
+  if [ -n "$pr_number" ]; then
+    if [ "$stat_only" -eq 1 ]; then
+      gh pr diff "$pr_number" --name-only
+    else
+      gh pr diff "$pr_number"
+    fi
+    return $?
+  fi
+
+  if [ "$use_base" -eq 1 ]; then
+    if [ -z "$base_branch" ]; then
+      base_branch=$(git symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null)
+      base_branch="${base_branch:-origin/main}"
+    fi
+    if [ "$stat_only" -eq 1 ]; then
+      git diff --stat "${base_branch}...HEAD"
+    else
+      git diff "${base_branch}...HEAD"
+    fi
+    return $?
+  fi
+
+  echo -e "${CB_BLUE}🔀 Open Pull Requests${C_RESET}"
+  gh pr list
 }
