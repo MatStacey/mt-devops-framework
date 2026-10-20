@@ -57,3 +57,41 @@ google-fmt() {
     echo "⚠️ 'google-java-format' not found. Run 'bootstrap' to install it."
   fi
 }
+
+#######################################
+# Dev: Python - Lint and format-check with Ruff without modifying any file.
+# Read-only counterpart of ruff-fmt.
+# Usage: ruff-check [paths...]
+# Arguments:
+#   paths        Files or directories to check (default: current directory)
+# Options:
+#   -h, --help   Show this help menu
+# Returns:
+#   0 if both checks pass, 1 if either reports problems, 127 if ruff is missing
+# Outputs:
+#   Ruff diagnostics on STDOUT
+#######################################
+ruff-check() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  if ! command -v ruff > /dev/null 2>&1; then
+    echo -e "${CB_RED}🚨 ruff is not installed.${C_RESET}"
+    return 127
+  fi
+
+  local -a targets=("$@")
+  [ "${#targets[@]}" -eq 0 ] && targets=(.)
+
+  local failed=0
+  ruff check "${targets[@]}" || failed=1
+  ruff format --check "${targets[@]}" || failed=1
+
+  if [ "$failed" -eq 1 ]; then
+    echo -e "${CB_RED}❌ Ruff found problems (nothing was modified; run ruff-fmt to fix).${C_RESET}"
+    return 1
+  fi
+  echo -e "${CB_GREEN}✅ Ruff lint and format checks passed.${C_RESET}"
+}
