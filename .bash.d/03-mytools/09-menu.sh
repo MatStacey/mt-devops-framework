@@ -328,6 +328,10 @@ __mt_menu_tf_replace() { __mt_menu_prompt_arg "Terraform resource address" tf-re
 __mt_menu_tf_yaml() { __mt_menu_prompt_arg "YAML var file path" tf-yaml; }
 __mt_menu_conftest() { __mt_menu_prompt_arg "File(s) to test against policy/" mt-conftest; }
 __mt_menu_conftest_verify() { mt-conftest --verify; }
+__mt_menu_gcs_summary() { __mt_menu_prompt_arg "GCS location (gs://bucket[/prefix])" gcl-gcs-summary; }
+__mt_menu_run_log_summary() { __mt_menu_prompt_arg "Cloud Run service name" gcl-run-log-summary; }
+__mt_menu_bq_query() { __mt_menu_prompt_arg "Read-only SQL (SELECT/WITH)" gcl-bq-query; }
+__mt_menu_wif_describe() { __mt_menu_prompt_arg "Workload Identity Pool ID" gcl-wif-describe; }
 __mt_menu_bb_pipelines() { bb-pipelines; }
 __mt_menu_bb_env() { bb-env list; }
 __mt_menu_bb_var() { bb-var list; }
@@ -652,6 +656,10 @@ __mt_menu_gcp_project() {
     "Export Project Vars (gcl-export-vars)" gcl-export-vars \
     "Show Project Number (gcl-get-project-number)" gcl-get-project-number \
     "Check gcloud Token (gcl-auth-check)" gcl-auth-check \
+    "Summarise GCS Prefixes (gcl-gcs-summary)" __mt_menu_gcs_summary \
+    "Summarise Cloud Run Logs (gcl-run-log-summary)" __mt_menu_run_log_summary \
+    "Run Read-Only BigQuery Query (gcl-bq-query)" __mt_menu_bq_query \
+    "Describe Workload Identity Pool (gcl-wif-describe)" __mt_menu_wif_describe \
     "gcloud Auth Login (gcp-login)" gcp-login \
     "gcloud ADC Login (gcp-login-adc)" gcp-login-adc \
     "Update gcloud CLI (gcl-update)" gcl-update
