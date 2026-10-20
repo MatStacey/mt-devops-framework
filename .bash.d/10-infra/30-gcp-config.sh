@@ -199,6 +199,60 @@ gcp-login() {
   gcloud auth login && gcloud auth application-default login
 }
 
+GCL_AUTH_EXIT_NO_ACCOUNT=1
+GCL_AUTH_EXIT_REAUTH=2
+GCL_AUTH_EXIT_NO_GCLOUD=3
+GCL_AUTH_EXIT_CHECK_FAILED=4
+
+#######################################
+# GCP: Check whether the active gcloud account has a usable token. Unlike
+# 'gcloud auth list' this detects accounts that need re-authentication.
+# Usage: gcl-auth-check [-q|--quiet]
+# Options:
+#   -q, --quiet   Print nothing, report through the exit code only
+#   -h, --help    Show this help menu
+# Returns:
+#   0 token valid, 1 no active account, 2 re-authentication required,
+#   3 gcloud not installed, 4 token check failed for another reason
+# Outputs:
+#   One status line (and the remedy on failure) unless --quiet
+#######################################
+gcl-auth-check() {
+  local quiet=false
+  case "${1:-}" in
+    -h | --help)
+      mt-help "${FUNCNAME[0]}"
+      return 0
+      ;;
+    -q | --quiet) quiet=true ;;
+  esac
+
+  local account err_output rc=0
+  if ! command -v gcloud > /dev/null 2>&1; then
+    [ "$quiet" = true ] || echo -e "${CB_RED}🚨 gcloud is not installed.${C_RESET}"
+    return "$GCL_AUTH_EXIT_NO_GCLOUD"
+  fi
+
+  account=$(gcloud auth list --filter=status:ACTIVE --format='value(account)' 2> /dev/null)
+  if [ -z "$account" ]; then
+    [ "$quiet" = true ] || echo -e "${CB_RED}🚨 No active gcloud account. Run 'gcp-login'.${C_RESET}"
+    return "$GCL_AUTH_EXIT_NO_ACCOUNT"
+  fi
+
+  err_output=$(CLOUDSDK_CORE_DISABLE_PROMPTS=1 gcloud auth print-access-token 2>&1 > /dev/null) || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    [ "$quiet" = true ] || echo -e "${CB_GREEN}✅ gcloud token for ${account} is valid.${C_RESET}"
+    return 0
+  fi
+
+  if [[ "$err_output" == *[Rr]eauth* || "$err_output" == *invalid_grant* ]]; then
+    [ "$quiet" = true ] || echo -e "${CB_YELLOW}⚠️  ${account} needs re-authentication. Run 'gcp-login'.${C_RESET}"
+    return "$GCL_AUTH_EXIT_REAUTH"
+  fi
+  [ "$quiet" = true ] || echo -e "${CB_RED}🚨 Token check failed for ${account}: ${err_output}${C_RESET}"
+  return "$GCL_AUTH_EXIT_CHECK_FAILED"
+}
+
 #######################################
 # GCP: Login to application default only
 #######################################

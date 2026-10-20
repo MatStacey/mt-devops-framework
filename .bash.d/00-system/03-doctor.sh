@@ -256,12 +256,34 @@ __mt_doctor_check_config_schema() {
 }
 
 #######################################
+# System: mt-doctor check -- whether the active gcloud account's token is
+# usable (valid / re-authentication required / no account).
+# Globals:
+#   __mt_doctor_issues (written, via __mt_doctor_line)
+#######################################
+__mt_doctor_check_gcloud_auth() {
+  __mt_doctor_section="gcloud_auth"
+  [ "${__mt_doctor_json:-false}" = "true" ] || echo -e "${CB_BLUE}☁️  gcloud Authentication${C_RESET}"
+
+  local rc=0
+  gcl-auth-check --quiet || rc=$?
+  case "$rc" in
+    0) __mt_doctor_line OK "Active gcloud token is valid." ;;
+    "$GCL_AUTH_EXIT_NO_ACCOUNT") __mt_doctor_line WARN "No active gcloud account. Run 'gcp-login'." ;;
+    "$GCL_AUTH_EXIT_REAUTH") __mt_doctor_line WARN "gcloud account needs re-authentication. Run 'gcp-login'." ;;
+    "$GCL_AUTH_EXIT_NO_GCLOUD") __mt_doctor_line SKIP "gcloud not installed." ;;
+    *) __mt_doctor_line WARN "gcloud token check failed (exit ${rc}). Run 'gcl-auth-check' for details." ;;
+  esac
+}
+
+#######################################
 # System: Diagnostic health-check for the framework's environment --
 # framework version, sync configuration (SYNC_REPO_URL, gh auth, clone
 # state), the sync repo's git state (stuck branches, open/stale PRs, an
 # in-progress merge, uncommitted changes), config.yaml schema drift, and
 # whether the active AI provider's configured model is still listed by
-# that provider's API. Report-only: never modifies anything, just names
+# that provider's API, and whether the active gcloud token is usable.
+# Report-only: never modifies anything, just names
 # the command that would fix each issue found (mt-get-update,
 # mt-push-update, mt-migrate-config, gh auth login, mt-set-claude-model /
 # mt-set-gemini-model, ...).
@@ -303,6 +325,8 @@ mt-doctor() {
   __mt_doctor_check_config_schema
   [ "$__mt_doctor_json" = "true" ] || echo
   __mt_doctor_check_ai_model
+  [ "$__mt_doctor_json" = "true" ] || echo
+  __mt_doctor_check_gcloud_auth
 
   if [ "$__mt_doctor_json" = "true" ]; then
     printf '%s\n' "${__mt_doctor_results[@]}" | jq -s --argjson issues "$__mt_doctor_issues" '{issues: $issues, checks: .}'
