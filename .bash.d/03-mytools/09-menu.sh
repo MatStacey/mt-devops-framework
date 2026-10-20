@@ -645,6 +645,7 @@ __mt_menu_gcp_project() {
     "List gcloud Config (gcl-config)" gcl-config \
     "Export Project Vars (gcl-export-vars)" gcl-export-vars \
     "Show Project Number (gcl-get-project-number)" gcl-get-project-number \
+    "Check gcloud Token (gcl-auth-check)" gcl-auth-check \
     "gcloud Auth Login (gcp-login)" gcp-login \
     "gcloud ADC Login (gcp-login-adc)" gcp-login-adc \
     "Update gcloud CLI (gcl-update)" gcl-update
@@ -846,6 +847,7 @@ __mt_menu_utilities_scaffolding() {
     "Format Code to Google Style (google-fmt)" google-fmt \
     "Format Python with Ruff (ruff-fmt)" __mt_menu_ruff_fmt \
     "Run uv Project Tests with Coverage (uv-pytest)" uv-pytest \
+    "Check Python with Ruff, read-only (ruff-check)" ruff-check \
     "Format Shell Scripts (sh-fmt-all)" __mt_menu_sh_fmt_all
 }
 
