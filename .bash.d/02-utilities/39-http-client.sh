@@ -123,18 +123,20 @@ mt-http() {
   [ -n "$user" ] && auth_config="user = \"${user//\"/\\\"}\""
   [ -n "$bearer" ] && auth_config="header = \"Authorization: Bearer ${bearer//\"/\\\"}\""
 
-  local body_file status curl_rc=0
-  body_file=$(mktemp)
+  local work_dir body_file err_file status curl_rc=0
+  work_dir=$(mktemp -d)
+  body_file="$work_dir/body"
+  err_file="$work_dir/err"
   local -a secrets=("$user" "$bearer" "${user#*:}")
 
   [ "$verbose" = true ] && echo -e "${CB_BLUE}🌐 ${method} $(__mt_http_redact "${secrets[@]}" <<< "$url")${C_RESET}" >&2
 
-  status=$(printf '%s\n' "$auth_config" | curl "${curl_args[@]}" --output "$body_file" --write-out '%{http_code}' -- "$url" 2> "$body_file.err") || curl_rc=$?
+  status=$(printf '%s\n' "$auth_config" | curl "${curl_args[@]}" --output "$body_file" --write-out '%{http_code}' -- "$url" 2> "$err_file") || curl_rc=$?
 
   if [ "$curl_rc" -ne 0 ]; then
     echo -e "${CB_RED}🚨 Request failed before a response was received (curl exit ${curl_rc}):${C_RESET}" >&2
-    __mt_http_redact "${secrets[@]}" < "$body_file.err" >&2
-    rm -f "$body_file" "$body_file.err"
+    __mt_http_redact "${secrets[@]}" < "$err_file" >&2
+    rm -rf "$work_dir"
     return "$MT_HTTP_EXIT_TRANSPORT"
   fi
   [ "$verbose" = true ] && echo -e "${CB_BLUE}↩️  HTTP ${status}${C_RESET}" >&2
@@ -153,7 +155,7 @@ mt-http() {
   else
     __mt_http_redact "${secrets[@]}" < "$body_file" >&"$out_stream"
   fi
-  rm -f "$body_file" "$body_file.err"
+  rm -rf "$work_dir"
   return "$rc"
 }
 
