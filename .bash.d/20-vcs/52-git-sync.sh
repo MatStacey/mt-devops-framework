@@ -662,7 +662,7 @@ mt-push-update() {
     case "$1" in
       -i | --issue)
         issue_num="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -s | --shellcheck)
         run_shellcheck=true
@@ -1094,7 +1094,7 @@ mt-get-update() {
     case "$1" in
       -v)
         target_version="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -V | --verbose)
         verbose=true

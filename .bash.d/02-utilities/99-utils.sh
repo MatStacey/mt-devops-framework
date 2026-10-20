@@ -72,7 +72,7 @@ mt-alias() {
     case "$1" in
       -u | --update)
         update_name="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -i | --interactive)
         interactive=true

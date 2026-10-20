@@ -27,7 +27,7 @@ git-remote-diff() {
     echo "Usage: git-remote-diff <refA> <refB> [-- <path>...]" >&2
     return 1
   fi
-  shift 2
+  shift 2 || shift
 
   git diff "${ref_a}...${ref_b}" "$@"
 }
