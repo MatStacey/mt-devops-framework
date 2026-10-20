@@ -34,7 +34,8 @@ __mt_gcl_preflight() {
 #   GCL_EXIT_DENIED for a permission denial, 1 otherwise
 #######################################
 __mt_gcl_report_failure() {
-  local context="$1" err="$2" permissions
+  local context="$1" err permissions
+  err=$(__mt_strip_control_chars <<< "$2")
   if grep -qiE 'permission|access denied|forbidden|\b403\b' <<< "$err"; then
     permissions=$(grep -oE '[a-z]+(\.[a-zA-Z]+)+\.(create|get|list|use|update|delete|getIamPolicy)[A-Za-z]*' <<< "$err" | sort -u | paste -sd, -)
     echo -e "${CB_RED}🚫 Permission denied for ${context}${permissions:+ (missing: ${permissions})} as $(gcl-get-user 2> /dev/null).${C_RESET}" >&2
@@ -95,7 +96,7 @@ gcl-gcs-summary() {
   fi
   rm -f "$err_file"
 
-  local entry objects size shown=0 top_level=0
+  local entry objects size shown=0 top_level=0 report=""
   while IFS= read -r entry; do
     [ -z "$entry" ] && continue
     if [[ "$entry" != */ ]]; then
@@ -108,10 +109,11 @@ gcl-gcs-summary() {
     fi
     objects=$(gcloud storage ls "${entry}**" 2> /dev/null | grep -vc '/$')
     size=$(gcloud storage du --summarize "$entry" 2> /dev/null | awk '{print $1}')
-    printf '%s\t%s\t%s\n' "${entry#"$location"}" "$objects" "$(numfmt --to=iec "${size:-0}" 2> /dev/null || echo "${size:-0}")"
+    report+=$(printf '%s\t%s\t%s' "${entry#"$location"}" "$objects" "$(numfmt --to=iec "${size:-0}" 2> /dev/null || echo "${size:-0}")")$'\n'
     shown=$((shown + 1))
   done <<< "$listing"
-  [ "$top_level" -gt 0 ] && printf '%s\t%s\t%s\n' "(top-level objects)" "$top_level" "-"
+  [ "$top_level" -gt 0 ] && report+=$(printf '%s\t%s\t%s' "(top-level objects)" "$top_level" "-")$'\n'
+  printf '%s' "$report" | __mt_strip_control_chars
   return 0
 }
 
@@ -259,7 +261,7 @@ gcl-bq-query() {
     return "$rc"
   fi
   rm -f "$err_file"
-  echo "$result"
+  __mt_strip_control_chars <<< "$result"
 }
 
 #######################################
@@ -307,13 +309,14 @@ gcl-wif-describe() {
   __mt_gcl_preflight || return $?
   [ -z "$project" ] && project=$(gcl-get-project)
 
-  local err_file rc=0
+  local err_file output rc=0
   err_file=$(mktemp)
-  gcloud iam workload-identity-pools describe "$pool" --location="$location" --project="$project" --quiet 2> "$err_file" || rc=$?
+  output=$(gcloud iam workload-identity-pools describe "$pool" --location="$location" --project="$project" --quiet 2> "$err_file") || rc=$?
   if [ "$rc" -eq 0 ]; then
-    echo -e "\n${CB_BLUE}Providers${C_RESET}"
-    gcloud iam workload-identity-pools providers list --workload-identity-pool="$pool" --location="$location" --project="$project" --quiet 2> "$err_file" || rc=$?
+    output+=$'\n\nProviders\n'
+    output+=$(gcloud iam workload-identity-pools providers list --workload-identity-pool="$pool" --location="$location" --project="$project" --quiet 2> "$err_file") || rc=$?
   fi
+  [ "$rc" -eq 0 ] && __mt_strip_control_chars <<< "$output"
   if [ "$rc" -ne 0 ]; then
     __mt_gcl_report_failure "describing pool ${pool}" "$(cat "$err_file")"
     rc=$?

@@ -31,12 +31,12 @@ case "$1 $2" in
     case "$3" in
       gs://b/pack/\*\*) printf 'gs://b/pack/a.json\ngs://b/pack/b.json\ngs://b/pack/sub/\n' ;;
       gs://b/mods/\*\*) printf 'gs://b/mods/x.json\n' ;;
-      gs://b/) printf 'gs://b/pack/\ngs://b/mods/\ngs://b/readme.txt\n' ;;
+      gs://b/) printf 'gs://b/pack/\ngs://b/mods/\ngs://b/readme.txt\ngs://b/evil\033]0;pwn\007\302\233x/\n' ;;
     esac ;;
   "storage du") case "$4" in */pack/) echo "2048  gs://b/pack/" ;; *) echo "1024  gs://b/mods/" ;; esac ;;
   "logging read")
     printf 'Pack 12 failed for user a@b.com\nPack 99 failed for user c@d.org\nPack 7 failed for user e@f.io\nStarted request id 3f2a1b9c-1111-2222-3333-444455556666\n\n' ;;
-  "iam workload-identity-pools") echo "name: pool-x" ;;
+  "iam workload-identity-pools") printf 'name: pool-x\033[31m\n' ;;
 esac
 STUB
   cat > "$BATS_TEST_TMPDIR/bin/bq" << 'STUB'
@@ -150,4 +150,18 @@ STUB
 @test "wif describe reports a permission denial" {
   STUB_DENY=1 run gcl-wif-describe pool-x
   [ "$status" -eq 5 ]
+}
+
+@test "terminal control characters never reach the output" {
+  run gcl-gcs-summary gs://b
+  [[ "$output" != *$'\033'* ]]
+  [[ "$output" != *$'\a'* ]]
+  [[ "$output" != *$'\xc2\x9b'* ]]
+  run gcl-wif-describe pool-x
+  [[ "$output" != *$'\033'* ]]
+}
+
+@test "control characters in error text are stripped" {
+  run __mt_gcl_report_failure "ctx" $'boom \033[31m bad'
+  [[ "$output" != *$'\033'* ]]
 }
