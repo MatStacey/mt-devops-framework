@@ -54,6 +54,12 @@ SUPPORTED_SECRETS = {
         "add_command": "mt-add-bitbucket-secret",
         "paired_with": "BITBUCKET_EMAIL",
     },
+    "CONFLUENCE_API_TOKEN": {
+        "system": "Atlassian Confluence",
+        "description": "Reading pages and searching spaces (conf-get, conf-folder, conf-search)",
+        "add_command": "mt-add-confluence-secret",
+        "paired_with": "CONFLUENCE_EMAIL",
+    },
     "DOCKERHUB_TOKEN": {
         "system": "Docker Hub",
         "description": "Image pushes (docker-push, docker-release, docker-deploy)",

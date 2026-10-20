@@ -427,6 +427,7 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `mt-add-bitbucket-secret` | System: Interactively add or update your Bitbucket API token, paired |
 | `mt-add-claude-key` | AI: Interactively add or update your Claude API key |
+| `mt-add-confluence-secret` | System: Interactively add or update your Confluence Cloud credentials: the |
 | `mt-add-dockerhub-secret` | System: Interactively add or update your Docker Hub credentials, |
 | `mt-add-gemini-key` | AI: Interactively add or update your Gemini API key |
 | `mt-add-nvd-key` | Repo: Interactively add or update your NVD (National Vulnerability |

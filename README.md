@@ -196,7 +196,7 @@ Credentials are plain `export` lines in `~/secrets/secrets.sh` (never in `config
 | --- | --- | --- |
 | `GEMINI_API_KEY`, `CLAUDE_API_KEY` | `ai`, AI-assisted commits and summaries | `mt-add-gemini-key`, `mt-add-claude-key` |
 | `BITBUCKET_EMAIL`, `BITBUCKET_API_KEY` | `bb-*`, `git-raise-pr`, `mt-clone` | `mt-add-bitbucket-secret` |
-| `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN`, `CONFLUENCE_SITE` (e.g. `yourorg.atlassian.net`) | `conf-*` | add the three `export` lines by hand |
+| `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN`, `CONFLUENCE_SITE` (e.g. `yourorg.atlassian.net`) | `conf-*` | `mt-add-confluence-secret` |
 
 ---
 

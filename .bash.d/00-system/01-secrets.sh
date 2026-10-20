@@ -221,6 +221,65 @@ mt-add-bitbucket-secret() {
 }
 
 #######################################
+# System: Interactively add or update your Confluence Cloud credentials: the
+# site hostname, the Atlassian account email and the API token. The conf-*
+# commands need all three (site to find the tenant, email + token for the
+# scoped-token gateway's Basic Auth).
+# Usage: mt-add-confluence-secret
+# Globals:
+#   Writes to ~/secrets/secrets.sh (never touches config.yaml or git)
+#   and exports CONFLUENCE_SITE/CONFLUENCE_EMAIL/CONFLUENCE_API_TOKEN into
+#   the current shell immediately.
+#######################################
+mt-add-confluence-secret() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+
+  local site
+  read -r -p "🌐 Confluence site hostname (e.g. yourorg.atlassian.net): " site < /dev/tty
+  site="${site#https://}"
+  site="${site%%/*}"
+  if ! [[ "$site" =~ ^[A-Za-z0-9.-]+$ ]]; then
+    echo -e "${CB_YELLOW}⚠️  '$site' is not a valid hostname. Aborted.${C_RESET}"
+    return 1
+  fi
+
+  local email
+  read -r -p "📧 Atlassian account email: " email < /dev/tty
+  if [ -z "$email" ]; then
+    echo -e "${CB_YELLOW}⚠️  No email entered. Aborted.${C_RESET}"
+    return 1
+  fi
+
+  local token
+  read -r -s -p "🔑 Enter your Confluence API token (input hidden): " token < /dev/tty
+  echo
+  if [ -z "$token" ]; then
+    echo -e "${CB_YELLOW}⚠️  No token entered. Aborted.${C_RESET}"
+    return 1
+  fi
+
+  local expiry
+  read -r -p "📅 Token expiry date, YYYY-MM-DD (leave blank if unknown): " expiry < /dev/tty
+  if [ -n "$expiry" ] && ! [[ "$expiry" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+    echo -e "${CB_YELLOW}⚠️  '$expiry' doesn't look like YYYY-MM-DD -- saving without an expiry date.${C_RESET}"
+    expiry=""
+  fi
+
+  __mt_write_secret "CONFLUENCE_SITE" "$site"
+  __mt_write_secret "CONFLUENCE_EMAIL" "$email"
+  __mt_write_secret "CONFLUENCE_API_TOKEN" "$token"
+  export CONFLUENCE_SITE="$site"
+  export CONFLUENCE_EMAIL="$email"
+  export CONFLUENCE_API_TOKEN="$token"
+  __MT_CONFLUENCE_GATEWAY_URL=""
+  python3 "$SECRETS_MANAGER" register "CONFLUENCE_API_TOKEN" "$expiry"
+  echo -e "${CB_GREEN}🎉 Confluence credentials saved to ~/secrets/secrets.sh and loaded into this shell.${C_RESET}"
+}
+
+#######################################
 # System: Interactively add or update your Docker Hub credentials,
 # paired with the account username -- Docker Hub authenticates pushes
 # via 'docker login -u <username> --password-stdin', so both are always
