@@ -328,6 +328,7 @@ __mt_menu_tf_replace() { __mt_menu_prompt_arg "Terraform resource address" tf-re
 __mt_menu_tf_yaml() { __mt_menu_prompt_arg "YAML var file path" tf-yaml; }
 __mt_menu_conftest() { __mt_menu_prompt_arg "File(s) to test against policy/" mt-conftest; }
 __mt_menu_conftest_verify() { mt-conftest --verify; }
+__mt_menu_bb_pr() { __mt_menu_prompt_arg "Bitbucket PR number" bb-pr; }
 __mt_menu_html_check() { __mt_menu_prompt_arg "HTML file path" mt-html-check; }
 __mt_menu_http() { __mt_menu_prompt_arg "URL to request" mt-http; }
 __mt_menu_grep_repos() { __mt_menu_prompt_arg "Pattern to search for across all repos" mt-grep-repos; }
@@ -763,7 +764,8 @@ __mt_menu_git_repos() {
     "Bulk-Update Repos, Background (mt-bulk-update -b)" __mt_menu_bulk_update_bg \
     "Search Across All Repos (mt-grep-repos)" __mt_menu_grep_repos \
     "List Open Pull Requests (git-review-prs)" git-review-prs \
-    "Diff All Uncommitted Changes incl. Untracked (git-diff-all)" git-diff-all
+    "Diff All Uncommitted Changes incl. Untracked (git-diff-all)" git-diff-all \
+    "Show Bitbucket Pull Request (bb-pr)" __mt_menu_bb_pr
 }
 
 #######################################
