@@ -2,7 +2,7 @@
 # ------------------------------------------
 # Version Control: Bitbucket Pipelines, Environments and Variables
 # ------------------------------------------
-# ~/.bash.d/20-vcs/63-bitbucket-ci.sh
+# ~/.bash.d/25-atlassian/11-bitbucket-ci.sh
 
 BITBUCKET_PIPELINES_DEFAULT_COUNT=10
 BITBUCKET_LOG_DEFAULT_TAIL=100

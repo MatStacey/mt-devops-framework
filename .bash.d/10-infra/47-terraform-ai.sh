@@ -2,7 +2,7 @@
 # ------------------------------------------
 # Terraform & AI Integrations
 # ------------------------------------------
-# ~/.bash.d/10-infra/43-terraform-ai.sh
+# ~/.bash.d/10-infra/47-terraform-ai.sh
 
 #######################################
 # AI: Analyze Terraform codebase for IAM requirements and optionally generate script

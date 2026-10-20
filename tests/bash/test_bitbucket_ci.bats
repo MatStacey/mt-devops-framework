@@ -1,7 +1,7 @@
 #!/usr/bin/env bats
 # ------------------------------------------
 # Bats: bb-pipelines, bb-env, bb-var and Bitbucket PR creation in
-# .bash.d/20-vcs/63-bitbucket-ci.sh
+# .bash.d/25-atlassian/11-bitbucket-ci.sh
 # ------------------------------------------
 # mt-http is replaced by a function that logs its arguments (and any
 # -d @file body) and serves fixtures chosen by URL.
@@ -14,9 +14,9 @@ setup() {
   # shellcheck disable=SC1091
   source "$repo_root/.bash.d/02-utilities/39-http-client.sh"
   # shellcheck disable=SC1091
-  source "$repo_root/.bash.d/20-vcs/61-bitbucket.sh"
+  source "$repo_root/.bash.d/25-atlassian/10-bitbucket.sh"
   # shellcheck disable=SC1091
-  source "$repo_root/.bash.d/20-vcs/63-bitbucket-ci.sh"
+  source "$repo_root/.bash.d/25-atlassian/11-bitbucket-ci.sh"
   export BITBUCKET_EMAIL="me@example.test" BITBUCKET_API_KEY="key-123"
   SECRETS_MANAGER="$BATS_TEST_TMPDIR/secrets_stub.py"
   : > "$SECRETS_MANAGER"

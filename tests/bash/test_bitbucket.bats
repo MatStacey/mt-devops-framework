@@ -1,6 +1,6 @@
 #!/usr/bin/env bats
 # ------------------------------------------
-# Bats: Bitbucket helpers in .bash.d/20-vcs/61-bitbucket.sh
+# Bats: Bitbucket helpers in .bash.d/25-atlassian/10-bitbucket.sh
 # ------------------------------------------
 # mt-http is replaced by a function that logs its arguments and serves a
 # fixture file chosen by the URL, so no network or real credentials are used.
@@ -13,7 +13,7 @@ setup() {
   # shellcheck disable=SC1091
   source "$repo_root/.bash.d/02-utilities/39-http-client.sh"
   # shellcheck disable=SC1091
-  source "$repo_root/.bash.d/20-vcs/61-bitbucket.sh"
+  source "$repo_root/.bash.d/25-atlassian/10-bitbucket.sh"
   export BITBUCKET_EMAIL="me@example.test" BITBUCKET_API_KEY="key-123"
   SECRETS_MANAGER="$BATS_TEST_TMPDIR/secrets_stub.py"
   printf 'import sys\nopen(sys.argv[0] + ".called", "w").write(" ".join(sys.argv[1:]))\n' > "$SECRETS_MANAGER"

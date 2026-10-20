@@ -3,7 +3,7 @@
 # Repo Radar: IAM Recommendation Advisor (Terraform + AI)
 # ------------------------------------------
 # ~/.bash.d/20-vcs/60-iam-advisor.sh
-# Cache-backed counterpart to tf-ai-iam (.bash.d/10-infra/43-terraform-ai.sh)
+# Cache-backed counterpart to tf-ai-iam (.bash.d/10-infra/47-terraform-ai.sh)
 # for one-click use from mt-radar/the VS Code companion, in the same
 # generate-then-cache shape as 57-infra.sh's infrastructure overview. Unlike
 # that overview, this always calls an AI provider (real cost/latency), so
