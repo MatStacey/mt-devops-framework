@@ -62,6 +62,17 @@ jobs:
           echo "🧪 Running bats..."
           bats tests/bash/
 
+      - name: Verify reference documents only tracked commands
+        run: |
+          missing=0
+          while read -r name; do
+            if ! grep -rqE --include='*.sh' "^${name}\(\)" .bash.d --exclude-dir=40-private --exclude-dir=private; then
+              echo "::error::TECHNICAL_REFERENCE.md documents '${name}' with no tracked definition"
+              missing=1
+            fi
+          done < <(grep -oP '^#### `\K[^`]+' .bash.d/docs/TECHNICAL_REFERENCE.md)
+          exit "$missing"
+
       - name: Verify Dockerfile (Hadolint)
         uses: hadolint/hadolint-action@06be81baf89a55ffd0e24b8f04a4185738dd3387 # v3.5.0
         with:

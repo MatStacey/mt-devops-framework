@@ -773,16 +773,31 @@ mt-status() {
 }
 
 #######################################
+# MyTools: Print mytools TSV rows whose source file is not under 40-private/ or lib/private/
+# Usage: __mt_dump_public_rows <tsv_file>
+# Arguments:
+#   tsv_file   Path to the mytools TSV index (5th column is the source file)
+# Outputs:
+#   Public rows on stdout
+#######################################
+__mt_dump_public_rows() {
+  awk -F'\t' '$5 !~ /\/(40-private|lib\/private)\//' "$1"
+}
+
+#######################################
 # MyTools: Generate a detailed technical Markdown dump of all functions and aliases
 # Usage: mt-dump [OPTIONS]
 # Options:
 #   -d, --dir <path>       Specify export directory (default: ~/.bash.d/docs)
-#   --private              Include private/internal framework functions (starting with _ or __)
+#   --internal             Include internal framework helper functions (starting with _ or __)
+#   --private              Deprecated alias for --internal
 #   -h, --help             Show this help menu
+# Notes:
+#   Anything under 40-private/ or lib/private/ is never written to the output.
 #######################################
 mt-dump() {
   local export_dir="$HOME/.bash.d/docs"
-  local include_private=false
+  local include_internal=false
 
   while [[ "$#" -gt 0 ]]; do
     case "$1" in
@@ -790,15 +805,15 @@ mt-dump() {
         export_dir="$2"
         shift
         ;;
-      --private)
-        include_private=true
+      --internal | --private)
+        include_internal=true
         ;;
       -h | --help)
         mt-help "${FUNCNAME[0]}"
         return 0
         ;;
       *)
-        echo "Usage: mt-dump [-d <export_dir>] [--private]"
+        echo "Usage: mt-dump [-d <export_dir>] [--internal]"
         return 1
         ;;
     esac
@@ -829,7 +844,7 @@ HDR
     echo "" >> "$out_file"
     echo "## 🔗 Shell Aliases" >> "$out_file"
     echo "" >> "$out_file"
-    awk -F'\t' '$1 == "alias" { printf "- **`%s`** *(%s)*: %s\n", $3, $2, $4 }' "$tsv_index" >> "$out_file"
+    __mt_dump_public_rows "$tsv_index" | awk -F'\t' '$1 == "alias" { printf "- **`%s`** *(%s)*: %s\n", $3, $2, $4 }' >> "$out_file"
     echo "" >> "$out_file"
     echo "---" >> "$out_file"
     echo "" >> "$out_file"
@@ -860,26 +875,26 @@ HDR
       echo "" >> "$out_file"
 
       local src_file
-      src_file=$(grep -rlE "^${name}\(\)[ \t]*\{" "$HOME/.bash.d/" 2> /dev/null | head -n 1)
+      src_file=$(grep -rlE --exclude-dir=40-private --exclude-dir=private "^${name}\(\)[ \t]*\{" "$HOME/.bash.d/" 2> /dev/null | head -n 1)
       if [ -n "$src_file" ]; then
         # shellcheck disable=SC2129
         echo "\`\`\`bash" >> "$out_file"
         awk -v target="$name" -f "$HOME/.bash.d/lib/awk/mt_help.awk" "$src_file" >> "$out_file"
         echo "\`\`\`" >> "$out_file"
       fi
-    done < <(sort -t$'\t' -k2,2 -k3,3 "$tsv_index")
+    done < <(__mt_dump_public_rows "$tsv_index" | sort -t$'\t' -k2,2 -k3,3)
   fi
 
-  if [ "$include_private" = true ]; then
+  if [ "$include_internal" = true ]; then
     # shellcheck disable=SC2129
     echo "" >> "$out_file"
     echo "---" >> "$out_file"
     echo "" >> "$out_file"
-    echo "## 🔒 Internal Framework Helpers (Private Functions)" >> "$out_file"
+    echo "## 🔒 Internal Framework Helpers (Internal Functions)" >> "$out_file"
     echo "" >> "$out_file"
-    echo "Private functions prefixed with \`_\` or \`__\` used internally by the framework." >> "$out_file"
+    echo "Internal functions prefixed with \`_\` or \`__\` used internally by the framework." >> "$out_file"
 
-    find -L "$HOME/.bash.d" -type f -name "*.sh" -exec grep -HnE "^_{1,2}[a-zA-Z0-9_-]+\(\)[ \t]*\{" {} + | while read -r line; do
+    find -L "$HOME/.bash.d" -type f -name "*.sh" -not -path "*/40-private/*" -not -path "*/lib/private/*" -exec grep -HnE "^_{1,2}[a-zA-Z0-9_-]+\(\)[ \t]*\{" {} + | while read -r line; do
       local fpath
       fpath=$(echo "$line" | cut -d: -f1)
       local func_name
@@ -907,6 +922,6 @@ HDR
 
 _mt_dump_completions() {
   local cur="${COMP_WORDS[COMP_CWORD]}"
-  mapfile -t COMPREPLY < <(compgen -W "-d --dir --private -h --help" -- "$cur")
+  mapfile -t COMPREPLY < <(compgen -W "-d --dir --internal --private -h --help" -- "$cur")
 }
 complete -F _mt_dump_completions mt-dump
