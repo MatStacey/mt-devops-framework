@@ -127,7 +127,7 @@ STUB
 }
 
 @test "bq query rejects data-changing and multi-statement SQL without calling bq" {
-  for sql in "DELETE FROM t WHERE 1=1" "SELECT 1; DROP TABLE t" "SELECT 1 UNION ALL SELECT 2; SELECT 3" "CREATE TABLE x AS SELECT 1" "INSERT INTO t SELECT 1"; do
+  for sql in "DELETE FROM t WHERE 1=1" "SELECT 1; DROP TABLE t" "SELECT 1 UNION ALL SELECT 2; SELECT 3" "CREATE TABLE x AS SELECT 1" "INSERT INTO t SELECT 1" "SELECT '--', 1; DROP TABLE t" "SELECT 1 /* x */" "SELECT 1 # x" "SELECT 1 -- x" $'SELECT 1;\nSELECT 2'; do
     run gcl-bq-query "$sql"
     [ "$status" -eq 1 ]
   done
@@ -164,4 +164,10 @@ STUB
 @test "control characters in error text are stripped" {
   run __mt_gcl_report_failure "ctx" $'boom \033[31m bad'
   [[ "$output" != *$'\033'* ]]
+}
+
+@test "the executed statement is exactly the validated one" {
+  run gcl-bq-query "SELECT 1 ;  "
+  [ "$status" -eq 0 ]
+  grep -qx "bq query --project_id=proj-1 --use_legacy_sql=false --format=pretty SELECT 1" "$CALLS"
 }
