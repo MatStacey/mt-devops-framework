@@ -119,7 +119,7 @@ alias pip-load='pip install -r requirements.txt'
 alias pip-save='pip freeze > requirements.txt'
 
 #######################################
-# Dev: Python - Format Python files and imports using Ruff (recursive)
+# Dev: Python - Format Python files and imports using Ruff (recursive, rewrites files; see ruff-check)
 #######################################
 alias ruff-fmt='ruff check --select I --fix . && ruff format .'
 
