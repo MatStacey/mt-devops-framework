@@ -269,23 +269,23 @@ mt-bulk-update() {
           echo "mt-bulk-update: --scope must be 'work' or 'personal'" >&2
           return 1
         fi
-        shift 2
+        shift 2 || shift
         ;;
       -p | --provider)
         provider="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -w | --workspace)
         workspace="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -pr | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --repo)
         repo_path="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -b | --bg | --background)
         run_bg=true

@@ -347,11 +347,11 @@ mt-toggle-display() {
         ;;
       -e | --element)
         element="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --gcp-mode)
         gcp_mode="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --ai-model)
         toggle_ai_model=true
@@ -363,7 +363,7 @@ mt-toggle-display() {
         ;;
       --git-branch-len)
         branch_len="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --prod-bg-warning)
         toggle_prod_bg=true
@@ -493,7 +493,7 @@ mt-open-config() {
         ;;
       -ide)
         selected_ide="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         args+=("$1")

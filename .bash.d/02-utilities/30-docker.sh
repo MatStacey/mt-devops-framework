@@ -1041,7 +1041,7 @@ docker-reboot-all() {
           return 1
         fi
         manual_excludes="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --verbose | -v)
         verbose=true
@@ -1091,7 +1091,7 @@ docker-stop-all() {
           return 1
         fi
         manual_excludes="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --verbose | -v)
         verbose=true
@@ -1144,7 +1144,7 @@ docker-start-all() {
           return 1
         fi
         manual_excludes="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --verbose | -v)
         verbose=true
@@ -1232,7 +1232,7 @@ docker-health() {
     case "$1" in
       -n | --lines)
         max_probes="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -t | --time)
         time_probe=true
@@ -1380,7 +1380,7 @@ docker-compose-inspect() {
     case "$1" in
       -f | --file)
         compose_file="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         echo "Usage: docker-compose-inspect [-f <compose-file>]" >&2

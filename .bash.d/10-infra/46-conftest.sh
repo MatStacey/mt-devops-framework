@@ -31,11 +31,11 @@ mt-conftest() {
     case "$1" in
       -p | --policy)
         policy_dir="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -n | --namespace)
         namespace="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -v | --verify)
         verify=1

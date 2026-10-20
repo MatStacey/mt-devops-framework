@@ -163,7 +163,7 @@ mt-http-server() {
           return 1
         fi
         port="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -w | --wsl-bridge)
         expose_wsl=true
@@ -187,7 +187,7 @@ mt-http-server() {
           return 1
         fi
         idle_timeout="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --no-idle-timeout)
         idle_timeout=0

@@ -73,7 +73,7 @@ gcp-iam-show() {
     case "$1" in
       -p | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         echo "Usage: gcp-iam-show [-p <project>]" >&2

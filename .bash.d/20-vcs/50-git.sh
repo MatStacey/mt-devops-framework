@@ -1069,19 +1069,19 @@ mt-repos() {
           echo "mt-repos: --scope must be 'work' or 'personal'" >&2
           return 1
         fi
-        shift 2
+        shift 2 || shift
         ;;
       -p | --provider)
         provider="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -w | --workspace)
         workspace="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -pr | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         echo "Usage: mt-repos [-s work|personal] [-p provider] [-w workspace] [-pr project]" >&2
@@ -1187,19 +1187,19 @@ mt-repos-run() {
           echo "mt-repos-run: --scope must be 'work' or 'personal'" >&2
           return 1
         fi
-        shift 2
+        shift 2 || shift
         ;;
       -p | --provider)
         provider="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -w | --workspace)
         workspace="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -pr | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --)
         shift
@@ -1277,27 +1277,27 @@ mt-grep-repos() {
           echo "mt-grep-repos: --scope must be 'work' or 'personal'" >&2
           return 1
         fi
-        shift 2
+        shift 2 || shift
         ;;
       -p | --provider)
         provider="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -w | --workspace)
         workspace="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -pr | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -g | --glob)
         glob="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -N | --name)
         name_glob="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -l | --files-only)
         files_only=1
@@ -1379,7 +1379,7 @@ git-review-start() {
     case "$1" in
       -d | --depth)
         depth="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         echo "Usage: git-review-start [-d <depth>]" >&2
@@ -1426,7 +1426,7 @@ git-review-prs() {
     case "$1" in
       -n | --pr)
         pr_number="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -b | --base)
         use_base=1

@@ -32,11 +32,11 @@ gcl-projects-list() {
     case "$1" in
       -f | --filter)
         name_filter="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --folder)
         folder="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         echo "Usage: gcl-projects-list [-f <name-filter>] [--folder <folder-id>]" >&2
@@ -124,11 +124,11 @@ gcl-network-survey() {
     case "$1" in
       -p | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -r | --region)
         region="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         echo "Usage: gcl-network-survey [-p <project>] [-r <region>]" >&2
@@ -183,11 +183,11 @@ gcl-run-describe() {
     case "$1" in
       -r | --region)
         region="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -p | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         echo "Usage: gcl-run-describe <service> -r <region> [-p <project>]" >&2
@@ -230,11 +230,11 @@ gcl-redis-describe() {
     case "$1" in
       -r | --region)
         region="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -p | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         echo "Usage: gcl-redis-describe <instance> -r <region> [-p <project>]" >&2
@@ -277,7 +277,7 @@ gcl-dataflow-describe() {
     case "$1" in
       -p | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --full)
         full=true
@@ -329,15 +329,15 @@ gcl-logging-read() {
     case "$1" in
       -p | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --limit)
         limit="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --fmt)
         fmt="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         echo "Usage: gcl-logging-read <filter> [-p <project>] [--limit <n>] [--fmt <format-expr>]" >&2
@@ -380,7 +380,7 @@ gcl-iam-keys() {
     case "$1" in
       -p | --project)
         project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       *)
         echo "Usage: gcl-iam-keys <service-account-email> [-p <project>]" >&2

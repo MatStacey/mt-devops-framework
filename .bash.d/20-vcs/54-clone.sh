@@ -483,19 +483,19 @@ mt-clone() {
           echo "mt-clone: --scope must be 'work' or 'personal'" >&2
           return 1
         fi
-        shift 2
+        shift 2 || shift
         ;;
       -p | --provider)
         provider="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -w | --workspace)
         raw_workspace="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -pr | --project)
         raw_project="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -t | --type)
         type_filter="${2,,}"
@@ -503,15 +503,15 @@ mt-clone() {
           echo "mt-clone: --type must be 'private' or 'public'" >&2
           return 1
         fi
-        shift 2
+        shift 2 || shift
         ;;
       -l | --lang)
         lang_filter="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -d | --from-date)
         from_date="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -y | --year)
         if ! [[ "$2" =~ ^[0-9]{4}$ ]]; then
@@ -519,7 +519,7 @@ mt-clone() {
           return 1
         fi
         year_filter="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -a | --age)
         if ! [[ "$2" =~ ^[0-9]+$ ]]; then
@@ -527,7 +527,7 @@ mt-clone() {
           return 1
         fi
         age_filter="$2"
-        shift 2
+        shift 2 || shift
         ;;
       --auto-approve)
         auto_approve=true

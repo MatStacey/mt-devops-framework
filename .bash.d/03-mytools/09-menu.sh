@@ -34,7 +34,7 @@ __mt_menu_submenu() {
   while [ "$#" -gt 0 ]; do
     labels+=("$1")
     commands+=("$2")
-    shift 2
+    shift 2 || shift
   done
 
   while true; do
@@ -76,7 +76,7 @@ __mt_menu_category() {
   while [ "$#" -gt 0 ]; do
     labels+=("$1")
     commands+=("$2")
-    shift 2
+    shift 2 || shift
   done
 
   while true; do
@@ -129,7 +129,7 @@ __mt_menu_prompt_arg() {
 #######################################
 __mt_menu_pick_enum() {
   local prompt_label="$1" target_func="$2"
-  shift 2
+  shift 2 || shift
   local choice
   choice=$(printf '%s\n' "$@" | fzf --prompt="${prompt_label} > " --height=~10 --layout=reverse --border)
   if [ -z "$choice" ]; then

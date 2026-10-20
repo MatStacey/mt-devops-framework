@@ -1002,7 +1002,7 @@ mt-ai-models() {
         ;;
       -p | --provider)
         provider="$2"
-        shift 2
+        shift 2 || shift
         ;;
       -r | --refresh)
         refresh=true
