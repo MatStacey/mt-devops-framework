@@ -14,7 +14,8 @@
 # a fast one-liner or from the mt-menu. Filed with the workflow-gap
 # label (plus bug or enhancement) so it surfaces separately from
 # fully-written issues during the next recurring self-audit (see
-# CONTRIBUTING.md).
+# CONTRIBUTING.md). The backlog is public, so the issue records only
+# whether it was filed from a work or personal repository, never the path.
 # Usage: mt-suggest [-b|--bug | -e|--enhancement] [--context <text>] ["<description>"]
 # Options:
 #   -b, --bug             File as a bug (something broken) instead of an enhancement (something missing)
@@ -81,6 +82,12 @@ mt-suggest() {
   local version="unknown"
   [[ -f "$VERSION_FILE" ]] && version=$(command cat "$VERSION_FILE")
 
+  local location="outside the VCS root"
+  case "$(__mt_vcs_path_context "$(pwd)")" in
+    "work|"*) location="work repository" ;;
+    "personal|"*) location="personal repository" ;;
+  esac
+
   local body
   body=$(
     cat << EOF
@@ -88,7 +95,7 @@ mt-suggest() {
 ${context:-Not specified}
 
 ## Captured from
-- Working directory: $(pwd)
+- Location: ${location}
 - Framework version: ${version}
 - Captured: $(date '+%Y-%m-%d %H:%M:%S')
 

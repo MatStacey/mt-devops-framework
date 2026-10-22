@@ -16,9 +16,16 @@
 # manager call.
 
 setup() {
-  load_target="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)/.bash.d/03-mytools/10-backlog.sh"
-  # shellcheck disable=SC1090
-  source "$load_target"
+  repo_root="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  # shellcheck disable=SC1091
+  source "$repo_root/.bash.d/03-mytools/10-backlog.sh"
+  # shellcheck disable=SC1091
+  source "$repo_root/.bash.d/20-vcs/50-git.sh"
+
+  VCS_ROOT="$BATS_TEST_TMPDIR/vcs"
+  work_repo="$VCS_ROOT/work/bitbucket/acme-corp/secret-project/internal-svc"
+  personal_repo="$VCS_ROOT/personal/my-private-repo"
+  mkdir -p "$work_repo/src" "$personal_repo"
 
   # Consumed by mt-suggest itself (sourced above); shellcheck can't see
   # that from this file alone since the source path is dynamic.
@@ -71,14 +78,47 @@ last_gh_call() {
   [ "$status" -ne 0 ]
 }
 
-@test "mt-suggest's issue body includes the given context and current directory" {
+@test "mt-suggest's issue body includes the given context" {
   run mt-suggest --context "building the menu feature" "some idea"
+  [ "$status" -eq 0 ]
+
+  grep -qF -- "building the menu feature" <<< "$(last_gh_call)"
+}
+
+@test "mt-suggest from a work repo records only the scope, never the path" {
+  cd "$work_repo/src"
+  run mt-suggest --context "testing" "some idea"
   [ "$status" -eq 0 ]
 
   local call
   call="$(last_gh_call)"
-  grep -qF -- "building the menu feature" <<< "$call"
-  grep -qF -- "$(pwd)" <<< "$call"
+  grep -qF -- "- Location: work repository" <<< "$call"
+  run grep -qE -- "acme-corp|secret-project|internal-svc|$BATS_TEST_TMPDIR" <<< "$call"
+  [ "$status" -ne 0 ]
+}
+
+@test "mt-suggest from a personal repo records only the scope, never the repo name" {
+  cd "$personal_repo"
+  run mt-suggest --context "testing" "some idea"
+  [ "$status" -eq 0 ]
+
+  local call
+  call="$(last_gh_call)"
+  grep -qF -- "- Location: personal repository" <<< "$call"
+  run grep -qF -- "my-private-repo" <<< "$call"
+  [ "$status" -ne 0 ]
+}
+
+@test "mt-suggest outside VCS_ROOT does not record the directory" {
+  cd "$BATS_TEST_TMPDIR"
+  run mt-suggest --context "testing" "some idea"
+  [ "$status" -eq 0 ]
+
+  local call
+  call="$(last_gh_call)"
+  grep -qF -- "- Location: outside the VCS root" <<< "$call"
+  run grep -qF -- "$BATS_TEST_TMPDIR" <<< "$call"
+  [ "$status" -ne 0 ]
 }
 
 @test "mt-suggest reports failure and returns non-zero when gh fails" {

@@ -122,6 +122,13 @@ request in the moment (that's what the issue templates are for later, during
 triage) -- just capture that the gap exists before you lose the thought and
 keep working.
 
+File gaps that are likely to come up again, and skip one-offs tied to a
+single investigation's data or project; the
+[team instruction block](docs/TEAM_INTEGRATION.md#the-instruction-block)
+has the exact checks agents use. Issues are public, so keep project names,
+IDs and data out of the description and context. `mt-suggest` records only
+whether you were in a work or personal repository, not the path.
+
 ## Recurring self-audit
 
 This project's found its highest-value bugs by periodically auditing its own

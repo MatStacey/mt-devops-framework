@@ -35,20 +35,38 @@ prefixed `mt-`). Treat it as the default way to run commands and perform
 actions in a terminal on this project, not just a tool that's available:
 
 - **Before reaching for a raw shell command or writing a one-off script**,
-  check whether an `mt-` command already covers it: `mt-search -i` (fuzzy
-  interactive search across every registered command/alias), `mt-help
-  <topic>`, or `mt-menu` for the full interactive catalog. Prefer the
-  framework command when one exists and fits, over a raw equivalent.
-- **When no framework command exists for something you're doing --
-  especially if it's the kind of thing that'll come up again** -- don't
-  just solve it ad hoc and move on. Run `mt-suggest "<short description>"`
-  to log it as a backlog candidate (works from any directory; add
-  `--context "..."` for what you were doing). This is meant to be
-  near-zero-friction -- one line, not a stop-and-write-a-full-issue
-  moment.
-- This applies the same way whether you're the primary session or a
-  specialist subagent working a piece of the task -- the backlog is
-  shared infrastructure, not something only the "main" agent maintains.
+  check whether an `mt-` command already covers it: `mt-search <keyword>`
+  for a targeted lookup, `mt-list -f` for every documented function, or
+  `mt-help <command>` for one command's usage. Prefer the framework
+  command when one exists and fits, over a raw equivalent.
+- **Run `mt-` commands as `bash -ic "<command>"`.** The Claude Code Bash
+  tool doesn't load `~/.bashrc`, so a bare `mt-` command isn't found.
+  Never run `mt-search -i`, `mt-search -v`, `mt-menu`, or `mt-suggest`
+  without `-e`/`-b`: they wait for keyboard input and hang the session.
+- **When no framework command exists for something you're doing**, run
+  the raw command and note it as a gap candidate. Before finishing, file
+  only the candidates that are all of:
+  1. **Reusable** beyond this task and repo, not tied to one
+     investigation's data, schema or project.
+  2. **Worth wrapping**: more than a single well-known command with
+     flags (e.g. loops across projects or regions, joins, redaction,
+     safety guards), and not already solved by an established tool or by
+     fixtures that belong in the repo's own tests.
+  3. **New**: `gh issue list -R MatStacey/mt-devops-framework --label
+     workflow-gap --state all --search "<keywords>"` finds no match. If
+     one exists, comment on it instead.
+
+  File with `mt-suggest -e "<short description>" --context "<what you
+  were doing>"`, or `-b` for something broken in an existing `mt-`
+  command (always worth filing). Merge related candidates into one issue
+  and file at most 5 per session. Mention the skipped ones in your final
+  reply.
+- **The backlog is public.** Never put project IDs, bucket, job or host
+  names, or data in the description or context. `mt-suggest` itself
+  records only whether you were in a work or personal repository, not
+  the path.
+- **Specialist subagents** report gap candidates to the main session
+  instead of filing them, so parallel subagents don't file duplicates.
 ```
 
 ## Where this needs to live
@@ -84,9 +102,10 @@ subagent quietly falls back to raw shell commands without anyone noticing.
 ## The backlog loop
 
 1. **Capture** -- `mt-suggest` files a `workflow-gap`-labeled issue against
-   this repo the moment a gap is noticed, from wherever the gap actually
-   showed up. Low friction is the entire point: a line of context, not a
-   fully-written feature request.
+   this repo from wherever the gap actually showed up. Low friction is
+   the point: a line of context, not a fully-written feature request. But
+   only gaps that pass the checks in the instruction block get filed, so
+   triage isn't buried under one-offs.
 2. **Accumulate** -- gaps land in the
    [open `workflow-gap` issues](https://github.com/MatStacey/mt-devops-framework/issues?q=is%3Aopen+label%3Aworkflow-gap)
    without needing anyone to stop and triage in the moment.
@@ -99,6 +118,6 @@ subagent quietly falls back to raw shell commands without anyone noticing.
    [CONTRIBUTING.md](../CONTRIBUTING.md)), and the next time anyone hits that
    same gap, the framework already covers it.
 
-The loop only works if step 1 actually happens in the moment instead of
-getting silently worked around -- that's what the instruction block above
-is for.
+The loop only works if real gaps get filed instead of silently worked
+around, and one-offs don't -- that's what the instruction block above is
+for.
