@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- `mt-suggest` no longer records your working directory in the public backlog issue, only whether you were in a work or personal repository. The team instruction block in `docs/TEAM_INTEGRATION.md` now files only reusable, new gaps (at most 5 per session), and no longer tells agents to run interactive commands that hang.
 - Hardened the new Atlassian/GCP/HTTP commands after a code review and live runs: request timeouts and safer credential handling in `mt-http`, a tighter read-only guard for `gcl-bq-query`, fuller secret redaction in `bb-pipelines --log`, and Confluence table/macro conversion fixes. Option parsers across the framework no longer loop forever on a trailing flag with no value.
 - Added Bitbucket tooling: `bb-pr` (PR metadata, diff, diffstat, comments), `bb-pipelines` (runs, steps, redacted log tails), and `bb-env`/`bb-var` (deployment environments and pipeline variables). `git-raise-pr` now creates the pull request through the Bitbucket API instead of only opening a browser.
 - Added Confluence reading: `conf-get` (page as plain text), `conf-folder` and `conf-search`, via the scoped-token gateway.
