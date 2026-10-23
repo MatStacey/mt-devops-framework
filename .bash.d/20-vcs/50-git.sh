@@ -10,7 +10,7 @@
 #   GIT_FEATURE_PREFIX
 # Arguments:
 #   $1 - Jira ticket ID or branch descriptor suffix
-# Usage: git-new-feature <CCON-123|suffix>
+# Usage: git-new-feature <PROJ-123|suffix>
 #######################################
 git-new-feature() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -18,7 +18,7 @@ git-new-feature() {
     return 0
   fi
   [ -z "$1" ] && {
-    echo -e "🚨 Error: Jira ID / branch suffix cannot be empty.\nUsage: git-new-feature CCON-123"
+    echo -e "🚨 Error: Jira ID / branch suffix cannot be empty.\nUsage: git-new-feature PROJ-123"
     return 1
   }
 
@@ -977,7 +977,7 @@ __mt_vcs_find_repos() {
 # scope/provider/workspace/project segments. Work-scope repos are five
 # levels deep, VCS_ROOT/work/<provider>/<workspace>/<project>/<repo> --
 # a Bitbucket/GitHub "project" is a grouping of many individual repos,
-# not a repo itself (e.g. cloudconnect groups 50+ real repos under it).
+# not a repo itself (e.g. platform groups 50+ real repos under it).
 # Personal-scope repos have no such grouping: VCS_ROOT/personal/<project>
 # is just two levels, and the project IS the repo.
 # Arguments:
@@ -1048,8 +1048,8 @@ __mt_vcs_matches_filter() {
 # Options:
 #   -s, --scope <work|personal>   Only list repos under this scope
 #   -p, --provider <name>         Only list repos under this provider (work scope only, e.g. bitbucket)
-#   -w, --workspace <name>        Only list repos under this workspace (work scope only, e.g. rentokilinitial)
-#   -pr, --project <name>         Only list repos under this project (work scope; e.g. cloudconnect groups many repos) or this exact repo (personal scope)
+#   -w, --workspace <name>        Only list repos under this workspace (work scope only, e.g. acme-corp)
+#   -pr, --project <name>         Only list repos under this project (work scope; e.g. platform groups many repos) or this exact repo (personal scope)
 #   -h, --help                    Show this help
 # Globals:
 #   VCS_ROOT, WSL_DISTRO_NAME

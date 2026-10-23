@@ -67,7 +67,7 @@ gcl-projects-list() {
 # Usage: gcl-api-check <api> <project> [project...]
 #
 # Examples:
-#   gcl-api-check appengine.googleapis.com connect-api-dev connect-api-prod
+#   gcl-api-check appengine.googleapis.com example-api-dev example-api-prod
 #######################################
 gcl-api-check() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then

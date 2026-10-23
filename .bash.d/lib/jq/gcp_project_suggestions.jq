@@ -5,7 +5,7 @@
 # Output: [{project, environment, references, sources: [up to $max_sources paths]}]
 # The environment is inferred from the project ID itself (dev/stage/prod/test).
 
-# Matches whole dash/underscore-separated tokens, so "connect-device-stage"
+# Matches whole dash/underscore-separated tokens, so "example-device-stage"
 # is stage, not dev (the "dev" inside "device").
 def token($names): test("(^|[-_])(" + $names + ")([-_]|$)");
 

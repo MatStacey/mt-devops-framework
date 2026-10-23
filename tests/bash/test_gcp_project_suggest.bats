@@ -18,19 +18,19 @@ setup() {
 }
 
 @test "finds project IDs across terraform, yaml, pipelines and package.json" {
-  printf 'project_name = "dev-cloud-connect"\n' > "$repo/terraform/environments/dev/main.tf"
-  printf 'environments:\n  stage:\n    project_id: "stage-cloud-connect"\n' > "$repo/config.yaml"
-  printf 'script:\n  - gcloud run deploy --project=production-cloud-connect --region=x\n' > "$repo/bitbucket-pipelines.yml"
-  printf '{"scripts":{"p":"gcloud config set project qa-cloud-connect"}}\n' > "$repo/package.json"
+  printf 'project_name = "dev-example-project"\n' > "$repo/terraform/environments/dev/main.tf"
+  printf 'environments:\n  stage:\n    project_id: "stage-example-project"\n' > "$repo/config.yaml"
+  printf 'script:\n  - gcloud run deploy --project=production-example-project --region=x\n' > "$repo/bitbucket-pipelines.yml"
+  printf '{"scripts":{"p":"gcloud config set project qa-example-project"}}\n' > "$repo/package.json"
 
   run __mt_radar_gcp_suggest_projects "$repo"
-  [ "$(jq -r 'map(.project) | join(",")' <<< "$output")" = "dev-cloud-connect,stage-cloud-connect,qa-cloud-connect,production-cloud-connect" ]
+  [ "$(jq -r 'map(.project) | join(",")' <<< "$output")" = "dev-example-project,stage-example-project,qa-example-project,production-example-project" ]
   [ "$(jq -r 'map(.environment) | join(",")' <<< "$output")" = "dev,stage,test,prod" ]
 }
 
 @test "counts references and lists source files per project" {
-  printf 'project = "dev-cloud-connect"\n' > "$repo/terraform/environments/dev/main.tf"
-  printf 'project_id: dev-cloud-connect\n' > "$repo/config.yaml"
+  printf 'project = "dev-example-project"\n' > "$repo/terraform/environments/dev/main.tf"
+  printf 'project_id: dev-example-project\n' > "$repo/config.yaml"
 
   run __mt_radar_gcp_suggest_projects "$repo"
   [ "$(jq -r '.[0].references' <<< "$output")" = "2" ]
@@ -46,15 +46,15 @@ setup() {
   [ "$output" = "[]" ]
 }
 
-@test "environment matches whole tokens: connect-device-stage is stage, not dev" {
-  printf 'project_id: connect-device-stage\nproject_id: connect-device-production\n' > "$repo/config.yaml"
+@test "environment matches whole tokens: example-device-stage is stage, not dev" {
+  printf 'project_id: example-device-stage\nproject_id: example-device-production\n' > "$repo/config.yaml"
 
   run __mt_radar_gcp_suggest_projects "$repo"
   [ "$(jq -r 'map(.environment) | join(",")' <<< "$output")" = "stage,prod" ]
 }
 
 @test "a project with no environment hint sorts last with an empty environment" {
-  printf 'project_id: shared-tooling-project\nproject_id: dev-cloud-connect\n' > "$repo/config.yaml"
+  printf 'project_id: shared-tooling-project\nproject_id: dev-example-project\n' > "$repo/config.yaml"
 
   run __mt_radar_gcp_suggest_projects "$repo"
   [ "$(jq -r '.[-1].project' <<< "$output")" = "shared-tooling-project" ]
