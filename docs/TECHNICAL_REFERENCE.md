@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Thu Oct 22 10:33:46 PM BST 2026  
+> Generated: Fri Oct 23 06:25:03 PM BST 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -4068,7 +4068,7 @@ gcp-set-project() {
 # Usage: gcl-api-check <api> <project> [project...]
 #
 # Examples:
-#   gcl-api-check appengine.googleapis.com connect-api-dev connect-api-prod
+#   gcl-api-check appengine.googleapis.com example-api-dev example-api-prod
 #######################################
 gcl-api-check() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -5405,8 +5405,8 @@ mt-clone() {
 # Options:
 #   -s, --scope <work|personal>   Only update repos under this scope
 #   -p, --provider <name>         Only update repos under this provider (work scope only, e.g. bitbucket)
-#   -w, --workspace <name>        Only update repos under this workspace (work scope only, e.g. rentokilinitial)
-#   -pr, --project <name>         Only update repos under this project (work scope; e.g. cloudconnect groups many repos) or this exact repo (personal scope)
+#   -w, --workspace <name>        Only update repos under this workspace (work scope only, e.g. acme-corp)
+#   -pr, --project <name>         Only update repos under this project (work scope; e.g. platform groups many repos) or this exact repo (personal scope)
 #   --repo <path>                 Update exactly this repo by absolute path, bypassing every other filter
 #   -b, --bg, --background        Run as a background job -- see 'mt-jobs' to monitor/view its log (ignored with --repo/--json)
 #   -j, --json                    Print results as a JSON array instead of the colored table
@@ -11817,7 +11817,7 @@ git-diff-all() {
 #   GIT_FEATURE_PREFIX
 # Arguments:
 #   $1 - Jira ticket ID or branch descriptor suffix
-# Usage: git-new-feature <CCON-123|suffix>
+# Usage: git-new-feature <PROJ-123|suffix>
 #######################################
 git-new-feature() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -11825,7 +11825,7 @@ git-new-feature() {
     return 0
   fi
   [ -z "$1" ] && {
-    echo -e "🚨 Error: Jira ID / branch suffix cannot be empty.\nUsage: git-new-feature CCON-123"
+    echo -e "🚨 Error: Jira ID / branch suffix cannot be empty.\nUsage: git-new-feature PROJ-123"
     return 1
   }
 
@@ -12448,8 +12448,8 @@ mt-grep-repos() {
 # Options:
 #   -s, --scope <work|personal>   Only list repos under this scope
 #   -p, --provider <name>         Only list repos under this provider (work scope only, e.g. bitbucket)
-#   -w, --workspace <name>        Only list repos under this workspace (work scope only, e.g. rentokilinitial)
-#   -pr, --project <name>         Only list repos under this project (work scope; e.g. cloudconnect groups many repos) or this exact repo (personal scope)
+#   -w, --workspace <name>        Only list repos under this workspace (work scope only, e.g. acme-corp)
+#   -pr, --project <name>         Only list repos under this project (work scope; e.g. platform groups many repos) or this exact repo (personal scope)
 #   -h, --help                    Show this help
 # Globals:
 #   VCS_ROOT, WSL_DISTRO_NAME

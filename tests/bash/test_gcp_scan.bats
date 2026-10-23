@@ -5,7 +5,7 @@ bats_require_minimum_version 1.5.0
 # and __mt_radar_gcp_check_resource's fallback-name matching
 # (.bash.d/20-vcs/58-infra-gcp-scan.sh)
 # ------------------------------------------
-# Covers two real bugs reported against a live repo (connect-api):
+# Covers two real bugs reported against a live repo (example-api):
 #
 # 1. The "Environments" pills showed vague AI-guessed names instead of
 #    "<TYPE>: GCP - <project-id>" -- __mt_radar_detect_environments adds a
@@ -14,12 +14,12 @@ bats_require_minimum_version 1.5.0
 #    reference -- same "don't guess" caution as __mt_radar_detect_gcp)
 #    from each environment subfolder's own .tf files.
 #
-# 2. The GCP deployment scan reported connect-api's Cloud Run service as
+# 2. The GCP deployment scan reported example-api's Cloud Run service as
 #    "not found" even though it's definitely deployed -- the scan looked
 #    up the live resource by its Terraform resource *label*
 #    (`google_cloud_run_service.run`), but the resource's real name comes
 #    from `name = var.service_name`, set to the repo's own name
-#    ("connect-api") elsewhere. __mt_radar_gcp_check_resource now retries
+#    ("example-api") elsewhere. __mt_radar_gcp_check_resource now retries
 #    with a fallback candidate name (the repo's own basename) whenever
 #    the label doesn't match anything live.
 #
@@ -57,12 +57,12 @@ setup() {
   mkdir -p "$repo_dir/terraform/environments/production/deploy-cloud-run"
   cat > "$repo_dir/terraform/environments/dev/deploy-cloud-run/main.tf" << 'EOF'
 locals {
-  project_name = "dev-cloud-connect"
+  project_name = "dev-example-project"
 }
 EOF
   cat > "$repo_dir/terraform/environments/production/deploy-cloud-run/main.tf" << 'EOF'
 locals {
-  project_name = "production-cloud-connect"
+  project_name = "production-example-project"
 }
 EOF
 
@@ -74,9 +74,9 @@ EOF
   dev_type=$(echo "$output" | jq -r '.[] | select(.type == "dev") | .type')
   prod_name=$(echo "$output" | jq -r '.[] | select(.type == "prod") | .name')
 
-  [ "$dev_name" = "DEV: GCP - dev-cloud-connect" ]
+  [ "$dev_name" = "DEV: GCP - dev-example-project" ]
   [ "$dev_type" = "dev" ]
-  [ "$prod_name" = "PROD: GCP - production-cloud-connect" ]
+  [ "$prod_name" = "PROD: GCP - production-example-project" ]
 }
 
 @test "__mt_radar_detect_environments falls back to the folder name when no literal project ID is found" {
@@ -99,7 +99,7 @@ EOF
   for d in stage stage-pd; do
     cat > "$repo_dir/terraform/environments/$d/deploy-cloud-run/main.tf" << 'EOF'
 locals {
-  project_name = "stage-cloud-connect"
+  project_name = "stage-example-project"
 }
 EOF
   done
@@ -130,12 +130,12 @@ EOF
   chmod +x "$fake_bin/gcloud"
 }
 
-RUN_LIST='echo '"'"'[{"metadata":{"name":"connect-api","labels":{"cloud.googleapis.com/location":"europe-west1"}},"status":{"url":"https://connect-api-x.a.run.app"}}]'"'"
+RUN_LIST='echo '"'"'[{"metadata":{"name":"example-api","labels":{"cloud.googleapis.com/location":"europe-west1"}},"status":{"url":"https://example-api-x.a.run.app"}}]'"'"
 
 @test "check_resource matches on the Terraform label with no fallback needed" {
   stub_gcloud "echo '[{\"metadata\":{\"name\":\"run\",\"labels\":{\"cloud.googleapis.com/location\":\"europe-west1\"}},\"status\":{\"url\":\"https://run-x.a.run.app\"}}]'"
 
-  run __mt_radar_gcp_check_resource "google_cloud_run_service" "run" "some-project" "connect-api"
+  run __mt_radar_gcp_check_resource "google_cloud_run_service" "run" "some-project" "example-api"
   [ "$status" -eq 0 ]
   [ "$(echo "$output" | jq -r '.deployed')" = "true" ]
   [ "$(echo "$output" | jq -r '.matched_name')" = "null" ]
@@ -145,19 +145,19 @@ RUN_LIST='echo '"'"'[{"metadata":{"name":"connect-api","labels":{"cloud.googleap
 @test "check_resource falls back to the repo name when the Terraform label doesn't match" {
   stub_gcloud "$RUN_LIST"
 
-  run __mt_radar_gcp_check_resource "google_cloud_run_service" "run" "production-cloud-connect" "connect-api"
+  run __mt_radar_gcp_check_resource "google_cloud_run_service" "run" "production-example-project" "example-api"
   [ "$status" -eq 0 ]
   [ "$(echo "$output" | jq -r '.deployed')" = "true" ]
-  [ "$(echo "$output" | jq -r '.matched_name')" = "connect-api" ]
+  [ "$(echo "$output" | jq -r '.matched_name')" = "example-api" ]
   [ "$(echo "$output" | jq -r '.region')" = "europe-west1" ]
-  [ "$(echo "$output" | jq -r '.live_url')" = "https://connect-api-x.a.run.app" ]
-  [[ "$(echo "$output" | jq -r '.console_url')" == *"/europe-west1/connect-api/"* ]]
+  [ "$(echo "$output" | jq -r '.live_url')" = "https://example-api-x.a.run.app" ]
+  [[ "$(echo "$output" | jq -r '.console_url')" == *"/europe-west1/example-api/"* ]]
 }
 
 @test "check_resource reports not-deployed when nothing in the live list matches" {
   stub_gcloud "echo '[]'"
 
-  run __mt_radar_gcp_check_resource "google_cloud_run_service" "run" "some-project" "connect-api"
+  run __mt_radar_gcp_check_resource "google_cloud_run_service" "run" "some-project" "example-api"
   [ "$status" -eq 0 ]
   [ "$(echo "$output" | jq -r '.deployed')" = "false" ]
   [ "$(echo "$output" | jq -r '.reason')" = "null" ]

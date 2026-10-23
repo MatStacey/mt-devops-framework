@@ -244,8 +244,8 @@ __mt_bulk_update_run_single() {
 # Options:
 #   -s, --scope <work|personal>   Only update repos under this scope
 #   -p, --provider <name>         Only update repos under this provider (work scope only, e.g. bitbucket)
-#   -w, --workspace <name>        Only update repos under this workspace (work scope only, e.g. rentokilinitial)
-#   -pr, --project <name>         Only update repos under this project (work scope; e.g. cloudconnect groups many repos) or this exact repo (personal scope)
+#   -w, --workspace <name>        Only update repos under this workspace (work scope only, e.g. acme-corp)
+#   -pr, --project <name>         Only update repos under this project (work scope; e.g. platform groups many repos) or this exact repo (personal scope)
 #   --repo <path>                 Update exactly this repo by absolute path, bypassing every other filter
 #   -b, --bg, --background        Run as a background job -- see 'mt-jobs' to monitor/view its log (ignored with --repo/--json)
 #   -j, --json                    Print results as a JSON array instead of the colored table
