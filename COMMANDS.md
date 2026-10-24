@@ -298,7 +298,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `gcp-crf-logs` | GCP: Tail logs of a Cloud Run Function |
 | `gcp-gar-docker` | GCP: Configure Docker auth for Artifact Registry |
 | `gcp-get-secret` | GCP: Read the latest payload of a secret |
-| `gcp-iam-show` | GCP: View IAM policy for a project |
+| `gcp-iam-show` | GCP: View IAM policy for one or more projects, or the roles one member |
 | `gcp-ps-pull` | GCP: Pull and auto-ack one message from a Pub/Sub subscription |
 
 ### General System Utilities

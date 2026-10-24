@@ -52,15 +52,51 @@ alias gcl-ps-topics='gcloud pubsub topics list'
 #######################################
 alias gcp-crf-ls='gcloud functions list'
 
+GCP_IAM_MATRIX_AWK="$HOME/.bash.d/lib/awk/kv_matrix.awk"
+GCP_IAM_MATRIX_MARK="✅"
+GCP_IAM_MATRIX_EMPTY="-"
+GCP_IAM_MEMBER_REGEX='^[A-Za-z0-9._@:+-]+$'
+
 #######################################
-# GCP: View IAM policy for a project
-# Usage: gcp-iam-show [-p <project>]
+# GCP: Add the IAM member type prefix: values with a type: prefix are kept,
+# *.gserviceaccount.com becomes serviceAccount:, any other email user:
+# Arguments:
+#   $1 - Member
+# Returns:
+#   0 on success, 1 if the member is not a type:value or an email
+# Outputs:
+#   Normalised member
+#######################################
+__mt_gcp_normalize_member() {
+  local member="$1"
+  [[ "$member" =~ $GCP_IAM_MEMBER_REGEX ]] || return 1
+  case "$member" in
+    *:*) echo "$member" ;;
+    *.gserviceaccount.com) echo "serviceAccount:${member}" ;;
+    *@*) echo "user:${member}" ;;
+    *) return 1 ;;
+  esac
+}
+
+#######################################
+# GCP: View IAM policy for one or more projects, or the roles one member
+# holds in them (a role x project matrix when several projects are given)
+# Usage: gcp-iam-show [-p <project>]... [-m <member>]
 # Options:
-#   -p, --project <id>   Project to inspect (default: the active gcloud project)
+#   -p, --project <id>     Project to inspect; repeatable (default: the active gcloud project)
+#   -m, --member <member>  Only this member's roles; a type: prefix is kept, *.gserviceaccount.com
+#                          becomes serviceAccount:, any other email becomes user:
+#   -h, --help             Show this help menu
+# Returns:
+#   0 on success, 1 on failure or bad usage, 5 if any project was permission denied
+# Outputs:
+#   Without --member: the policy bindings table (headed per project when several).
+#   With --member: "role<TAB>condition" rows for one project, otherwise a
+#   role x project matrix.
+# Example:
+#   gcp-iam-show -m sa@proj.iam.gserviceaccount.com -p dev -p stage -p prod
 # Globals:
 #   gcl-get-project (Framework Function)
-# Outputs:
-#   Prints tabular IAM policy bindings to STDOUT
 #######################################
 gcp-iam-show() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -68,22 +104,66 @@ gcp-iam-show() {
     return 0
   fi
 
-  local project=""
+  local -a projects=()
+  local member=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -p | --project)
-        project="$2"
+        projects+=("${2:-}")
+        shift 2 || shift
+        ;;
+      -m | --member)
+        member="${2:-}"
         shift 2 || shift
         ;;
       *)
-        echo "Usage: gcp-iam-show [-p <project>]" >&2
+        echo "Usage: gcp-iam-show [-p <project>]... [-m <member>]" >&2
         return 1
         ;;
     esac
   done
-  [ -z "$project" ] && project=$(gcl-get-project)
+  [ "${#projects[@]}" -eq 0 ] && projects=("$(gcl-get-project)")
 
-  gcloud projects get-iam-policy "$project" --format="table(bindings.role, bindings.members)" --quiet
+  local project rc=0 project_rc
+  if [ -z "$member" ]; then
+    for project in "${projects[@]}"; do
+      [ "${#projects[@]}" -gt 1 ] && echo "== ${project} =="
+      project_rc=0
+      gcloud projects get-iam-policy "$project" --format="table(bindings.role, bindings.members)" --quiet || project_rc=$?
+      [ "$rc" -eq 0 ] && rc="$project_rc"
+    done
+    return "$rc"
+  fi
+
+  member=$(__mt_gcp_normalize_member "$member") || {
+    echo "Invalid --member: use an email or <type>:<value>." >&2
+    return 1
+  }
+  local roles matrix_input="" row
+  for project in "${projects[@]}"; do
+    project_rc=0
+    roles=$(__mt_gcl_run "reading the IAM policy of ${project}" gcloud projects get-iam-policy "$project" \
+      --flatten="bindings[].members" --filter="bindings.members=${member}" \
+      --format="value(bindings.role,bindings.condition.title)" --quiet) || project_rc=$?
+    if [ "$project_rc" -ne 0 ]; then
+      [ "$rc" -eq 0 ] && rc="$project_rc"
+      continue
+    fi
+    while IFS= read -r row; do
+      [ -n "$row" ] && matrix_input+="${project}"$'\t'"${row}"$'\n'
+    done <<< "$roles"
+  done
+
+  if [ "${#projects[@]}" -eq 1 ]; then
+    printf '%s' "$matrix_input" | cut -f2- | sort
+  else
+    local columns
+    columns=$(printf '%s,' "${projects[@]}")
+    printf '%s' "$matrix_input" | awk -v columns="${columns%,}" \
+      -v mark="$GCP_IAM_MATRIX_MARK" -v empty="$GCP_IAM_MATRIX_EMPTY" -v header="ROLE" \
+      -f "$GCP_IAM_MATRIX_AWK"
+  fi
+  return "$rc"
 }
 
 #######################################
