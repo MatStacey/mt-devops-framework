@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Sat Oct 24 05:31:59 AM BST 2026  
+> Generated: Sat Oct 24 05:33:33 AM BST 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -12512,7 +12512,7 @@ mt-git-clone() {
 # 'find' loops. Skips .git, node_modules, .terraform and virtualenvs.
 # Usage: mt-grep-repos [-s work|personal] [-p provider] [-w workspace]
 #                      [-pr project] [-g <glob>] [-l] [-N <name-glob>]
-#                      [<pattern>]
+#                      [-b <ref-glob> | -B] [-u] [<pattern>]
 # Arguments:
 #   <pattern>                     Extended regex to search file contents for
 # Options:
@@ -12523,11 +12523,17 @@ mt-git-clone() {
 #   -g, --glob <glob>             Only search files whose name matches this glob (e.g. '*.tf')
 #   -l, --files-only              Print matching file paths only, not matching lines
 #   -N, --name <name-glob>        List files whose name matches this glob (no <pattern> needed)
+#   -b, --branches <ref-glob>     Search remote-tracking branches instead of the working tree, e.g. 'origin/*'
+#                                 or 'origin/release/*' (no fetch: refs are as fresh as the last fetch,
+#                                 see mt-bulk-update); output is repo/ref:path:line:text
+#   -B, --all-branches            Search every remote-tracking branch
+#   -u, --unique                  With -b/-B, merge identical hits found on several branches into one
+#                                 line: repo/ref1,ref2:path:line:text
 #   -h, --help                    Show this help
 # Globals:
 #   VCS_ROOT
 # Returns:
-#   0 if anything matched, 1 otherwise
+#   0 if anything matched, 1 otherwise (also on bad usage, e.g. -N with -b/-B)
 #######################################
 mt-grep-repos() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -12535,7 +12541,7 @@ mt-grep-repos() {
     return 0
   fi
 
-  local scope="" provider="" workspace="" project="" glob="" name_glob="" files_only=0
+  local scope="" provider="" workspace="" project="" glob="" name_glob="" files_only=0 ref_glob="" search_refs=0 unique=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -s | --scope)
@@ -12570,6 +12576,20 @@ mt-grep-repos() {
         files_only=1
         shift
         ;;
+      -b | --branches)
+        ref_glob="$2"
+        search_refs=1
+        shift 2 || shift
+        ;;
+      -B | --all-branches)
+        ref_glob=""
+        search_refs=1
+        shift
+        ;;
+      -u | --unique)
+        unique=1
+        shift
+        ;;
       *)
         break
         ;;
@@ -12578,7 +12598,15 @@ mt-grep-repos() {
 
   local pattern="${1:-}"
   if [ -z "$pattern" ] && [ -z "$name_glob" ]; then
-    echo "Usage: mt-grep-repos [filters] [-g <glob>] [-l] [-N <name-glob>] [<pattern>]" >&2
+    echo "Usage: mt-grep-repos [filters] [-g <glob>] [-l] [-N <name-glob>] [-b <ref-glob> | -B] [-u] [<pattern>]" >&2
+    return 1
+  fi
+  if [ "$search_refs" -eq 1 ] && { [ -n "$name_glob" ] || [ -z "$pattern" ]; }; then
+    echo "mt-grep-repos: -b/-B search file contents and need a <pattern>; -N is not supported with them" >&2
+    return 1
+  fi
+  if [ "$unique" -eq 1 ] && [ "$search_refs" -eq 0 ]; then
+    echo "mt-grep-repos: --unique needs -b or -B" >&2
     return 1
   fi
 
@@ -12605,6 +12633,15 @@ mt-grep-repos() {
   while IFS= read -r repo_path; do
     [ -z "$repo_path" ] && continue
     __mt_vcs_matches_filter "$repo_path" "$scope" "$provider" "$workspace" "$project" || continue
+    if [ "$search_refs" -eq 1 ]; then
+      local ref_hits
+      ref_hits=$(__mt_grep_repo_refs "$repo_path" "${repo_path#"$search_dir"/}" "$ref_glob" "$pattern" "$glob" "$files_only" "$unique")
+      if [ -n "$ref_hits" ]; then
+        echo "$ref_hits"
+        found=1
+      fi
+      continue
+    fi
     if [ -n "$name_glob" ]; then
       local name_hits
       name_hits=$(find "$repo_path" \( -name .git -o -name node_modules -o -name .terraform -o -name .venv -o -name venv -o -name __pycache__ \) -prune -o -type f -name "$name_glob" -print)
