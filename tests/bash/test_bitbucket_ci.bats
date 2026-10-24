@@ -37,10 +37,10 @@ setup() {
     case "$last" in
       */pipelines/%7Bnosteps%7D/steps/\?*) echo '{"values":[]}' ;;
       */steps/*/log) printf 'line1\nDB_PASSWORD=hunter2\nAuthorization: Bearer abc.def\nline4\x1b[31m\nline5\nexport API_TOKEN="q1w2"\npassword: '"'"'p3p4'"'"'\n{"password": "j5j6"}\n' ;;
-      */steps/\?*) echo '{"values":[{"uuid":"{s1}","name":"Build","state":{"result":{"name":"SUCCESSFUL"}},"duration_in_seconds":12},{"uuid":"{s2}","name":"Deploy","state":{"result":{"name":"FAILED"}},"duration_in_seconds":30}]}' ;;
+      */steps/\?*) echo '{"values":[{"uuid":"{s1}","name":"Build","state":{"result":{"name":"SUCCESSFUL"}},"duration_in_seconds":12,"started_on":"2026-10-05T10:00:00Z","completed_on":"2026-10-05T10:00:12Z"},{"uuid":"{s2}","name":"Deploy","state":{"result":{"name":"FAILED"}},"duration_in_seconds":30,"started_on":"2026-10-05T10:00:12Z","completed_on":"2026-10-05T10:00:42Z"},{"uuid":"{s3}","name":"Verify","state":{"name":"IN_PROGRESS"},"started_on":"2026-10-05T10:00:42Z","completed_on":null}]}' ;;
       */pipelines/42) echo '{"uuid":"{p1}","build_number":42}' ;;
       */pipelines/%7Bnosteps%7D) echo '{"state":{"name":"COMPLETED","result":{"name":"FAILED","error":{"message":"Step is empty"}}}}' ;;
-      */pipelines/) echo '{"values":[{"uuid":"{p1}","build_number":42,"state":{"result":{"name":"FAILED"}},"target":{"ref_name":"main"},"creator":{"display_name":"Al"},"created_on":"t"}]}' ;;
+      */pipelines/) echo '{"values":[{"uuid":"{p1}","build_number":42,"state":{"result":{"name":"FAILED"}},"target":{"ref_name":"main"},"creator":{"display_name":"Al"},"duration_in_seconds":95,"created_on":"t"}]}' ;;
       */environments/\?*) echo '{"values":[{"uuid":"{e1}","name":"Staging","environment_type":{"name":"Staging"}}]}' ;;
       */variables\?*) echo '{"values":[{"uuid":"{v1}","key":"PLAIN","value":"visible","secured":false},{"uuid":"{v2}","key":"SECRET","secured":true}]}' ;;
       */pullrequests)
@@ -61,14 +61,15 @@ setup() {
 @test "bb-pipelines lists recent runs" {
   run bb-pipelines -r ws/r
   [ "$status" -eq 0 ]
-  [[ "$output" == *$'#42\tFAILED\tmain\tAl'* ]]
+  [[ "$output" == *$'#42\tFAILED\t95s\tmain\tAl'* ]]
   grep -q "pagelen=10" "$HTTP_LOG"
 }
 
 @test "bb-pipelines resolves a build number and lists numbered steps" {
   run bb-pipelines -r ws/r 42
-  [[ "$output" == *$'1\tSUCCESSFUL\tBuild\t12s\t{s1}'* ]]
-  [[ "$output" == *$'2\tFAILED\tDeploy\t30s\t{s2}'* ]]
+  [[ "$output" == *$'1\tSUCCESSFUL\tBuild\t12s\t2026-10-05T10:00:00Z\t2026-10-05T10:00:12Z\t{s1}'* ]]
+  [[ "$output" == *$'2\tFAILED\tDeploy\t30s\t2026-10-05T10:00:12Z\t2026-10-05T10:00:42Z\t{s2}'* ]]
+  [[ "$output" == *$'3\tIN_PROGRESS\tVerify\t0s\t2026-10-05T10:00:42Z\t-\t{s3}'* ]]
   grep -q "pipelines/42" "$HTTP_LOG"
 }
 
