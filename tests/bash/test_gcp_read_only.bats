@@ -46,6 +46,9 @@ if [ -n "${STUB_DENY:-}" ]; then
   echo "BigQuery error: Access Denied: Project proj-1: User does not have bigquery.jobs.create permission in project proj-1." >&2
   exit 1
 fi
+case "$*" in
+  *--dry_run*) echo "{\"statistics\":{\"totalBytesProcessed\":\"${STUB_BYTES:-1024}\"}}"; exit 0 ;;
+esac
 echo "col1"
 STUB
   chmod +x "$BATS_TEST_TMPDIR/bin/gcloud" "$BATS_TEST_TMPDIR/bin/bq"
@@ -176,7 +179,7 @@ STUB
 @test "the executed statement is exactly the validated one" {
   run gcl-bq-query "SELECT 1 ;  "
   [ "$status" -eq 0 ]
-  grep -qx "bq query --project_id=proj-1 --use_legacy_sql=false --format=pretty SELECT 1" "$CALLS"
+  grep -qx "bq query --project_id=proj-1 --use_legacy_sql=false --format=pretty --maximum_bytes_billed=10737418240 SELECT 1" "$CALLS"
 }
 
 @test "literal backslash escapes in error text are not expanded into control characters" {
@@ -190,4 +193,62 @@ STUB
   [[ "$output" == *URL* ]]
   [[ "$output" == *TOKEN* ]]
   [[ "$output" != *QWxhZ* ]]
+}
+
+@test "bq query dry-runs first and passes the cap as --maximum_bytes_billed" {
+  run gcl-bq-query "SELECT 1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Estimated scan: 1.0K (cap 10G)"* ]]
+  [ "$(grep -c '^bq ' "$CALLS")" -eq 2 ]
+  [[ "$(grep '^bq ' "$CALLS" | sed -n 1p)" == *"--dry_run"* ]]
+  [[ "$(grep '^bq ' "$CALLS" | sed -n 2p)" == *"--maximum_bytes_billed=10737418240"* ]]
+}
+
+@test "bq query over the cap is refused and the real query never runs" {
+  STUB_BYTES=20000000000 run gcl-bq-query "SELECT 1"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"--max-bytes"* ]]
+  [ "$(grep -c '^bq ' "$CALLS")" -eq 1 ]
+  [[ "$(grep '^bq ' "$CALLS")" == *"--dry_run"* ]]
+}
+
+@test "bq query --dry-run prints the estimate and never runs the query" {
+  run gcl-bq-query --dry-run "SELECT 1"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Estimated scan"* ]]
+  [[ "$output" != *col1* ]]
+  [ "$(grep -c '^bq ' "$CALLS")" -eq 1 ]
+}
+
+@test "bq query --max-bytes overrides the configured cap and accepts IEC suffixes" {
+  GCP_BQ_MAX_BYTES_BILLED=1000 STUB_BYTES=5000 run gcl-bq-query "SELECT 1"
+  [ "$status" -eq 1 ]
+  GCP_BQ_MAX_BYTES_BILLED=1000 STUB_BYTES=5000 run gcl-bq-query --max-bytes 1M "SELECT 1"
+  [ "$status" -eq 0 ]
+  grep -q -- '--maximum_bytes_billed=1048576' "$CALLS"
+}
+
+@test "bq query honours the configured cap" {
+  GCP_BQ_MAX_BYTES_BILLED=2048 STUB_BYTES=4096 run gcl-bq-query "SELECT 1"
+  [ "$status" -eq 1 ]
+}
+
+@test "bq query rejects an invalid --max-bytes before calling bq" {
+  run gcl-bq-query --max-bytes lots "SELECT 1"
+  [ "$status" -eq 1 ]
+  ! grep -q '^bq ' "$CALLS" 2> /dev/null
+}
+
+@test "bq query with a denied dry run names the missing permission and returns 5" {
+  STUB_DENY=1 run gcl-bq-query --dry-run "SELECT 1"
+  [ "$status" -eq 5 ]
+  [[ "$output" == *bigquery.jobs.create* ]]
+}
+
+@test "bq byte-size parser handles plain numbers and suffixes" {
+  [ "$(__mt_gcl_parse_bytes 500)" = "500" ]
+  [ "$(__mt_gcl_parse_bytes 2K)" = "2048" ]
+  [ "$(__mt_gcl_parse_bytes 1G)" = "1073741824" ]
+  run __mt_gcl_parse_bytes 5X
+  [ "$status" -eq 1 ]
 }

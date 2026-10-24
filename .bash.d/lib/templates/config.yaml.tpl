@@ -104,6 +104,10 @@ gcp:
   # Scheduler jobs) -- space-separated. Add a region here if your
   # infrastructure lives outside the defaults.
   scan_regions: "europe-west1 europe-west2"
+  # Scan cap for gcl-bq-query, in bytes (K/M/G/T suffixes also work, e.g. 10G).
+  # A query whose dry-run estimate exceeds it is refused, and the real run
+  # carries it as --maximum_bytes_billed. 10737418240 = 10 GiB.
+  bq_max_bytes_billed: 10737418240
 
 server:
   default_port: 8000

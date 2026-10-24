@@ -10,6 +10,7 @@ GCL_LOG_DEFAULT_LIMIT=1000
 GCL_LOG_DEFAULT_FRESHNESS="1d"
 GCL_LOG_TEMPLATE_MAX_LENGTH=160
 GCL_LOG_TEMPLATE_SED="$HOME/.bash.d/lib/sed/log_template.sed"
+GCL_BQ_DEFAULT_MAX_BYTES_BILLED=10737418240
 GCL_RFC3339_FORMAT="%Y-%m-%dT%H:%M:%SZ"
 GCL_RFC3339_REGEX='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$'
 
@@ -281,25 +282,51 @@ gcl-run-log-summary() {
 }
 
 #######################################
+# GCP: Convert a byte size such as 5000, 500M or 20G (IEC suffixes) to bytes
+# Arguments:
+#   $1 - Size
+# Returns:
+#   0 on success, 1 if the size is not a number with an optional K/M/G/T suffix
+# Outputs:
+#   Bytes
+#######################################
+__mt_gcl_parse_bytes() {
+  local size="$1"
+  if [[ "$size" =~ ^[0-9]+$ ]]; then
+    echo "$size"
+    return 0
+  fi
+  [[ "$size" =~ ^[0-9]+[KMGT]$ ]] || return 1
+  numfmt --from=iec "$size" 2> /dev/null
+}
+
+#######################################
 # GCP: Run a read-only BigQuery query. Only a single SELECT/WITH statement
 # is accepted (the statement must start with the keyword and contain no
 # semicolon), and permission failures name the missing permission. For a
 # hard guarantee, run under an account limited to bigquery.dataViewer + jobUser.
-# Usage: gcl-bq-query [-p <project>] [--json] "<sql>"
+# Every run is preceded by a dry run; a query estimated to scan more than the
+# cap (gcp.bq_max_bytes_billed in config.yaml, default 10 GiB) is refused, and
+# the real run carries the cap as --maximum_bytes_billed.
+# Usage: gcl-bq-query [-p <project>] [--json] [--max-bytes <size>] [--dry-run] "<sql>"
 # Arguments:
 #   <sql>                A single SELECT or WITH statement (standard SQL); the only
 #                        semicolon allowed is one trailing semicolon
 # Options:
 #   -p, --project <id>   Project to run (and bill) the job in (default: the active gcloud project)
 #   --json               Print the result as JSON instead of a table
+#   --max-bytes <size>   Scan cap for this call, bytes or with a K/M/G/T suffix (default: gcp.bq_max_bytes_billed)
+#   --dry-run            Print the estimated scan and exit without running the query
 #   -h, --help           Show this help menu
+# Globals:
+#   GCP_BQ_MAX_BYTES_BILLED
 # Returns:
-#   0 on success, 1 on failure or a rejected statement, 5 on permission denied
+#   0 on success, 1 on failure, a rejected statement or an over-cap estimate, 5 on permission denied
 # Outputs:
-#   Query result on stdout
+#   Query result on stdout; the scan estimate and cap on stderr
 #######################################
 gcl-bq-query() {
-  local project="" format="pretty" sql=""
+  local project="" format="pretty" sql="" max_bytes_arg="" dry_run=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -h | --help)
@@ -311,14 +338,24 @@ gcl-bq-query() {
         shift
         ;;
       --json) format="json" ;;
+      --max-bytes)
+        max_bytes_arg="${2:-}"
+        shift
+        ;;
+      --dry-run) dry_run="1" ;;
       *) sql="$1" ;;
     esac
     shift
   done
   if [ -z "$sql" ]; then
-    echo "Usage: gcl-bq-query [-p <project>] [--json] \"<sql>\"" >&2
+    echo "Usage: gcl-bq-query [-p <project>] [--json] [--max-bytes <size>] [--dry-run] \"<sql>\"" >&2
     return 1
   fi
+  local cap
+  cap=$(__mt_gcl_parse_bytes "${max_bytes_arg:-${GCP_BQ_MAX_BYTES_BILLED:-$GCL_BQ_DEFAULT_MAX_BYTES_BILLED}}") || {
+    echo -e "${CB_RED}❌ Invalid scan cap '${max_bytes_arg:-${GCP_BQ_MAX_BYTES_BILLED}}': use bytes or a K/M/G/T suffix (e.g. 500M).${C_RESET}" >&2
+    return 1
+  }
 
   local statement
   statement="${sql%"${sql##*[![:space:]]}"}"
@@ -335,16 +372,24 @@ gcl-bq-query() {
   __mt_gcl_preflight || return $?
   [ -z "$project" ] && project=$(gcl-get-project)
 
-  local result err_file rc=0
-  err_file=$(mktemp)
-  result=$(bq query --project_id="$project" --use_legacy_sql=false --format="$format" "$statement" 2> "$err_file") || rc=$?
-  if [ "$rc" -ne 0 ]; then
-    __mt_gcl_report_failure "BigQuery job in ${project}" "$(cat "$err_file")"
-    rc=$?
-    rm -f "$err_file"
-    return "$rc"
+  local estimate_json estimate rc=0
+  estimate_json=$(__mt_gcl_run "BigQuery dry run in ${project}" bq query --dry_run --format=json \
+    --use_legacy_sql=false --project_id="$project" "$statement") || return $?
+  estimate=$(jq -r '.statistics.totalBytesProcessed // .statistics.query.totalBytesProcessed // empty' <<< "$estimate_json" 2> /dev/null)
+  if [[ ! "$estimate" =~ ^[0-9]+$ ]]; then
+    echo -e "${CB_RED}🚨 Could not read the scan estimate from the BigQuery dry run; not running the query.${C_RESET}" >&2
+    return 1
   fi
-  rm -f "$err_file"
+  echo -e "${CB_YELLOW}💰 Estimated scan: $(numfmt --to=iec "$estimate") (cap $(numfmt --to=iec "$cap"))${C_RESET}" >&2
+  [ -n "$dry_run" ] && return 0
+  if [ "$estimate" -gt "$cap" ]; then
+    echo -e "${CB_RED}🚫 Estimated scan exceeds the cap; raise it with --max-bytes (or gcp.bq_max_bytes_billed) to run this query.${C_RESET}" >&2
+    return 1
+  fi
+
+  local result
+  result=$(__mt_gcl_run "BigQuery job in ${project}" bq query --project_id="$project" --use_legacy_sql=false \
+    --format="$format" --maximum_bytes_billed="$cap" "$statement") || return $?
   __mt_strip_control_chars <<< "$result"
 }
 

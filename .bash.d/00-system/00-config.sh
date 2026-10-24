@@ -848,6 +848,7 @@ mt-wizard-git() {
 #   -h, --help   Show this help menu
 # Globals:
 #   GCP_SCAN_REGIONS
+#   GCP_BQ_MAX_BYTES_BILLED
 #######################################
 mt-wizard-gcp() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -858,6 +859,13 @@ mt-wizard-gcp() {
   echo -e "${C_DIM}💡 Regions 'mt-radar --scan-gcp' checks for resource types whose gcloud list command needs one (Redis, VPC connectors, API Gateway gateways, Cloud Scheduler jobs). Space-separated.${C_RESET}"
   read -r -p "GCP scan regions [${GCP_SCAN_REGIONS:-europe-west1 europe-west2}]: " scan_regions
   [ -n "$scan_regions" ] && python3 "$CONFIG_MANAGER" update "gcp" "scan_regions" "$scan_regions"
+  echo -e "${C_DIM}💡 Scan cap for 'gcl-bq-query': queries estimated above it are refused. Bytes, or a K/M/G/T suffix (e.g. 10G).${C_RESET}"
+  read -r -p "BigQuery max bytes billed [${GCP_BQ_MAX_BYTES_BILLED:-10737418240}]: " bq_max_bytes
+  if [ -n "$bq_max_bytes" ] && ! __mt_gcl_parse_bytes "$bq_max_bytes" > /dev/null; then
+    echo -e "${CB_RED}❌ Not a valid size; keeping the current value.${C_RESET}"
+  elif [ -n "$bq_max_bytes" ]; then
+    python3 "$CONFIG_MANAGER" update "gcp" "bq_max_bytes_billed" "$bq_max_bytes"
+  fi
   echo -e "${CB_GREEN}✅ GCP config updated.${C_RESET}"
 }
 
