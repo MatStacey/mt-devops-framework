@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- `gcp-iam-show` now accepts repeated `-p` and a `-m/--member` filter: for one member it lists their roles, and across several projects it prints a role x project matrix. Adds a generic `lib/awk/kv_matrix.awk` pivot. Without the new flags, output is unchanged.
 - Added `gcl-audit-changes`: lists who changed what in one or more GCP projects during a time window (relative or absolute), from the Admin Activity audit log, merged across projects and sorted by time. Also adds shared helpers in `33-gcp-read-only.sh` for upcoming GCP commands.
 - Replaced employer workspace, project and Jira-key examples in docstrings and test fixtures with generic placeholders. No behavior change.
 - `mt-suggest` no longer records your working directory in the public backlog issue, only whether you were in a work or personal repository. The team instruction block in `docs/TEAM_INTEGRATION.md` now files only reusable, new gaps (at most 5 per session), and no longer tells agents to run interactive commands that hang.
