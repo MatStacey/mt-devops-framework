@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- `gcl-bq-query` now dry-runs every query first and refuses one estimated to scan more than a cap (`gcp.bq_max_bytes_billed`, default 10 GiB; set in `mt-wizard-gcp`). New `--max-bytes` and `--dry-run` options; the real run carries `--maximum_bytes_billed`.
 - `mt-grep-repos` can search remote-tracking branches without checking them out: `-b <ref-glob>` or `-B` for all, with `-u` to merge identical hits across branches.
 - `bb-pipelines` now shows each step's start and end time and each run's duration in the list view.
 - `gcp-iam-show` now accepts repeated `-p` and a `-m/--member` filter: for one member it lists their roles, and across several projects it prints a role x project matrix. Adds a generic `lib/awk/kv_matrix.awk` pivot. Without the new flags, output is unchanged.
