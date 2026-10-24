@@ -75,7 +75,9 @@ __mt_bb_body_file() {
 # Returns:
 #   0 on success, 1 on bad usage or missing credentials, mt-http's code on API failure
 # Outputs:
-#   Runs or steps as tab-separated lines; logs as redacted text
+#   Runs as "#build<TAB>state<TAB>duration<TAB>branch<TAB>creator<TAB>created" lines,
+#   steps as "n<TAB>result<TAB>name<TAB>duration<TAB>started_on<TAB>completed_on<TAB>uuid"
+#   lines (- when not yet set); logs as redacted text
 #######################################
 bb-pipelines() {
   local repo="" count="$BITBUCKET_PIPELINES_DEFAULT_COUNT" ref="" log_step="" tail_lines="$BITBUCKET_LOG_DEFAULT_TAIL"

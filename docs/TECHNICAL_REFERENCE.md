@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Sat Oct 24 05:30:57 AM BST 2026  
+> Generated: Sat Oct 24 05:31:59 AM BST 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -11194,7 +11194,9 @@ bb-env() {
 # Returns:
 #   0 on success, 1 on bad usage or missing credentials, mt-http's code on API failure
 # Outputs:
-#   Runs or steps as tab-separated lines; logs as redacted text
+#   Runs as "#build<TAB>state<TAB>duration<TAB>branch<TAB>creator<TAB>created" lines,
+#   steps as "n<TAB>result<TAB>name<TAB>duration<TAB>started_on<TAB>completed_on<TAB>uuid"
+#   lines (- when not yet set); logs as redacted text
 #######################################
 bb-pipelines() {
   local repo="" count="$BITBUCKET_PIPELINES_DEFAULT_COUNT" ref="" log_step="" tail_lines="$BITBUCKET_LOG_DEFAULT_TAIL"
