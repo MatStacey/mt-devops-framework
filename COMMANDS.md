@@ -285,6 +285,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `gcl-run-log-summary` | GCP: Count Cloud Run log lines by message template. Numbers, IDs, UUIDs, |
 | `gcl-wif-describe` | GCP: Describe a Workload Identity Pool and list its providers. Read-only. |
 
+### GCP: Read-Only Observability Wrappers
+| Command | Description |
+|---|---|
+| `gcl-audit-changes` | GCP: List audit-log changes (who changed what) in projects over a time window. |
+
 ### GCP: Resources & Services
 | Command | Description |
 |---|---|

@@ -10,6 +10,8 @@ GCL_LOG_DEFAULT_LIMIT=1000
 GCL_LOG_DEFAULT_FRESHNESS="1d"
 GCL_LOG_TEMPLATE_MAX_LENGTH=160
 GCL_LOG_TEMPLATE_SED="$HOME/.bash.d/lib/sed/log_template.sed"
+GCL_RFC3339_FORMAT="%Y-%m-%dT%H:%M:%SZ"
+GCL_RFC3339_REGEX='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$'
 
 #######################################
 # GCP: Verify the gcloud token is usable before a read-only call
@@ -42,6 +44,82 @@ __mt_gcl_report_failure() {
   fi
   printf '%b🚨 %s failed:%b %s\n' "$CB_RED" "$context" "$C_RESET" "$err" >&2
   return 1
+}
+
+#######################################
+# GCP: Run a command, passing its stdout through and reporting a failure
+# via __mt_gcl_report_failure
+# Arguments:
+#   $1 - What is being attempted, $2... - the command and its arguments
+# Returns:
+#   0 on success, otherwise __mt_gcl_report_failure's result
+#######################################
+__mt_gcl_run() {
+  local context="$1" err_file rc=0
+  shift
+  err_file=$(mktemp)
+  "$@" 2> "$err_file" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    __mt_gcl_report_failure "$context" "$(cat "$err_file")"
+    rc=$?
+  fi
+  rm -f "$err_file"
+  return "$rc"
+}
+
+#######################################
+# GCP: Convert a duration such as 90s, 30m, 6h or 2d to seconds
+# Arguments:
+#   $1 - Duration
+# Returns:
+#   0 on success, 1 if the duration is not <number><s|m|h|d>
+# Outputs:
+#   Seconds
+#######################################
+__mt_gcl_duration_seconds() {
+  local duration="$1" amount unit
+  [[ "$duration" =~ ^([0-9]+)([smhd])$ ]] || return 1
+  amount="${BASH_REMATCH[1]}"
+  unit="${BASH_REMATCH[2]}"
+  case "$unit" in
+    s) echo "$amount" ;;
+    m) echo $((amount * 60)) ;;
+    h) echo $((amount * 3600)) ;;
+    d) echo $((amount * 86400)) ;;
+  esac
+}
+
+#######################################
+# GCP: Format epoch seconds as a UTC RFC3339 timestamp
+# Arguments:
+#   $1 - Epoch seconds
+# Outputs:
+#   Timestamp such as 2026-10-05T12:00:00Z
+#######################################
+__mt_gcl_rfc3339() {
+  date -u -d "@$1" +"$GCL_RFC3339_FORMAT" 2> /dev/null || date -u -r "$1" +"$GCL_RFC3339_FORMAT"
+}
+
+#######################################
+# GCP: Build a Cloud Logging timestamp filter from a relative or absolute window
+# Arguments:
+#   $1 - Relative window (e.g. 1d), used when $2 is empty
+#   $2 - Window start (RFC3339), $3 - window end (RFC3339, default: now)
+# Returns:
+#   0 on success, 1 on an invalid duration or timestamp
+# Outputs:
+#   timestamp>="..." AND timestamp<="..."
+#######################################
+__mt_gcl_time_filter() {
+  local since="$1" start="$2" end="$3" now seconds
+  now=$(date +%s)
+  if [ -z "$start" ]; then
+    seconds=$(__mt_gcl_duration_seconds "$since") || return 1
+    start=$(__mt_gcl_rfc3339 $((now - seconds)))
+  fi
+  [ -z "$end" ] && end=$(__mt_gcl_rfc3339 "$now")
+  [[ "$start" =~ $GCL_RFC3339_REGEX && "$end" =~ $GCL_RFC3339_REGEX ]] || return 1
+  printf 'timestamp>="%s" AND timestamp<="%s"\n' "$start" "$end"
 }
 
 #######################################
