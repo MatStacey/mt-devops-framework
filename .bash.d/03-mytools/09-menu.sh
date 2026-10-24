@@ -660,6 +660,7 @@ __mt_menu_gcp_project() {
     "Summarise Cloud Run Logs (gcl-run-log-summary)" __mt_menu_run_log_summary \
     "Run Read-Only BigQuery Query (gcl-bq-query)" __mt_menu_bq_query \
     "Describe Workload Identity Pool (gcl-wif-describe)" __mt_menu_wif_describe \
+    "List Audit-Log Changes (gcl-audit-changes)" gcl-audit-changes \
     "gcloud Auth Login (gcp-login)" gcp-login \
     "gcloud ADC Login (gcp-login-adc)" gcp-login-adc \
     "Update gcloud CLI (gcl-update)" gcl-update
