@@ -1238,6 +1238,36 @@ mt-repos-run() {
   fi
 }
 
+GREP_REPOS_REMOTE_REFS_PREFIX="refs/remotes/"
+GREP_REPOS_REFS_AWK="$HOME/.bash.d/lib/awk/grep_refs.awk"
+
+#######################################
+# Git: Search file contents on the remote-tracking branches of one repo
+# without checking anything out (no fetch -- refs are as fresh as the last one)
+# Arguments:
+#   $1 - Repository path, $2 - path shown in the output (relative to the VCS root)
+#   $3 - Remote-tracking ref glob relative to refs/remotes/ (empty: all)
+#   $4 - Extended regex, $5 - file-name glob (may be empty)
+#   $6 - 1 to print file paths only, $7 - 1 to merge identical hits across refs
+# Outputs:
+#   "repo/ref:path:line:text" lines ("repo/ref:path" with files-only)
+#######################################
+__mt_grep_repo_refs() {
+  local repo_path="$1" display_path="$2" ref_glob="$3" pattern="$4" file_glob="$5" files_only="$6" unique="$7"
+  local -a refs=() grep_args=(-I -E)
+  mapfile -t refs < <(git -C "$repo_path" for-each-ref --format='%(refname)' "${GREP_REPOS_REMOTE_REFS_PREFIX}${ref_glob}" 2> /dev/null | grep -v '/HEAD$')
+  [ "${#refs[@]}" -eq 0 ] && return 0
+  if [ "$files_only" -eq 1 ]; then
+    grep_args+=(-l)
+  else
+    grep_args+=(-n)
+  fi
+  local -a pathspec=()
+  [ -n "$file_glob" ] && pathspec=(-- ":(glob)**/${file_glob}")
+  git -C "$repo_path" grep "${grep_args[@]}" -e "$pattern" "${refs[@]}" "${pathspec[@]}" 2> /dev/null |
+    awk -v repo="$display_path" -v strip="$GREP_REPOS_REMOTE_REFS_PREFIX" -v unique="$unique" -f "$GREP_REPOS_REFS_AWK"
+}
+
 #######################################
 # Git: Search file contents and/or file names across every local repo
 # under VCS_ROOT, optionally narrowed to a scope/provider/workspace/
@@ -1245,7 +1275,7 @@ mt-repos-run() {
 # 'find' loops. Skips .git, node_modules, .terraform and virtualenvs.
 # Usage: mt-grep-repos [-s work|personal] [-p provider] [-w workspace]
 #                      [-pr project] [-g <glob>] [-l] [-N <name-glob>]
-#                      [<pattern>]
+#                      [-b <ref-glob> | -B] [-u] [<pattern>]
 # Arguments:
 #   <pattern>                     Extended regex to search file contents for
 # Options:
@@ -1256,11 +1286,17 @@ mt-repos-run() {
 #   -g, --glob <glob>             Only search files whose name matches this glob (e.g. '*.tf')
 #   -l, --files-only              Print matching file paths only, not matching lines
 #   -N, --name <name-glob>        List files whose name matches this glob (no <pattern> needed)
+#   -b, --branches <ref-glob>     Search remote-tracking branches instead of the working tree, e.g. 'origin/*'
+#                                 or 'origin/release/*' (no fetch: refs are as fresh as the last fetch,
+#                                 see mt-bulk-update); output is repo/ref:path:line:text
+#   -B, --all-branches            Search every remote-tracking branch
+#   -u, --unique                  With -b/-B, merge identical hits found on several branches into one
+#                                 line: repo/ref1,ref2:path:line:text
 #   -h, --help                    Show this help
 # Globals:
 #   VCS_ROOT
 # Returns:
-#   0 if anything matched, 1 otherwise
+#   0 if anything matched, 1 otherwise (also on bad usage, e.g. -N with -b/-B)
 #######################################
 mt-grep-repos() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -1268,7 +1304,7 @@ mt-grep-repos() {
     return 0
   fi
 
-  local scope="" provider="" workspace="" project="" glob="" name_glob="" files_only=0
+  local scope="" provider="" workspace="" project="" glob="" name_glob="" files_only=0 ref_glob="" search_refs=0 unique=0
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -s | --scope)
@@ -1303,6 +1339,20 @@ mt-grep-repos() {
         files_only=1
         shift
         ;;
+      -b | --branches)
+        ref_glob="$2"
+        search_refs=1
+        shift 2 || shift
+        ;;
+      -B | --all-branches)
+        ref_glob=""
+        search_refs=1
+        shift
+        ;;
+      -u | --unique)
+        unique=1
+        shift
+        ;;
       *)
         break
         ;;
@@ -1311,7 +1361,15 @@ mt-grep-repos() {
 
   local pattern="${1:-}"
   if [ -z "$pattern" ] && [ -z "$name_glob" ]; then
-    echo "Usage: mt-grep-repos [filters] [-g <glob>] [-l] [-N <name-glob>] [<pattern>]" >&2
+    echo "Usage: mt-grep-repos [filters] [-g <glob>] [-l] [-N <name-glob>] [-b <ref-glob> | -B] [-u] [<pattern>]" >&2
+    return 1
+  fi
+  if [ "$search_refs" -eq 1 ] && { [ -n "$name_glob" ] || [ -z "$pattern" ]; }; then
+    echo "mt-grep-repos: -b/-B search file contents and need a <pattern>; -N is not supported with them" >&2
+    return 1
+  fi
+  if [ "$unique" -eq 1 ] && [ "$search_refs" -eq 0 ]; then
+    echo "mt-grep-repos: --unique needs -b or -B" >&2
     return 1
   fi
 
@@ -1338,6 +1396,15 @@ mt-grep-repos() {
   while IFS= read -r repo_path; do
     [ -z "$repo_path" ] && continue
     __mt_vcs_matches_filter "$repo_path" "$scope" "$provider" "$workspace" "$project" || continue
+    if [ "$search_refs" -eq 1 ]; then
+      local ref_hits
+      ref_hits=$(__mt_grep_repo_refs "$repo_path" "${repo_path#"$search_dir"/}" "$ref_glob" "$pattern" "$glob" "$files_only" "$unique")
+      if [ -n "$ref_hits" ]; then
+        echo "$ref_hits"
+        found=1
+      fi
+      continue
+    fi
     if [ -n "$name_glob" ]; then
       local name_hits
       name_hits=$(find "$repo_path" \( -name .git -o -name node_modules -o -name .terraform -o -name .venv -o -name venv -o -name __pycache__ \) -prune -o -type f -name "$name_glob" -print)
