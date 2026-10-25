@@ -345,7 +345,10 @@ bb-pipeline-run() {
       echo -e "${CB_RED}❌ --secured-var ${key}: set the environment variable ${key} first.${C_RESET}" >&2
       return 1
     fi
-    variables=$(jq -c --arg key "$key" --arg value "${!key}" '. + [{key: $key, value: $value, secured: true}]' <<< "$variables")
+    variables=$(
+      export "${key?}"
+      jq -c --arg key "$key" '. + [{key: $key, value: $ENV[$key], secured: true}]' <<< "$variables"
+    )
   done
 
   if [ -z "$assume_yes" ] && [ ! -t 0 ]; then
@@ -366,11 +369,12 @@ bb-pipeline-run() {
   fi
 
   local body body_file response rc=0
-  body=$(jq -nc --arg branch "$branch" --arg commit "$commit" --arg pattern "$pattern" --argjson variables "$variables" '
-    ((if $branch != "" then {type: "pipeline_ref_target", ref_type: "branch", ref_name: $branch}
+  body=$(jq -c --arg branch "$branch" --arg commit "$commit" --arg pattern "$pattern" '
+    . as $variables
+    | ((if $branch != "" then {type: "pipeline_ref_target", ref_type: "branch", ref_name: $branch}
       else {type: "pipeline_commit_target", commit: {type: "commit", hash: $commit}} end)
      + (if $pattern != "" then {selector: {type: "custom", pattern: $pattern}} else {} end)) as $target
-    | {target: $target} + (if ($variables | length) > 0 then {variables: $variables} else {} end)')
+    | {target: $target} + (if ($variables | length) > 0 then {variables: $variables} else {} end)' <<< "$variables")
   body_file=$(__mt_bb_body_file "$body") || return 1
   response=$(__mt_bb_api "repositories/${repo}/pipelines/" -H "Content-Type: application/json" -d "@${body_file}" --raw) || rc=$?
   rm -rf "$(dirname "$body_file")"
@@ -575,7 +579,10 @@ bb-var() {
   fi
 
   local body body_file rc=0
-  body=$(jq -nc --arg key "$key" --arg value "$value" --argjson secured "$secured" '{key: $key, value: $value, secured: $secured}')
+  body=$(
+    export value
+    jq -nc --arg key "$key" --argjson secured "$secured" '{key: $key, value: $ENV.value, secured: $secured}'
+  )
   body_file=$(__mt_bb_body_file "$body") || return 1
   __mt_bb_api "${variables_path}" -H "Content-Type: application/json" -d "@${body_file}" --raw > /dev/null || rc=$?
   rm -rf "$(dirname "$body_file")"

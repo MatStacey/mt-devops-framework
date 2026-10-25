@@ -6,6 +6,9 @@
 
 setup() {
   repo_root="$(cd "$BATS_TEST_DIRNAME/../.." && pwd)"
+  HOME="$BATS_TEST_TMPDIR/home"
+  mkdir -p "$HOME/.bash.d"
+  ln -s "$repo_root/.bash.d/lib" "$HOME/.bash.d/lib"
   # shellcheck disable=SC1091
   source "$repo_root/.bash.d/20-vcs/50-git.sh"
   CB_RED="" CB_GREEN="" CB_YELLOW="" CB_BLUE="" CB_CYAN="" C_RESET=""
