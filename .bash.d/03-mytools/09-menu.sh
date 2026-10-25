@@ -340,6 +340,7 @@ __mt_menu_firestore_get_doc() { gcl-firestore get "$1"; }
 __mt_menu_wif_describe() { __mt_menu_prompt_arg "Workload Identity Pool ID" gcl-wif-describe; }
 __mt_menu_bb_pipelines() { bb-pipelines; }
 __mt_menu_bb_env() { bb-env list; }
+__mt_menu_bb_deployments() { bb-deployments; }
 __mt_menu_bb_var() { bb-var list; }
 __mt_menu_bb_pr() { __mt_menu_prompt_arg "Bitbucket PR number" bb-pr; }
 __mt_menu_conf_get() { __mt_menu_prompt_arg "Confluence page ID or URL" conf-get; }
@@ -792,6 +793,7 @@ __mt_menu_git_repos() {
     "Show Bitbucket Pull Request (bb-pr)" __mt_menu_bb_pr \
     "List Bitbucket Pipeline Runs (bb-pipelines)" __mt_menu_bb_pipelines \
     "List Bitbucket Environments (bb-env)" __mt_menu_bb_env \
+    "List Bitbucket Deployments (bb-deployments)" __mt_menu_bb_deployments \
     "List Bitbucket Variables (bb-var)" __mt_menu_bb_var \
     "Read Confluence Page (conf-get)" __mt_menu_conf_get \
     "Search Confluence (conf-search)" __mt_menu_conf_search

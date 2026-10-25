@@ -156,6 +156,82 @@ bb-pipelines() {
 }
 
 #######################################
+# Bitbucket: Show deployment history -- the latest deployment of every
+# environment, or the last N deployments to one environment -- with the
+# commit, branch, build number and who triggered it. The branch, build and
+# creator come from one pipeline lookup per printed row.
+# Usage: bb-deployments [-r <workspace/repo>] [-e <environment>] [-n <count>]
+# Options:
+#   -r, --repo <w/r>        Repository (default: the current directory's Bitbucket remote)
+#   -e, --env <name>        Only this environment (case-insensitive), newest first
+#   -n, --count <n>         With -e, how many deployments to list (default: 10)
+#   -h, --help              Show this help menu
+# Returns:
+#   0 on success, 1 on bad usage or an unknown environment, mt-http's code on API failure
+# Outputs:
+#   "env<TAB>state/status<TAB>started_on<TAB>commit<TAB>branch<TAB>build<TAB>triggered-by" lines
+#######################################
+bb-deployments() {
+  local repo="" env_name="" count="$BITBUCKET_PIPELINES_DEFAULT_COUNT"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -r | --repo)
+        repo="${2:-}"
+        shift
+        ;;
+      -e | --env)
+        env_name="${2:-}"
+        shift
+        ;;
+      -n | --count)
+        count="${2:-}"
+        shift
+        ;;
+      *)
+        echo "Usage: bb-deployments [-r <workspace/repo>] [-e <environment>] [-n <count>]" >&2
+        return 1
+        ;;
+    esac
+    shift
+  done
+  if [[ ! "$count" =~ ^[1-9][0-9]*$ ]]; then
+    echo -e "${CB_RED}❌ --count must be a positive number.${C_RESET}" >&2
+    return 1
+  fi
+  repo=$(__mt_bb_resolve_repo "$repo") || return 1
+
+  local environments env_uuid=""
+  environments=$(__mt_bb_collect "repositories/${repo}/environments/") || return $?
+  if [ -n "$env_name" ]; then
+    env_uuid=$(jq -r --arg n "$env_name" '[.[] | select(.name | ascii_downcase == ($n | ascii_downcase))][0].uuid // empty' <<< "$environments")
+    if [ -z "$env_uuid" ]; then
+      echo -e "${CB_RED}🚨 No environment named '${env_name}'.${C_RESET}" >&2
+      return 1
+    fi
+  fi
+
+  local deployments selected
+  deployments=$(__mt_bb_collect "repositories/${repo}/deployments/") || return $?
+  selected=$(jq -c --argjson environments "$environments" --arg env_uuid "$env_uuid" --argjson count "$count" \
+    -f "$BITBUCKET_JQ_DIR/bb_deployments.jq" <<< "$deployments") || return 1
+
+  local row pipeline_uuid pipeline
+  while IFS= read -r row; do
+    [ -z "$row" ] && continue
+    pipeline="{}"
+    pipeline_uuid=$(jq -r '.pipeline_uuid' <<< "$row")
+    if [ -n "$pipeline_uuid" ]; then
+      pipeline=$(__mt_bb_api "repositories/${repo}/pipelines/$(__mt_bb_encode_uuid "$pipeline_uuid")" --raw 2> /dev/null) || pipeline="{}"
+    fi
+    jq -r --argjson pipeline "$pipeline" -f "$BITBUCKET_JQ_DIR/bb_deployment_row.jq" <<< "$row"
+  done < <(jq -c '.[]' <<< "$selected") | __mt_strip_control_chars
+}
+
+#######################################
 # Bitbucket: Print the encoded UUID of a deployment environment by name
 # Arguments:
 #   $1 - workspace/repo, $2 - environment name (case-insensitive)
