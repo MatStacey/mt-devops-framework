@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added `gcl-metric-read`: reads Cloud Monitoring time series for any metric over a time window (alignment, reducer, group-by, `--align window` for one total per series) and lists metric types by prefix. Adds shared REST helpers (`__mt_gcl_rest`, `__mt_gcl_rest_collect`) for upcoming GCP commands.
 - `gcl-bq-query` now dry-runs every query first and refuses one estimated to scan more than a cap (`gcp.bq_max_bytes_billed`, default 10 GiB; set in `mt-wizard-gcp`). New `--max-bytes` and `--dry-run` options; the real run carries `--maximum_bytes_billed`.
 - `mt-grep-repos` can search remote-tracking branches without checking them out: `-b <ref-glob>` or `-B` for all, with `-u` to merge identical hits across branches.
 - `bb-pipelines` now shows each step's start and end time and each run's duration in the list view.

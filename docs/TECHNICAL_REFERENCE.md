@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Sat Oct 24 05:35:00 AM BST 2026  
+> Generated: Sun Oct 25 01:17:35 AM GMT 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -4973,6 +4973,185 @@ gcl-audit-changes() {
 
   [ -n "$result" ] && printf '%s' "$result" | sort -t$'\t' -k1,1 -s | __mt_strip_control_chars
   return "$rc"
+}
+```
+
+#### `gcl-metric-read`
+
+> GCP: Read Cloud Monitoring time series for a metric over a time window (gcloud
+
+```bash
+#######################################
+# GCP: Read Cloud Monitoring time series for a metric over a time window (gcloud
+# has no command for this), or list the metric types under a prefix. Read-only;
+# needs roles/monitoring.viewer.
+# Usage: gcl-metric-read <metric.type> [-p <project>] [--filter '<extra>'] [--since <dur> | --start <rfc3339> [--end <rfc3339>]] [--align <dur>|window] [--aligner ALIGN_*] [--reducer REDUCE_*] [--group-by <field,...>] [--json]
+#        gcl-metric-read --list <metric-type-prefix> [-p <project>]
+# Arguments:
+#   <metric.type>              Metric type, e.g. logging.googleapis.com/byte_count
+# Options:
+#   -p, --project <id>         Project (default: the active gcloud project)
+#   --filter <expr>            Extra filter ANDed onto the metric type, e.g. 'resource.labels.job_name="x"'
+#   --since <dur>              Relative window, e.g. 30m, 6h, 30d (default: 1h)
+#   --start <rfc3339>          Window start (overrides --since)
+#   --end <rfc3339>            Window end (default: now)
+#   --align <dur>|window       Alignment period, or "window" for one value per series over the whole window
+#                              (default 60s when --aligner or --reducer is given)
+#   --aligner <ALIGN_*>        Per-series aligner, e.g. ALIGN_SUM, ALIGN_MAX, ALIGN_RATE
+#   --reducer <REDUCE_*>       Cross-series reducer, e.g. REDUCE_SUM
+#   --group-by <f1,f2>         Fields to group the reduced series by, e.g. resource.type
+#   --json                     Print the series as JSON instead of tab-separated rows
+#   --list <prefix>            List metric types starting with this prefix (to find exact names)
+#   -h, --help                 Show this help menu
+# Returns:
+#   0 on success, 1 on failure or bad usage, 5 on permission denied
+# Outputs:
+#   "labels<TAB>end_time<TAB>value" rows, or with --list
+#   "type<TAB>kind<TAB>value type<TAB>unit<TAB>description" rows
+# Example:
+#   gcl-metric-read logging.googleapis.com/byte_count -p proj --since 30d --align window --aligner ALIGN_SUM --reducer REDUCE_SUM --group-by resource.type
+#   gcl-metric-read --list dataflow.googleapis.com/job/ -p proj
+#   gcl-metric-read pubsub.googleapis.com/subscription/num_undelivered_messages -p proj --filter 'resource.labels.subscription_id="sub"' --since 6h --align 60s --aligner ALIGN_MAX
+#######################################
+gcl-metric-read() {
+  local project="" metric="" list_prefix="" extra_filter="" since="$GCL_METRIC_DEFAULT_SINCE" start="" end="" align="" aligner="" reducer="" group_by="" as_json=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -p | --project)
+        project="${2:-}"
+        shift
+        ;;
+      --filter)
+        extra_filter="${2:-}"
+        shift
+        ;;
+      --since)
+        since="${2:-}"
+        shift
+        ;;
+      --start)
+        start="${2:-}"
+        shift
+        ;;
+      --end)
+        end="${2:-}"
+        shift
+        ;;
+      --align)
+        align="${2:-}"
+        shift
+        ;;
+      --aligner)
+        aligner="${2:-}"
+        shift
+        ;;
+      --reducer)
+        reducer="${2:-}"
+        shift
+        ;;
+      --group-by)
+        group_by="${2:-}"
+        shift
+        ;;
+      --json) as_json="1" ;;
+      --list)
+        list_prefix="${2:-}"
+        shift
+        ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) metric="$1" ;;
+    esac
+    shift
+  done
+
+  local usage="Usage: gcl-metric-read <metric.type> [options] | gcl-metric-read --list <prefix> [-p <project>]"
+  if [ -z "$metric" ] && [ -z "$list_prefix" ]; then
+    echo "$usage" >&2
+    return 1
+  fi
+  [ -n "$project" ] && [[ ! "$project" =~ $GCL_AUDIT_PROJECT_REGEX ]] && {
+    echo -e "${CB_RED}❌ Invalid project: ${project}${C_RESET}" >&2
+    return 1
+  }
+  local checked_value
+  for checked_value in "$metric" "$list_prefix"; do
+    [ -n "$checked_value" ] && [[ ! "$checked_value" =~ $GCL_METRIC_TYPE_REGEX ]] && {
+      echo -e "${CB_RED}❌ Invalid metric type: ${checked_value}${C_RESET}" >&2
+      return 1
+    }
+  done
+  [ -n "$aligner" ] && [[ ! "$aligner" =~ $GCL_METRIC_ALIGNER_REGEX ]] && {
+    echo -e "${CB_RED}❌ --aligner must look like ALIGN_SUM.${C_RESET}" >&2
+    return 1
+  }
+  [ -n "$reducer" ] && [[ ! "$reducer" =~ $GCL_METRIC_REDUCER_REGEX ]] && {
+    echo -e "${CB_RED}❌ --reducer must look like REDUCE_SUM.${C_RESET}" >&2
+    return 1
+  }
+
+  __mt_gcl_preflight || return $?
+  [ -z "$project" ] && project=$(gcl-get-project)
+  local url="${GCL_METRIC_API}/${project}"
+
+  if [ -n "$list_prefix" ]; then
+    __mt_gcl_rest_collect "listing metric descriptors of ${project}" metricDescriptors "${url}/metricDescriptors" \
+      -q "filter=metric.type = starts_with(\"${list_prefix}\")" |
+      jq -r -f "$GCL_METRIC_DESCRIPTORS_JQ" | __mt_strip_control_chars
+    return "${PIPESTATUS[0]}"
+  fi
+
+  local window window_start window_end
+  window=$(__mt_gcl_window "$since" "$start" "$end") || {
+    echo -e "${CB_RED}❌ Invalid --since (use e.g. 6h, 30d) or --start/--end (RFC3339 UTC).${C_RESET}" >&2
+    return 1
+  }
+  read -r window_start window_end <<< "$window"
+
+  local -a query=(-q "filter=metric.type=\"${metric}\"${extra_filter:+ AND ${extra_filter}}"
+    -q "interval.startTime=${window_start}" -q "interval.endTime=${window_end}")
+  if [ -n "$aligner" ] || [ -n "$reducer" ] || [ -n "$align" ]; then
+    local period_seconds
+    if [ "$align" = "window" ]; then
+      period_seconds=$(($(__mt_gcl_epoch "$window_end") - $(__mt_gcl_epoch "$window_start")))
+    else
+      period_seconds=$(__mt_gcl_duration_seconds "${align:-$GCL_METRIC_DEFAULT_ALIGN}") || {
+        echo -e "${CB_RED}❌ --align must be a duration such as 60s or 5m, or the word window.${C_RESET}" >&2
+        return 1
+      }
+    fi
+    query+=(-q "aggregation.alignmentPeriod=${period_seconds}s")
+    [ -n "$aligner" ] && query+=(-q "aggregation.perSeriesAligner=${aligner}")
+    [ -n "$reducer" ] && query+=(-q "aggregation.crossSeriesReducer=${reducer}")
+  fi
+  if [ -n "$group_by" ]; then
+    local field
+    local -a group_fields
+    IFS=, read -ra group_fields <<< "$group_by"
+    for field in "${group_fields[@]}"; do
+      [[ "$field" =~ $GCL_METRIC_GROUP_REGEX ]] || {
+        echo -e "${CB_RED}❌ Invalid --group-by field: ${field}${C_RESET}" >&2
+        return 1
+      }
+      query+=(-q "aggregation.groupByFields=${field}")
+    done
+  fi
+
+  local series rc=0
+  series=$(__mt_gcl_rest_collect "reading ${metric} in ${project}" timeSeries "${url}/timeSeries" "${query[@]}") || rc=$?
+  [ "$rc" -ne 0 ] && return "$rc"
+  [ -z "$series" ] && return 0
+  if [ -n "$as_json" ]; then
+    jq -s '.' <<< "$series" | __mt_strip_control_chars
+  else
+    jq -r -f "$GCL_METRIC_SERIES_JQ" <<< "$series" | __mt_strip_control_chars
+  fi
 }
 ```
 
