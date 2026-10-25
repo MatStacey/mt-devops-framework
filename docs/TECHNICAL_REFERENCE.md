@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Sun Oct 25 01:24:01 AM GMT 2026  
+> Generated: Sun Oct 25 01:26:00 AM GMT 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -4443,6 +4443,106 @@ gcl-redis-describe() {
   [ -z "$project" ] && project=$(gcl-get-project)
 
   gcloud redis instances describe "$instance" --region="$region" --project="$project" --quiet
+}
+```
+
+#### `gcl-run-compare`
+
+> GCP: Compare one Cloud Run service across projects (environments): image,
+
+```bash
+#######################################
+# GCP: Compare one Cloud Run service across projects (environments): image,
+# revision, service account, scaling, networking, probes, environment variable
+# names and secret references. Environment variable VALUES are never shown
+# (a literal value reads "set"; a secret reads "secret:<name>:<version>"), so
+# the output is safe to paste. Rows that differ are marked; a project without
+# the service shows (absent).
+# Usage: gcl-run-compare <service> -r <region> -p <project> -p <project> [...] [--all]
+# Arguments:
+#   <service>              Cloud Run service name
+# Options:
+#   -r, --region <region>  Region of the service
+#   -p, --project <id>     Project to compare; repeat for each (at least two)
+#   --all                  Print every row, not only the ones that differ
+#   -h, --help             Show this help menu
+# Returns:
+#   0 on success, 1 on failure or bad usage, 5 if any project was permission denied
+# Outputs:
+#   A key x project table, differing rows marked with a warning sign
+#######################################
+gcl-run-compare() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  local service="" region="" show_all=""
+  local -a projects=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -r | --region)
+        region="${2:-}"
+        shift
+        ;;
+      -p | --project)
+        projects+=("${2:-}")
+        shift
+        ;;
+      --all) show_all="1" ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) service="$1" ;;
+    esac
+    shift
+  done
+  if [ -z "$service" ] || [ -z "$region" ] || [ "${#projects[@]}" -lt 2 ]; then
+    echo "Usage: gcl-run-compare <service> -r <region> -p <project> -p <project> [...] [--all]" >&2
+    return 1
+  fi
+  [[ "$service" =~ ^[A-Za-z0-9_-]+$ && "$region" =~ ^[a-z0-9-]+$ ]] || {
+    echo -e "${CB_RED}❌ Invalid service or region.${C_RESET}" >&2
+    return 1
+  }
+  local project
+  for project in "${projects[@]}"; do
+    [[ "$project" =~ $GCL_PROJECT_ID_REGEX ]] || {
+      echo -e "${CB_RED}❌ Invalid project: ${project}${C_RESET}" >&2
+      return 1
+    }
+  done
+  __mt_gcl_preflight || return $?
+
+  local profiles="" rc=0 description err_file project_rc columns
+  local -a shown=()
+  for project in "${projects[@]}"; do
+    err_file=$(mktemp)
+    project_rc=0
+    description=$(gcloud run services describe "$service" --region="$region" --project="$project" --format=json --quiet 2> "$err_file") || project_rc=$?
+    if [ "$project_rc" -eq 0 ]; then
+      shown+=("$project")
+      profiles+=$(jq -r --arg project "$project" -f "$GCL_RUN_PROFILE_JQ" <<< "$description")$'\n'
+    elif grep -qiE "$GCL_RUN_NOT_FOUND_REGEX" "$err_file"; then
+      shown+=("$project")
+      profiles+="${project}"$'\t'"service"$'\t'"${GCL_RUN_ABSENT_TEXT}"$'\n'
+    else
+      __mt_gcl_report_failure "describing ${service} in ${project}" "$(cat "$err_file")"
+      project_rc=$?
+      [ "$rc" -eq 0 ] && rc="$project_rc"
+    fi
+    rm -f "$err_file"
+  done
+
+  columns=$(printf '%s,' "${shown[@]}")
+  printf '%s' "$profiles" | awk -v columns="${columns%,}" -v header="KEY" -v empty="-" -v mark="set" \
+    -v flag="$GCL_RUN_DIFF_FLAG" -v diff_only="$([ -z "$show_all" ] && echo 1 || echo 0)" \
+    -f "$GCL_RUN_MATRIX_AWK" | __mt_strip_control_chars
+  return "$rc"
 }
 ```
 
