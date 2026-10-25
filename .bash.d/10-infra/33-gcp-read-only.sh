@@ -12,6 +12,8 @@ GCL_LOG_TEMPLATE_MAX_LENGTH=160
 GCL_LOG_TEMPLATE_SED="$HOME/.bash.d/lib/sed/log_template.sed"
 GCL_BQ_DEFAULT_MAX_BYTES_BILLED=10737418240
 GCL_REST_MAX_PAGES=20
+# shellcheck disable=SC2034  # used by 32-, 34- and later GCP modules
+GCL_PROJECT_ID_REGEX='^[a-z0-9][a-z0-9:.-]*$'
 GCL_RFC3339_FORMAT="%Y-%m-%dT%H:%M:%SZ"
 GCL_RFC3339_REGEX='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$'
 
@@ -40,7 +42,7 @@ __mt_gcl_report_failure() {
   local context="$1" err permissions
   err=$(__mt_strip_control_chars <<< "$2")
   if grep -qiE 'permission|access denied|forbidden|\b403\b' <<< "$err"; then
-    permissions=$(grep -oE '[a-z]+(\.[a-zA-Z]+)+\.(create|get|list|use|update|delete|getIamPolicy)[A-Za-z]*' <<< "$err" | sort -u | paste -sd, -)
+    permissions=$(grep -oE '[a-z]+(\.[a-zA-Z]+)+\.(create|get|list|use|update|delete|getIamPolicy|setIamPolicy|pause|resume|run|enable|disable|actAs)[A-Za-z]*' <<< "$err" | sort -u | paste -sd, -)
     printf '%b🚫 Permission denied for %s%s as %s.%b\n' "$CB_RED" "$context" "${permissions:+ (missing: ${permissions})}" "$(gcl-get-user 2> /dev/null)" "$C_RESET" >&2
     return "$GCL_EXIT_DENIED"
   fi

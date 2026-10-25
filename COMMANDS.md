@@ -276,6 +276,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `gcl-projects-list` | GCP: List projects, optionally filtered by name and/or parent folder |
 | `gcl-redis-describe` | GCP: Describe a single Memorystore Redis instance |
 | `gcl-run-describe` | GCP: Describe a single Cloud Run service |
+| `gcl-scheduler` | GCP: List, describe, pause or resume Cloud Scheduler jobs across projects and |
 
 ### GCP: Read-Only Inspection Wrappers
 | Command | Description |

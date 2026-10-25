@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Sun Oct 25 01:17:35 AM GMT 2026  
+> Generated: Sun Oct 25 01:19:47 AM GMT 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -4499,6 +4499,168 @@ gcl-run-describe() {
 }
 ```
 
+#### `gcl-scheduler`
+
+> GCP: List, describe, pause or resume Cloud Scheduler jobs across projects and
+
+```bash
+#######################################
+# GCP: List, describe, pause or resume Cloud Scheduler jobs across projects and
+# locations. Scheduler is regional, so the locations searched are -l, every
+# location of the project (--all-locations), or the configured scan regions
+# (gcp.scan_regions). describe hides request bodies and header values; pause and
+# resume change a job's state and ask for confirmation (or --yes).
+# Usage: gcl-scheduler list [-p <project>]... [-l <location>]... [--all-locations]
+#        gcl-scheduler describe <job> [-p <project>] [-l <location>]...
+#        gcl-scheduler pause|resume <job> [-p <project>] [-l <location>]... [--yes]
+# Arguments:
+#   <job>                    Job ID (the last segment of its name)
+# Options:
+#   -p, --project <id>       Project; repeatable for list (default: the active gcloud project)
+#   -l, --location <region>  Location to search; repeatable (default: gcp.scan_regions)
+#   --all-locations          Search every Cloud Scheduler location of the project
+#   --yes                    pause/resume: skip the confirmation (required without a terminal)
+#   -h, --help               Show this help menu
+# Globals:
+#   GCP_SCAN_REGIONS
+# Returns:
+#   0 on success, 1 on failure, bad usage or an ambiguous/unknown job, 5 on permission denied
+# Outputs:
+#   list: "project<TAB>location<TAB>job<TAB>state<TAB>schedule<TAB>timeZone<TAB>target<TAB>lastAttemptTime<TAB>status" rows
+#   describe: the job as JSON
+#######################################
+gcl-scheduler() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  local action="${1:-}" job=""
+  shift
+  local -a projects=() locations=()
+  local all_locations="" assume_yes=""
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -p | --project)
+        projects+=("${2:-}")
+        shift
+        ;;
+      -l | --location)
+        locations+=("${2:-}")
+        shift
+        ;;
+      --all-locations) all_locations="1" ;;
+      --yes) assume_yes="1" ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) job="$1" ;;
+    esac
+    shift
+  done
+
+  local usage="Usage: gcl-scheduler list|describe|pause|resume [<job>] [-p <project>] [-l <location>] [--all-locations] [--yes]"
+  case "$action" in
+    list) ;;
+    describe | pause | resume)
+      [ -z "$job" ] && {
+        echo "$usage" >&2
+        return 1
+      }
+      [[ "$job" =~ $GCL_SCHEDULER_JOB_REGEX ]] || {
+        echo -e "${CB_RED}❌ Invalid job ID: ${job}${C_RESET}" >&2
+        return 1
+      }
+      [ "${#projects[@]}" -gt 1 ] && {
+        echo -e "${CB_RED}❌ ${action} takes a single project.${C_RESET}" >&2
+        return 1
+      }
+      ;;
+    *)
+      echo "$usage" >&2
+      return 1
+      ;;
+  esac
+  local item
+  for item in "${projects[@]}"; do
+    [[ "$item" =~ $GCL_PROJECT_ID_REGEX ]] || {
+      echo -e "${CB_RED}❌ Invalid project: ${item}${C_RESET}" >&2
+      return 1
+    }
+  done
+  for item in "${locations[@]}"; do
+    [[ "$item" =~ $GCL_SCHEDULER_LOCATION_REGEX ]] || {
+      echo -e "${CB_RED}❌ Invalid location: ${item}${C_RESET}" >&2
+      return 1
+    }
+  done
+  if [[ "$action" == "pause" || "$action" == "resume" ]] && [ -z "$assume_yes" ] && [ ! -t 0 ]; then
+    echo -e "${CB_RED}🚫 ${action} changes a job; pass --yes when there is no terminal to confirm on.${C_RESET}" >&2
+    return 1
+  fi
+
+  __mt_gcl_preflight || return $?
+  [ "${#projects[@]}" -eq 0 ] && projects=("$(gcl-get-project)")
+
+  local project rc=0 step_rc found_locations
+  local -a search_locations
+  if [ "$action" = "list" ]; then
+    for project in "${projects[@]}"; do
+      mapfile -t search_locations < <(__mt_gcl_scheduler_locations "$project" "$all_locations" "${locations[@]}")
+      for item in "${search_locations[@]}"; do
+        step_rc=0
+        __mt_gcl_run "listing Cloud Scheduler jobs in ${project}/${item}" gcloud scheduler jobs list \
+          --location="$item" --project="$project" --format=json --quiet |
+          jq -r --arg project "$project" --arg location "$item" -f "$GCL_SCHEDULER_JOBS_JQ" |
+          __mt_strip_control_chars
+        step_rc="${PIPESTATUS[0]}"
+        [ "$rc" -eq 0 ] && rc="$step_rc"
+      done
+    done
+    return "$rc"
+  fi
+
+  project="${projects[0]}"
+  mapfile -t search_locations < <(__mt_gcl_scheduler_locations "$project" "$all_locations" "${locations[@]}")
+  step_rc=0
+  found_locations=$(__mt_gcl_scheduler_locate "$project" "$job" "${search_locations[@]}") || step_rc=$?
+  local -a found=()
+  [ -n "$found_locations" ] && mapfile -t found <<< "$found_locations"
+  if [ "${#found[@]}" -ne 1 ]; then
+    [ "$step_rc" -ne 0 ] && return "$step_rc"
+    if [ "${#found[@]}" -eq 0 ]; then
+      echo -e "${CB_RED}❌ Job ${job} not found in ${project} (searched: ${search_locations[*]}).${C_RESET}" >&2
+    else
+      echo -e "${CB_RED}❌ Job ${job} exists in several locations (${found[*]}); pass -l.${C_RESET}" >&2
+    fi
+    return 1
+  fi
+  local location="${found[0]}"
+
+  if [ "$action" = "describe" ]; then
+    __mt_gcl_run "describing ${job}" gcloud scheduler jobs describe "$job" --location="$location" \
+      --project="$project" --format=json --quiet | jq -f "$GCL_SCHEDULER_DESCRIBE_JQ" | __mt_strip_control_chars
+    return "${PIPESTATUS[0]}"
+  fi
+
+  if [ -z "$assume_yes" ]; then
+    local reply
+    read -r -p "${action^} job ${job} in ${project}/${location}? [y/N] " reply
+    [[ "$reply" =~ ^[Yy] ]] || {
+      echo "Cancelled."
+      return 1
+    }
+  fi
+  __mt_gcl_run "${action} of ${job}" gcloud scheduler jobs "$action" "$job" --location="$location" \
+    --project="$project" --quiet > /dev/null || return $?
+  echo -e "${CB_GREEN}✅ ${action^}d ${job} (${project}/${location}).${C_RESET}"
+}
+```
+
 ### 📂 GCP: Read-Only Inspection Wrappers
 
 
@@ -4918,7 +5080,7 @@ gcl-audit-changes() {
 
   local project
   for project in "${projects[@]}"; do
-    [[ "$project" =~ $GCL_AUDIT_PROJECT_REGEX ]] || {
+    [[ "$project" =~ $GCL_PROJECT_ID_REGEX ]] || {
       echo -e "${CB_RED}❌ Invalid project: ${project}${C_RESET}" >&2
       return 1
     }
@@ -5076,7 +5238,7 @@ gcl-metric-read() {
     echo "$usage" >&2
     return 1
   fi
-  [ -n "$project" ] && [[ ! "$project" =~ $GCL_AUDIT_PROJECT_REGEX ]] && {
+  [ -n "$project" ] && [[ ! "$project" =~ $GCL_PROJECT_ID_REGEX ]] && {
     echo -e "${CB_RED}❌ Invalid project: ${project}${C_RESET}" >&2
     return 1
   }
