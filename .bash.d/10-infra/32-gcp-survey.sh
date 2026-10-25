@@ -416,7 +416,7 @@ gcl-iam-keys() {
 #######################################
 __mt_gcl_scheduler_locations() {
   local project="$1" all_locations="$2" location
-  shift 2
+  shift 2 || return 1
   if [ "$#" -gt 0 ]; then
     printf '%s\n' "$@"
     return 0
@@ -442,7 +442,7 @@ __mt_gcl_scheduler_locations() {
 #######################################
 __mt_gcl_scheduler_locate() {
   local project="$1" job="$2" location jobs rc=0 location_rc
-  shift 2
+  shift 2 || return 1
   for location in "$@"; do
     location_rc=0
     jobs=$(__mt_gcl_run "listing Cloud Scheduler jobs in ${project}/${location}" gcloud scheduler jobs list \
