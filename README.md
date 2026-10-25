@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added `bb-deployments`: the latest deployment of each Bitbucket environment, or the history of one (`-e`, `-n`), with commit, branch, build number and who triggered it.
 - Added `gcl-run-compare`: compares one Cloud Run service across projects (image, service account, scaling, networking, probes, env var names, secret references) and marks the rows that differ. Environment values are never shown. `kv_matrix.awk` gains `diff_only` and `flag`.
 - Added `gcl-firestore`: read-only Firestore access over REST with `get` (field masks), `query` (a `--where` builder or a raw structured query, default limit 100) and `count`, returning plain JSON with `_id`.
 - Added `gcl-scheduler`: lists Cloud Scheduler jobs across projects and locations (the configured scan regions by default), describes a job without exposing bodies or header values, and pauses or resumes it after confirmation. Permission errors now also name pause/resume-style permissions.
