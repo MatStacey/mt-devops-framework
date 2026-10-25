@@ -278,6 +278,11 @@ Complex bash functions, framework utilities, and automated workflows.
 | `gcl-run-describe` | GCP: Describe a single Cloud Run service |
 | `gcl-scheduler` | GCP: List, describe, pause or resume Cloud Scheduler jobs across projects and |
 
+### GCP: Read-Only Firestore Access
+| Command | Description |
+|---|---|
+| `gcl-firestore` | GCP: Read Firestore documents over REST (gcloud has no document reads). |
+
 ### GCP: Read-Only Inspection Wrappers
 | Command | Description |
 |---|---|
