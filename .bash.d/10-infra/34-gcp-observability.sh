@@ -11,7 +11,6 @@ GCL_AUDIT_ACTIVITY_LOG="cloudaudit.googleapis.com%2Factivity"
 GCL_AUDIT_SYSTEM_LOG="cloudaudit.googleapis.com%2Fsystem_event"
 GCL_AUDIT_SERVICE_REGEX='^[A-Za-z0-9.-]+$'
 GCL_AUDIT_PRINCIPAL_REGEX='^[A-Za-z0-9._@+-]+$'
-GCL_AUDIT_PROJECT_REGEX='^[a-z0-9][a-z0-9:.-]*$'
 
 GCL_METRIC_DEFAULT_SINCE="1h"
 GCL_METRIC_DEFAULT_ALIGN="60s"
@@ -95,7 +94,7 @@ gcl-audit-changes() {
 
   local project
   for project in "${projects[@]}"; do
-    [[ "$project" =~ $GCL_AUDIT_PROJECT_REGEX ]] || {
+    [[ "$project" =~ $GCL_PROJECT_ID_REGEX ]] || {
       echo -e "${CB_RED}❌ Invalid project: ${project}${C_RESET}" >&2
       return 1
     }
@@ -247,7 +246,7 @@ gcl-metric-read() {
     echo "$usage" >&2
     return 1
   fi
-  [ -n "$project" ] && [[ ! "$project" =~ $GCL_AUDIT_PROJECT_REGEX ]] && {
+  [ -n "$project" ] && [[ ! "$project" =~ $GCL_PROJECT_ID_REGEX ]] && {
     echo -e "${CB_RED}❌ Invalid project: ${project}${C_RESET}" >&2
     return 1
   }
