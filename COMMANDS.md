@@ -274,6 +274,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | `gcl-logging-read` | GCP: Read logs with a custom filter and optional custom output format |
 | `gcl-network-survey` | GCP: Read-only survey of a project's networking surface -- VPC |
 | `gcl-projects-list` | GCP: List projects, optionally filtered by name and/or parent folder |
+| `gcl-pubsub-map` | GCP: Map Pub/Sub topics to their subscriptions across projects: delivery |
 | `gcl-redis-describe` | GCP: Describe a single Memorystore Redis instance |
 | `gcl-run-compare` | GCP: Compare one Cloud Run service across projects (environments): image, |
 | `gcl-run-describe` | GCP: Describe a single Cloud Run service |

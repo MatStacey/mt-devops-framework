@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Sun Oct 25 01:27:32 AM GMT 2026  
+> Generated: Sun Oct 25 01:28:51 AM GMT 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -4390,6 +4390,96 @@ gcl-projects-list() {
   else
     gcloud projects list --format="table(projectId,name,projectNumber,parent.type,parent.id)" --quiet
   fi
+}
+```
+
+#### `gcl-pubsub-map`
+
+> GCP: Map Pub/Sub topics to their subscriptions across projects: delivery
+
+```bash
+#######################################
+# GCP: Map Pub/Sub topics to their subscriptions across projects: delivery
+# type (push, bigquery, gcs, pull) and target, filter, dead-letter topic and
+# any non-ACTIVE state. Subscriptions are matched to topics by full path, so
+# listing two projects shows subscriptions that cross them. Push URLs are
+# shown without userinfo and query string.
+# Usage: gcl-pubsub-map [-p <project>]... [-t <topic-substring>] [--json]
+# Options:
+#   -p, --project <id>       Project to read; repeatable (default: the active gcloud project)
+#   -t, --topic <text>       Only topics whose full path contains this text
+#   --json                   Print the grouped structure as JSON instead of a tree
+#   -h, --help               Show this help menu
+# Returns:
+#   0 on success, 1 on failure or bad usage, 5 if any project was permission denied
+# Outputs:
+#   A topic -> subscription tree
+#######################################
+gcl-pubsub-map() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  local needle="" as_json=""
+  local -a projects=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -p | --project)
+        projects+=("${2:-}")
+        shift
+        ;;
+      -t | --topic)
+        needle="${2:-}"
+        shift
+        ;;
+      --json) as_json="1" ;;
+      *)
+        echo "Usage: gcl-pubsub-map [-p <project>]... [-t <topic-substring>] [--json]" >&2
+        return 1
+        ;;
+    esac
+    shift
+  done
+  local project
+  for project in "${projects[@]}"; do
+    [[ "$project" =~ $GCL_PROJECT_ID_REGEX ]] || {
+      echo -e "${CB_RED}❌ Invalid project: ${project}${C_RESET}" >&2
+      return 1
+    }
+  done
+  __mt_gcl_preflight || return $?
+  [ "${#projects[@]}" -eq 0 ] && projects=("$(gcl-get-project)")
+
+  local all_subs="[]" all_topics="[]" rc=0 step_rc found
+  for project in "${projects[@]}"; do
+    step_rc=0
+    found=$(__mt_gcl_run "listing subscriptions of ${project}" gcloud pubsub subscriptions list --project="$project" --format=json --quiet) || step_rc=$?
+    if [ "$step_rc" -eq 0 ]; then
+      all_subs=$(jq -c --argjson more "${found:-[]}" '. + $more' <<< "$all_subs")
+    else
+      [ "$rc" -eq 0 ] && rc="$step_rc"
+    fi
+    step_rc=0
+    found=$(__mt_gcl_run "listing topics of ${project}" gcloud pubsub topics list --project="$project" --format=json --quiet) || step_rc=$?
+    if [ "$step_rc" -eq 0 ]; then
+      all_topics=$(jq -c --argjson more "${found:-[]}" '. + $more' <<< "$all_topics")
+    else
+      [ "$rc" -eq 0 ] && rc="$step_rc"
+    fi
+  done
+
+  local map
+  map=$(jq -n -c --argjson subs "$all_subs" --argjson topics "$all_topics" --arg needle "$needle" -f "$GCL_PUBSUB_MAP_JQ") || return 1
+  if [ -n "$as_json" ]; then
+    jq '.' <<< "$map" | __mt_strip_control_chars
+  else
+    jq -r -f "$GCL_PUBSUB_TREE_JQ" <<< "$map" | __mt_strip_control_chars
+  fi
+  return "$rc"
 }
 ```
 
