@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added `gcl-as-sa`: runs a command as a service account (`--impersonate` or `--key-file`) in a subshell without touching your active gcloud configuration; a key file is activated in a temporary config that is always removed. It does not enforce read-only.
 - Added `gcl-pubsub-map`: maps Pub/Sub topics to their subscriptions across projects (delivery type and target, filter, dead-letter topic, state), with push URLs stripped of query strings.
 - Added `bb-deployments`: the latest deployment of each Bitbucket environment, or the history of one (`-e`, `-n`), with commit, branch, build number and who triggered it.
 - Added `gcl-run-compare`: compares one Cloud Run service across projects (image, service account, scaling, networking, probes, env var names, secret references) and marks the rows that differ. Environment values are never shown. `kv_matrix.awk` gains `diff_only` and `flag`.

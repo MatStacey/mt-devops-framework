@@ -250,6 +250,7 @@ Complex bash functions, framework utilities, and automated workflows.
 ### GCP: Configuration & Authentication
 | Command | Description |
 |---|---|
+| `gcl-as-sa` | GCP: Run a command as a service account without touching the active gcloud |
 | `gcl-auth-check` | GCP: Check whether the active gcloud account has a usable token. Unlike |
 | `gcl-config` | GCP: List active configuration properties |
 | `gcl-export-vars` | GCP: Export PROJECT_ID and PROJECT_NUMBER env vars to shell |
