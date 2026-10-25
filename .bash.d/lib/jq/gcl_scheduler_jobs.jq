@@ -1,3 +1,5 @@
+def strip_uri: sub("^(?<scheme>[A-Za-z][A-Za-z0-9+.-]*://)[^/@]*@"; "\(.scheme)") | split("?")[0];
+
 .[]
 | [
     $project,
@@ -6,9 +8,9 @@
     (.state // "-"),
     (.schedule // "-"),
     (.timeZone // "-"),
-    (if .httpTarget then "\(.httpTarget.httpMethod // "POST") \(.httpTarget.uri | split("?")[0])"
+    (if .httpTarget then "\(.httpTarget.httpMethod // "POST") \(.httpTarget.uri | strip_uri)"
      elif .pubsubTarget then "pubsub:\(.pubsubTarget.topicName)"
-     elif .appEngineHttpTarget then "appengine:\(.appEngineHttpTarget.relativeUri)"
+     elif .appEngineHttpTarget then "appengine:\(.appEngineHttpTarget.relativeUri | strip_uri)"
      else "-" end),
     (.lastAttemptTime // "-"),
     (.status.code // 0)
