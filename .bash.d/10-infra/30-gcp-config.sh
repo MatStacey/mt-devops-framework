@@ -204,6 +204,8 @@ GCL_AUTH_EXIT_NO_ACCOUNT=1
 GCL_AUTH_EXIT_REAUTH=2
 GCL_AUTH_EXIT_NO_GCLOUD=3
 GCL_AUTH_EXIT_CHECK_FAILED=4
+GCL_SA_EMAIL_REGEX='^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+\.gserviceaccount\.com$'
+GCL_SA_KEY_TYPE="service_account"
 
 #######################################
 # GCP: Check whether the active gcloud account has a usable token. Unlike
@@ -339,3 +341,108 @@ _gcp_set_project_completions() {
   mapfile -t COMPREPLY < <(compgen -W "$(gcloud projects list --format="value(projectId)" 2> /dev/null)" -- "${COMP_WORDS[COMP_CWORD]}")
 }
 complete -F _gcp_set_project_completions gcp-set-project gcpp gcl-export-vars
+
+#######################################
+# GCP: Run a command as a service account without touching the active gcloud
+# configuration. The command runs in a subshell (framework functions such as
+# gcl-bq-query still work) with the identity set through environment variables
+# only; a --key-file is activated inside a throwaway CLOUDSDK_CONFIG that is
+# removed on every exit path. This does NOT enforce read-only: the service
+# account's roles are the only control. --impersonate is preferred (no key);
+# it covers gcloud, not client libraries or application-default credentials.
+# Usage: gcl-as-sa (--impersonate <sa-email> | --key-file <path>) [-p <project>] -- <command> [args...]
+# Options:
+#   --impersonate <email>   Impersonate this service account (needs roles/iam.serviceAccountTokenCreator)
+#   --key-file <path>       Use this service-account key file (never printed)
+#   -p, --project <id>      Project for the command (CLOUDSDK_CORE_PROJECT)
+#   -h, --help              Show this help menu
+# Returns:
+#   The command's exit code; 1 on bad usage, an invalid key or failed activation
+# Outputs:
+#   The command's output; "Running as <email>" on stderr
+# Example:
+#   gcl-as-sa --impersonate ro-sa@proj.iam.gserviceaccount.com -p proj -- gcl-bq-query "SELECT 1"
+#######################################
+gcl-as-sa() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  local impersonate="" key_file="" project=""
+  local -a command=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      --impersonate)
+        impersonate="${2:-}"
+        shift
+        ;;
+      --key-file)
+        key_file="${2:-}"
+        shift
+        ;;
+      -p | --project)
+        project="${2:-}"
+        shift
+        ;;
+      --)
+        shift
+        command=("$@")
+        break
+        ;;
+      *)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  local usage="Usage: gcl-as-sa (--impersonate <sa-email> | --key-file <path>) [-p <project>] -- <command> [args...]"
+  if [ "${#command[@]}" -eq 0 ] || { [ -n "$impersonate" ] && [ -n "$key_file" ]; } || { [ -z "$impersonate" ] && [ -z "$key_file" ]; }; then
+    echo "$usage" >&2
+    return 1
+  fi
+  if [ -n "$project" ] && [[ ! "$project" =~ $GCL_PROJECT_ID_REGEX ]]; then
+    echo -e "${CB_RED}❌ Invalid project: ${project}${C_RESET}" >&2
+    return 1
+  fi
+
+  local identity="$impersonate"
+  if [ -n "$impersonate" ] && [[ ! "$impersonate" =~ $GCL_SA_EMAIL_REGEX ]]; then
+    echo -e "${CB_RED}❌ --impersonate needs a service account email.${C_RESET}" >&2
+    return 1
+  fi
+  if [ -n "$key_file" ]; then
+    if [ ! -f "$key_file" ] || [ "$(jq -r '.type // empty' "$key_file" 2> /dev/null)" != "$GCL_SA_KEY_TYPE" ]; then
+      echo -e "${CB_RED}❌ ${key_file} is not a service-account key file.${C_RESET}" >&2
+      return 1
+    fi
+    identity=$(jq -r '.client_email // "unknown"' "$key_file")
+    local mode
+    mode=$(stat -c %a "$key_file" 2> /dev/null || stat -f %Lp "$key_file" 2> /dev/null)
+    if [[ "$mode" =~ ^[0-7]+$ ]] && [ $((8#$mode & 8#077)) -ne 0 ]; then
+      echo -e "${CB_YELLOW}⚠️  ${key_file} is readable by other users (mode ${mode}); run chmod 600.${C_RESET}" >&2
+    fi
+  fi
+
+  echo -e "${CB_YELLOW}🔐 Running as ${identity}${C_RESET}" >&2
+  local config_dir="" rc=0
+  [ -n "$key_file" ] && config_dir=$(mktemp -d)
+  (
+    [ -n "$config_dir" ] && trap 'rm -rf "$config_dir"' EXIT
+    unset CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT GOOGLE_APPLICATION_CREDENTIALS
+    [ -n "$project" ] && export CLOUDSDK_CORE_PROJECT="$project"
+    if [ -n "$impersonate" ]; then
+      export CLOUDSDK_AUTH_IMPERSONATE_SERVICE_ACCOUNT="$impersonate"
+    else
+      export CLOUDSDK_CONFIG="$config_dir" GOOGLE_APPLICATION_CREDENTIALS="$key_file"
+      activation_error=$(gcloud auth activate-service-account --key-file="$key_file" --quiet 2>&1 > /dev/null) || {
+        echo -e "${CB_RED}🚨 Could not activate the key file:${C_RESET} ${activation_error}" >&2
+        exit 1
+      }
+    fi
+    "${command[@]}"
+  ) || rc=$?
+  [ -n "$config_dir" ] && rm -rf "$config_dir"
+  return "$rc"
+}
