@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added `gcl-pubsub-map`: maps Pub/Sub topics to their subscriptions across projects (delivery type and target, filter, dead-letter topic, state), with push URLs stripped of query strings.
 - Added `bb-deployments`: the latest deployment of each Bitbucket environment, or the history of one (`-e`, `-n`), with commit, branch, build number and who triggered it.
 - Added `gcl-run-compare`: compares one Cloud Run service across projects (image, service account, scaling, networking, probes, env var names, secret references) and marks the rows that differ. Environment values are never shown. `kv_matrix.awk` gains `diff_only` and `flag`.
 - Added `gcl-firestore`: read-only Firestore access over REST with `get` (field masks), `query` (a `--where` builder or a raw structured query, default limit 100) and `count`, returning plain JSON with `_id`.

@@ -291,6 +291,7 @@ __mt_menu_gcl_gar_ls() { gcl-gar-ls; }
 __mt_menu_gcl_iam_ls() { gcl-iam-ls; }
 __mt_menu_gcl_ps_subs() { gcl-ps-subs; }
 __mt_menu_gcl_ps_topics() { gcl-ps-topics; }
+__mt_menu_gcl_ps_map() { gcl-pubsub-map; }
 __mt_menu_gcp_crf_ls() { gcp-crf-ls; }
 __mt_menu_tf_scan() { tf-scan; }
 __mt_menu_cd_bashd() { cd-bashd; }
@@ -715,6 +716,7 @@ __mt_menu_gcp_data() {
     "List BigQuery Datasets (bq-ls)" __mt_menu_bq_ls \
     "List Pub/Sub Topics (gcl-ps-topics)" __mt_menu_gcl_ps_topics \
     "List Pub/Sub Subscriptions (gcl-ps-subs)" __mt_menu_gcl_ps_subs \
+    "Map Pub/Sub Topics to Subscriptions (gcl-pubsub-map)" __mt_menu_gcl_ps_map \
     "Pull a Pub/Sub Message (gcp-ps-pull)" __mt_menu_gcp_ps_pull
 }
 
