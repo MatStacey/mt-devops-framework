@@ -137,3 +137,14 @@ setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"help called"* ]]
 }
+
+@test "a secured value never appears in the argv of jq" {
+  mkdir -p "$BATS_TEST_TMPDIR/shim"
+  printf '#!/usr/bin/env bash\necho "$*" >> "%s/jq_argv"\nexec %s "$@"\n' "$BATS_TEST_TMPDIR" "$(command -v jq)" > "$BATS_TEST_TMPDIR/shim/jq"
+  chmod +x "$BATS_TEST_TMPDIR/shim/jq"
+  PATH="$BATS_TEST_TMPDIR/shim:$PATH" DEPLOY_TOKEN="s3cr3t-value" run bb-pipeline-run -r ws/r --branch main --secured-var DEPLOY_TOKEN --yes
+  [ "$status" -eq 0 ]
+  [ -s "$BATS_TEST_TMPDIR/jq_argv" ]
+  ! grep -q 's3cr3t-value' "$BATS_TEST_TMPDIR/jq_argv"
+  grep -qF '"value":"s3cr3t-value","secured":true' "$HTTP_LOG"
+}

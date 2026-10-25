@@ -143,6 +143,16 @@ setup() {
   [ "$status" -eq 1 ]
 }
 
+@test "bb-var add keeps the value out of the argv of jq" {
+  mkdir -p "$BATS_TEST_TMPDIR/shim"
+  printf '#!/usr/bin/env bash\necho "$*" >> "%s/jq_argv"\nexec %s "$@"\n' "$BATS_TEST_TMPDIR" "$(command -v jq)" > "$BATS_TEST_TMPDIR/shim/jq"
+  chmod +x "$BATS_TEST_TMPDIR/shim/jq"
+  PATH="$BATS_TEST_TMPDIR/shim:$PATH" bb-var -r ws/r add --secured TOKEN <<< "s3cret-value"
+  [ -s "$BATS_TEST_TMPDIR/jq_argv" ]
+  ! grep -q 's3cret-value' "$BATS_TEST_TMPDIR/jq_argv"
+  grep -qF '"value":"s3cret-value"' "$HTTP_LOG"
+}
+
 @test "an unknown environment is an error" {
   run bb-var -r ws/r -e nope list
   [ "$status" -eq 1 ]
