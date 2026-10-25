@@ -289,6 +289,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | Command | Description |
 |---|---|
 | `gcl-audit-changes` | GCP: List audit-log changes (who changed what) in projects over a time window. |
+| `gcl-metric-read` | GCP: Read Cloud Monitoring time series for a metric over a time window (gcloud |
 
 ### GCP: Resources & Services
 | Command | Description |

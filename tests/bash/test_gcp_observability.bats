@@ -58,6 +58,29 @@ STUB
   # shellcheck disable=SC2034
   CB_RED="" CB_GREEN="" CB_BLUE="" CB_YELLOW="" C_RESET=""
   mt-help() { echo "help called"; }
+
+  HTTP_LOG="$BATS_TEST_TMPDIR/http.log"
+  export HTTP_LOG
+  # shellcheck disable=SC2317
+  mt-http() {
+    local joined="$*"
+    echo "$joined" >> "$HTTP_LOG"
+    if [ -n "${STUB_REST_DENY:-}" ]; then
+      echo "HTTP 403: Permission monitoring.timeSeries.list denied on resource" >&2
+      return 4
+    fi
+    case "$joined" in
+      *metricDescriptors*)
+        echo '{"metricDescriptors":[{"type":"dataflow.googleapis.com/job/total_vcpu_time","metricKind":"CUMULATIVE","valueType":"DOUBLE","unit":"s","description":"vCPU time.\nSecond line"}]}'
+        ;;
+      *"pageToken=p2"*)
+        echo '{"timeSeries":[{"metric":{"labels":{"b":"2"}},"resource":{"labels":{"a":"1"}},"points":[{"interval":{"endTime":"2026-10-05T01:00:00Z"},"value":{"int64Value":"7"}}]}]}'
+        ;;
+      *timeSeries*)
+        echo '{"timeSeries":[{"metric":{"labels":{"z":"9"}},"resource":{"labels":{"a":"1"}},"points":[{"interval":{"endTime":"2026-10-05T00:00:00Z"},"value":{"doubleValue":0}},{"interval":{"endTime":"2026-10-05T00:01:00Z"},"value":{"boolValue":false}}]}],"nextPageToken":"p2"}'
+        ;;
+    esac
+  }
 }
 
 read_call() {
@@ -158,4 +181,92 @@ read_call() {
   run gcl-audit-changes -h
   [ "$status" -eq 0 ]
   [[ "$output" == *"help called"* ]]
+}
+
+@test "metric read builds the timeSeries URL, filter and interval query parameters" {
+  run gcl-metric-read logging.googleapis.com/byte_count -p proj-a --start 2026-10-05T00:00:00Z --end 2026-10-05T12:00:00Z --filter 'resource.type="gce_instance"'
+  [ "$status" -eq 0 ]
+  local call
+  call="$(head -1 "$HTTP_LOG")"
+  [[ "$call" == *"https://monitoring.googleapis.com/v3/projects/proj-a/timeSeries"* ]]
+  [[ "$call" == *'-q filter=metric.type="logging.googleapis.com/byte_count" AND resource.type="gce_instance"'* ]]
+  [[ "$call" == *"-q interval.startTime=2026-10-05T00:00:00Z"* ]]
+  [[ "$call" == *"-q interval.endTime=2026-10-05T12:00:00Z"* ]]
+  [[ "$call" != *"aggregation"* ]]
+}
+
+@test "metric read follows nextPageToken and prints sorted label pairs, falsy values included" {
+  run gcl-metric-read some.googleapis.com/metric -p proj-a
+  [ "$status" -eq 0 ]
+  [ "$(grep -c . "$HTTP_LOG")" -eq 2 ]
+  [[ "$(sed -n 2p "$HTTP_LOG")" == *"-q pageToken=p2"* ]]
+  [[ "$output" == *$'a=1,z=9\t2026-10-05T00:00:00Z\t0'* ]]
+  [[ "$output" == *$'a=1,z=9\t2026-10-05T00:01:00Z\tfalse'* ]]
+  [[ "$output" == *$'a=1,b=2\t2026-10-05T01:00:00Z\t7'* ]]
+}
+
+@test "--align window uses the whole window in seconds, with aligner, reducer and group-by" {
+  run gcl-metric-read logging.googleapis.com/byte_count -p proj-a --start 2026-10-04T00:00:00Z --end 2026-10-05T00:00:00Z --align window --aligner ALIGN_SUM --reducer REDUCE_SUM --group-by resource.type,metric.type
+  [ "$status" -eq 0 ]
+  local call
+  call="$(head -1 "$HTTP_LOG")"
+  [[ "$call" == *"-q aggregation.alignmentPeriod=86400s"* ]]
+  [[ "$call" == *"-q aggregation.perSeriesAligner=ALIGN_SUM"* ]]
+  [[ "$call" == *"-q aggregation.crossSeriesReducer=REDUCE_SUM"* ]]
+  [[ "$call" == *"-q aggregation.groupByFields=resource.type"* ]]
+  [[ "$call" == *"-q aggregation.groupByFields=metric.type"* ]]
+}
+
+@test "an aligner without --align defaults the alignment period to 60s" {
+  run gcl-metric-read some.googleapis.com/metric -p proj-a --aligner ALIGN_MAX
+  [ "$status" -eq 0 ]
+  [[ "$(head -1 "$HTTP_LOG")" == *"-q aggregation.alignmentPeriod=60s"* ]]
+}
+
+@test "--json prints the collected series as one JSON array" {
+  run gcl-metric-read some.googleapis.com/metric -p proj-a --json
+  [ "$status" -eq 0 ]
+  [ "$(jq 'length' <<< "$output")" -eq 2 ]
+}
+
+@test "--list prints descriptors under a prefix on one line each" {
+  run gcl-metric-read --list dataflow.googleapis.com/job/ -p proj-a
+  [ "$status" -eq 0 ]
+  [[ "$(head -1 "$HTTP_LOG")" == *'-q filter=metric.type = starts_with("dataflow.googleapis.com/job/")'* ]]
+  [ "$output" = "$(printf 'dataflow.googleapis.com/job/total_vcpu_time\tCUMULATIVE\tDOUBLE\ts\tvCPU time. Second line')" ]
+}
+
+@test "a denied metric read exits 5 and names the permission" {
+  STUB_REST_DENY=1 run gcl-metric-read some.googleapis.com/metric -p proj-a
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"monitoring.timeSeries.list"* ]]
+}
+
+@test "the access token is passed as a bearer credential and never printed" {
+  run gcl-metric-read some.googleapis.com/metric -p proj-a
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"tok"* ]]
+}
+
+@test "metric read rejects bad input before any request" {
+  run gcl-metric-read
+  [ "$status" -eq 1 ]
+  run gcl-metric-read 'bad type"' -p proj-a
+  [ "$status" -eq 1 ]
+  run gcl-metric-read some.googleapis.com/metric -p proj-a --aligner sum
+  [ "$status" -eq 1 ]
+  run gcl-metric-read some.googleapis.com/metric -p proj-a --since 2w
+  [ "$status" -eq 1 ]
+  run gcl-metric-read some.googleapis.com/metric -p proj-a --align soon --aligner ALIGN_SUM
+  [ "$status" -eq 1 ]
+  run gcl-metric-read some.googleapis.com/metric -p proj-a --aligner ALIGN_SUM --group-by 'a b'
+  [ "$status" -eq 1 ]
+  [ ! -s "$HTTP_LOG" ]
+}
+
+@test "the window helpers resolve and validate" {
+  [ "$(__mt_gcl_window 1d 2026-10-05T00:00:00Z 2026-10-06T00:00:00Z)" = "2026-10-05T00:00:00Z 2026-10-06T00:00:00Z" ]
+  [ "$(__mt_gcl_epoch 1970-01-02T00:00:00Z)" = "86400" ]
+  run __mt_gcl_window 1d bad-start ""
+  [ "$status" -eq 1 ]
 }

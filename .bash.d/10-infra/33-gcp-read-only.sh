@@ -11,6 +11,7 @@ GCL_LOG_DEFAULT_FRESHNESS="1d"
 GCL_LOG_TEMPLATE_MAX_LENGTH=160
 GCL_LOG_TEMPLATE_SED="$HOME/.bash.d/lib/sed/log_template.sed"
 GCL_BQ_DEFAULT_MAX_BYTES_BILLED=10737418240
+GCL_REST_MAX_PAGES=20
 GCL_RFC3339_FORMAT="%Y-%m-%dT%H:%M:%SZ"
 GCL_RFC3339_REGEX='^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$'
 
@@ -102,6 +103,39 @@ __mt_gcl_rfc3339() {
 }
 
 #######################################
+# GCP: Convert an RFC3339 timestamp to epoch seconds
+# Arguments:
+#   $1 - Timestamp
+# Outputs:
+#   Epoch seconds
+#######################################
+__mt_gcl_epoch() {
+  date -u -d "$1" +%s 2> /dev/null || date -u -j -f "$GCL_RFC3339_FORMAT" "$1" +%s
+}
+
+#######################################
+# GCP: Resolve a relative or absolute time window to start and end timestamps
+# Arguments:
+#   $1 - Relative window (e.g. 1d), used when $2 is empty
+#   $2 - Window start (RFC3339), $3 - window end (RFC3339, default: now)
+# Returns:
+#   0 on success, 1 on an invalid duration or timestamp
+# Outputs:
+#   "start end" (RFC3339, space-separated)
+#######################################
+__mt_gcl_window() {
+  local since="$1" start="$2" end="$3" now seconds
+  now=$(date +%s)
+  if [ -z "$start" ]; then
+    seconds=$(__mt_gcl_duration_seconds "$since") || return 1
+    start=$(__mt_gcl_rfc3339 $((now - seconds)))
+  fi
+  [ -z "$end" ] && end=$(__mt_gcl_rfc3339 "$now")
+  [[ "$start" =~ $GCL_RFC3339_REGEX && "$end" =~ $GCL_RFC3339_REGEX ]] || return 1
+  echo "${start} ${end}"
+}
+
+#######################################
 # GCP: Build a Cloud Logging timestamp filter from a relative or absolute window
 # Arguments:
 #   $1 - Relative window (e.g. 1d), used when $2 is empty
@@ -112,15 +146,76 @@ __mt_gcl_rfc3339() {
 #   timestamp>="..." AND timestamp<="..."
 #######################################
 __mt_gcl_time_filter() {
-  local since="$1" start="$2" end="$3" now seconds
-  now=$(date +%s)
-  if [ -z "$start" ]; then
-    seconds=$(__mt_gcl_duration_seconds "$since") || return 1
-    start=$(__mt_gcl_rfc3339 $((now - seconds)))
-  fi
-  [ -z "$end" ] && end=$(__mt_gcl_rfc3339 "$now")
-  [[ "$start" =~ $GCL_RFC3339_REGEX && "$end" =~ $GCL_RFC3339_REGEX ]] || return 1
+  local start end
+  read -r start end < <(__mt_gcl_window "$1" "$2" "$3") || return 1
+  [ -z "$end" ] && return 1
   printf 'timestamp>="%s" AND timestamp<="%s"\n' "$start" "$end"
+}
+
+#######################################
+# GCP: Call a Google REST API with the active gcloud account's access token.
+# The token is handed to mt-http as a bearer credential (never printed) and a
+# request body travels through a private temp file. A 4xx/5xx response is
+# reported via __mt_gcl_report_failure. Run __mt_gcl_preflight first.
+# Arguments:
+#   $1 - What is being attempted, $2 - HTTP method, $3 - URL
+#   $4 - JSON body (empty for none), $5... - extra mt-http arguments (e.g. -q k=v)
+# Returns:
+#   0 on success, otherwise __mt_gcl_report_failure's result
+# Outputs:
+#   Response body
+#######################################
+__mt_gcl_rest() {
+  local context="$1" method="$2" url="$3" body="$4" token err_file body_dir="" rc=0
+  shift 4
+  token=$(gcloud auth print-access-token 2> /dev/null) || {
+    echo -e "${CB_RED}🚨 Could not get a gcloud access token; run gcl-auth-check.${C_RESET}" >&2
+    return 1
+  }
+  local -a args=(-X "$method" -b "$token" --raw)
+  if [ -n "$body" ]; then
+    body_dir=$(mktemp -d)
+    printf '%s' "$body" > "${body_dir}/body.json"
+    args+=(-H "Content-Type: application/json" -d "@${body_dir}/body.json")
+  fi
+  err_file=$(mktemp)
+  mt-http "${args[@]}" "$@" "$url" 2> "$err_file" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    __mt_gcl_report_failure "$context" "$(cat "$err_file")"
+    rc=$?
+  fi
+  rm -f "$err_file"
+  [ -n "$body_dir" ] && rm -rf "$body_dir"
+  return "$rc"
+}
+
+#######################################
+# GCP: GET a paginated Google REST list, following nextPageToken
+# Arguments:
+#   $1 - What is being attempted, $2 - name of the array field holding the items
+#   $3 - URL, $4... - extra mt-http arguments (e.g. -q k=v)
+# Returns:
+#   0 on success, otherwise the failing call's result
+# Outputs:
+#   One compact JSON item per line
+#######################################
+__mt_gcl_rest_collect() {
+  local context="$1" items_key="$2" url="$3" response page_token="" pages=0
+  shift 3
+  local -a page_args
+  while true; do
+    page_args=()
+    [ -n "$page_token" ] && page_args=(-q "pageToken=${page_token}")
+    response=$(__mt_gcl_rest "$context" GET "$url" "" "$@" "${page_args[@]}") || return $?
+    jq -c --arg key "$items_key" '.[$key][]?' <<< "$response"
+    page_token=$(jq -r '.nextPageToken // empty' <<< "$response")
+    pages=$((pages + 1))
+    [ -z "$page_token" ] && return 0
+    if [ "$pages" -ge "$GCL_REST_MAX_PAGES" ]; then
+      echo -e "${CB_YELLOW}⚠️  ${context}: stopped after ${GCL_REST_MAX_PAGES} pages; results are incomplete.${C_RESET}" >&2
+      return 0
+    fi
+  done
 }
 
 #######################################
