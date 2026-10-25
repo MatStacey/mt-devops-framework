@@ -157,3 +157,10 @@ STUB
   [ "$status" -eq 0 ]
   [[ "$output" == *"help called"* ]]
 }
+
+@test "describe redacts headers and attributes of every target type and strips userinfo and query strings" {
+  run bash -c "echo '{\"name\":\"x\",\"httpTarget\":{\"uri\":\"https://user:pw@h.example.test/p?k=v\",\"headers\":{\"A\":\"s\"}},\"pubsubTarget\":{\"attributes\":{\"k\":\"secret\"}},\"appEngineHttpTarget\":{\"relativeUri\":\"/a?token=1\",\"headers\":{\"B\":\"s\"}}}' | jq -c -f '$repo_root/.bash.d/lib/jq/gcl_scheduler_describe.jq'"
+  [ "$status" -eq 0 ]
+  [[ "$output" != *secret* && "$output" != *pw* && "$output" != *token* && "$output" != *'"s"'* ]]
+  [ "$(jq -r '.httpTarget.uri, .appEngineHttpTarget.relativeUri' <<< "$output" | paste -sd' ')" = "https://h.example.test/p /a" ]
+}
