@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Sun Oct 25 01:30:27 AM GMT 2026  
+> Generated: Sun Oct 25 01:32:23 AM GMT 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -12138,6 +12138,183 @@ bb-env() {
   rm -rf "$(dirname "$body_file")"
   [ "$rc" -eq 0 ] && echo -e "${CB_GREEN}✅ Created ${env_type} environment '${env_name}'.${C_RESET}"
   return "$rc"
+}
+```
+
+#### `bb-pipeline-run`
+
+> Bitbucket: Trigger a pipeline on a branch or commit -- the default pipeline
+
+```bash
+#######################################
+# Bitbucket: Trigger a pipeline on a branch or commit -- the default pipeline
+# or a named custom one -- with optional variables, and optionally wait for it
+# to finish. Starting a pipeline can deploy, so it asks for confirmation (or
+# --yes, required without a terminal). Variable values are never printed; use
+# --secured-var for secrets so they come from the environment, not the command line.
+# Usage: bb-pipeline-run [-r <w/r>] (--branch <name> | --commit <sha>) [--pattern <custom-pipeline>] [--var K=V]... [--secured-var K]... [--wait [--timeout <s>]] [--yes]
+# Options:
+#   -r, --repo <w/r>         Repository (default: the current directory's Bitbucket remote)
+#   --branch <name>          Run on this branch
+#   --commit <sha>           Run on this commit (7-40 hex characters)
+#   --pattern <name>         Custom pipeline to run (default: the branch/commit's default pipeline)
+#   --var <K=V>              Pipeline variable, repeatable (value visible in shell history)
+#   --secured-var <K>        Secured variable whose value is read from the environment variable K
+#   --wait                   Poll until the pipeline completes; exit 0 only if it succeeded
+#   --timeout <seconds>      With --wait, give up after this long (default: 1800)
+#   --yes                    Skip the confirmation
+#   -h, --help               Show this help menu
+# Returns:
+#   0 on success (with --wait: the pipeline succeeded), 1 on failure, bad usage or a failed pipeline,
+#   124 if --wait timed out, mt-http's code on API failure
+# Outputs:
+#   The new pipeline's build number and UUID; with --wait, state changes on stderr and the final result
+#######################################
+bb-pipeline-run() {
+  local repo="" branch="" commit="" pattern="" wait_for="" timeout="$BITBUCKET_PIPELINE_WAIT_TIMEOUT" assume_yes=""
+  local -a var_args=() secured_keys=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -r | --repo)
+        repo="${2:-}"
+        shift
+        ;;
+      --branch)
+        branch="${2:-}"
+        shift
+        ;;
+      --commit)
+        commit="${2:-}"
+        shift
+        ;;
+      --pattern)
+        pattern="${2:-}"
+        shift
+        ;;
+      --var)
+        var_args+=("${2:-}")
+        shift
+        ;;
+      --secured-var)
+        secured_keys+=("${2:-}")
+        shift
+        ;;
+      --wait) wait_for="1" ;;
+      --timeout)
+        timeout="${2:-}"
+        shift
+        ;;
+      --yes) assume_yes="1" ;;
+      *)
+        echo -e "${CB_RED}❌ Unknown option or argument: $1${C_RESET}" >&2
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  local usage="Usage: bb-pipeline-run [-r <w/r>] (--branch <name> | --commit <sha>) [--pattern <name>] [--var K=V]... [--secured-var K]... [--wait [--timeout <s>]] [--yes]"
+  if { [ -z "$branch" ] && [ -z "$commit" ]; } || { [ -n "$branch" ] && [ -n "$commit" ]; }; then
+    echo "$usage" >&2
+    return 1
+  fi
+  [ -n "$branch" ] && [[ ! "$branch" =~ $BITBUCKET_BRANCH_REGEX ]] && {
+    echo -e "${CB_RED}❌ Invalid branch name.${C_RESET}" >&2
+    return 1
+  }
+  [ -n "$commit" ] && [[ ! "$commit" =~ $BITBUCKET_COMMIT_REGEX ]] && {
+    echo -e "${CB_RED}❌ --commit must be 7-40 hex characters.${C_RESET}" >&2
+    return 1
+  }
+  [ -n "$pattern" ] && [[ ! "$pattern" =~ $BITBUCKET_PATTERN_REGEX ]] && {
+    echo -e "${CB_RED}❌ Invalid --pattern.${C_RESET}" >&2
+    return 1
+  }
+  [[ "$timeout" =~ ^[1-9][0-9]*$ ]] || {
+    echo -e "${CB_RED}❌ --timeout must be a positive number of seconds.${C_RESET}" >&2
+    return 1
+  }
+
+  local variables="[]" item key
+  for item in "${var_args[@]}"; do
+    key="${item%%=*}"
+    if [[ "$item" != *=* ]] || [[ ! "$key" =~ $BITBUCKET_VAR_KEY_REGEX ]]; then
+      echo -e "${CB_RED}❌ --var needs KEY=VALUE with a valid KEY.${C_RESET}" >&2
+      return 1
+    fi
+    variables=$(jq -c --arg key "$key" --arg value "${item#*=}" '. + [{key: $key, value: $value, secured: false}]' <<< "$variables")
+  done
+  for key in "${secured_keys[@]}"; do
+    if [[ ! "$key" =~ $BITBUCKET_VAR_KEY_REGEX ]] || [ -z "${!key:-}" ]; then
+      echo -e "${CB_RED}❌ --secured-var ${key}: set the environment variable ${key} first.${C_RESET}" >&2
+      return 1
+    fi
+    variables=$(jq -c --arg key "$key" --arg value "${!key}" '. + [{key: $key, value: $value, secured: true}]' <<< "$variables")
+  done
+
+  if [ -z "$assume_yes" ] && [ ! -t 0 ]; then
+    echo -e "${CB_RED}🚫 Starting a pipeline can deploy; pass --yes when there is no terminal to confirm on.${C_RESET}" >&2
+    return 1
+  fi
+  repo=$(__mt_bb_resolve_repo "$repo") || return 1
+
+  local ref_label="${branch:-${commit}}"
+  if [ -z "$assume_yes" ]; then
+    local keys reply
+    keys=$(jq -r 'map(.key) | join(", ")' <<< "$variables")
+    read -r -p "Run ${pattern:-the default pipeline} on ${ref_label} in ${repo}${keys:+ with variables ${keys}}? [y/N] " reply
+    [[ "$reply" =~ ^[Yy] ]] || {
+      echo "Cancelled."
+      return 1
+    }
+  fi
+
+  local body body_file response rc=0
+  body=$(jq -nc --arg branch "$branch" --arg commit "$commit" --arg pattern "$pattern" --argjson variables "$variables" '
+    ((if $branch != "" then {type: "pipeline_ref_target", ref_type: "branch", ref_name: $branch}
+      else {type: "pipeline_commit_target", commit: {type: "commit", hash: $commit}} end)
+     + (if $pattern != "" then {selector: {type: "custom", pattern: $pattern}} else {} end)) as $target
+    | {target: $target} + (if ($variables | length) > 0 then {variables: $variables} else {} end)')
+  body_file=$(__mt_bb_body_file "$body") || return 1
+  response=$(__mt_bb_api "repositories/${repo}/pipelines/" -H "Content-Type: application/json" -d "@${body_file}" --raw) || rc=$?
+  rm -rf "$(dirname "$body_file")"
+  [ "$rc" -ne 0 ] && return "$rc"
+
+  local uuid build
+  uuid=$(jq -r '.uuid // empty' <<< "$response")
+  build=$(jq -r '.build_number // "?"' <<< "$response")
+  if [ -z "$uuid" ]; then
+    echo -e "${CB_RED}🚨 Bitbucket did not return a pipeline.${C_RESET}" >&2
+    return 1
+  fi
+  echo -e "${CB_GREEN}✅ Triggered pipeline #${build} ${uuid}${C_RESET}"
+  [ -z "$wait_for" ] && return 0
+
+  local started="$SECONDS" state last_state="" result encoded
+  encoded=$(__mt_bb_encode_uuid "$uuid")
+  while true; do
+    response=$(__mt_bb_api "repositories/${repo}/pipelines/${encoded}" --raw) || return $?
+    state=$(jq -r '.state.name // "UNKNOWN"' <<< "$response")
+    if [ "$state" != "$last_state" ]; then
+      echo -e "⏳ #${build}: ${state}" >&2
+      last_state="$state"
+    fi
+    if [ "$state" = "COMPLETED" ]; then
+      result=$(jq -r '.state.result.name // "UNKNOWN"' <<< "$response")
+      echo "#${build} ${result}"
+      [ "$result" = "SUCCESSFUL" ]
+      return $?
+    fi
+    if [ $((SECONDS - started)) -ge "$timeout" ]; then
+      echo -e "${CB_YELLOW}⌛ Gave up waiting after ${timeout}s; pipeline #${build} is ${state}.${C_RESET}" >&2
+      return "$BITBUCKET_EXIT_WAIT_TIMEOUT"
+    fi
+    sleep "$BITBUCKET_PIPELINE_POLL_SECONDS"
+  done
 }
 ```
 

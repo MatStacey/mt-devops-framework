@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added `bb-pipeline-run`: triggers a Bitbucket pipeline on a branch or commit (default or custom pipeline, optional variables, secured values from the environment) after confirmation, and with `--wait` polls until it finishes and exits non-zero unless it succeeded.
 - Added `gcl-as-sa`: runs a command as a service account (`--impersonate` or `--key-file`) in a subshell without touching your active gcloud configuration; a key file is activated in a temporary config that is always removed. It does not enforce read-only.
 - Added `gcl-pubsub-map`: maps Pub/Sub topics to their subscriptions across projects (delivery type and target, filter, dead-letter topic, state), with push URLs stripped of query strings.
 - Added `bb-deployments`: the latest deployment of each Bitbucket environment, or the history of one (`-e`, `-n`), with commit, branch, build number and who triggered it.

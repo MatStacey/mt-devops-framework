@@ -545,6 +545,7 @@ Complex bash functions, framework utilities, and automated workflows.
 |---|---|
 | `bb-deployments` | Bitbucket: Show deployment history -- the latest deployment of every |
 | `bb-env` | Bitbucket: List or create deployment environments |
+| `bb-pipeline-run` | Bitbucket: Trigger a pipeline on a branch or commit -- the default pipeline |
 | `bb-pipelines` | Bitbucket: List recent pipeline runs, show a run's steps, or print a |
 | `bb-var` | Bitbucket: List or add pipeline variables, repository-wide or per environment. |
 
