@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Wed Nov 11 12:55:56 PM GMT 2026  
+> Generated: Wed Nov 11 12:58:54 PM GMT 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -10074,18 +10074,23 @@ mt-cmd-history() {
 
 #### `py-hermetic-run`
 
-> Dev: Python - Run an ad-hoc script or module with the repo's interpreter in a
+> Dev: Python - Run an ad-hoc script or module with the repo's interpreter with
 
 ```bash
 #######################################
-# Dev: Python - Run an ad-hoc script or module with the repo's interpreter in a
-# sealed environment: a cleared environment (only PATH, LANG, TERM and PYTHONPATH
-# survive), an empty temporary HOME and gcloud config, no Google credentials
-# (so ADC lookups fail closed), and -- unless --allow-network -- a network
-# namespace with no connectivity. For repro scripts, especially agent-written
-# ones, run against repos wired to real cloud projects. Uses ./.venv/bin/python,
-# else `uv run --no-sync python` (needs uv.lock). Env-file values appear in the
-# process list, so keep real secrets out of them.
+# Dev: Python - Run an ad-hoc script or module with the repo's interpreter with
+# a cleared environment (only PATH, LANG, TERM and PYTHONPATH survive), an empty
+# temporary HOME and gcloud config, no Google credential variables (so ADC
+# lookups through the environment fail closed), and -- unless --allow-network --
+# a network namespace with no connectivity. Meant for repro scripts, especially
+# agent-written ones, run against repos wired to real cloud projects.
+# This is NOT a filesystem sandbox: a script that opens an absolute path (for
+# example the real ~/.config/gcloud) can still read it, local Unix sockets (such
+# as the Docker socket) stay reachable, and on WSL with interop enabled it can
+# still start Windows programs that are not network-isolated. Review the script,
+# or use a container or VM when that matters.
+# Uses ./.venv/bin/python, else `uv run --no-sync python` (needs uv.lock).
+# Env-file values appear in the process list, so keep real secrets out of them.
 # Usage: py-hermetic-run [--env-file <file>] [--allow-network] (<script.py> | -m <module>) [args...]
 # Arguments:
 #   <script.py>              Script to run
@@ -10174,6 +10179,9 @@ py-hermetic-run() {
     isolate=(unshare -rn)
   fi
 
+  if [ "${#isolate[@]}" -gt 0 ] && [ -e "$PY_WSL_INTEROP_FILE" ]; then
+    echo -e "${CB_YELLOW}⚠️  WSL interop is enabled: the script can still start Windows programs, which are not network-isolated.${C_RESET}" >&2
+  fi
   local -a sealed_env=()
   local name
   for name in "${PY_HERMETIC_ENV_ALLOWLIST[@]}"; do

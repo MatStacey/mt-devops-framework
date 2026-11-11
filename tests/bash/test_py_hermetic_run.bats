@@ -132,3 +132,15 @@ PY
   [ "$status" -eq 0 ]
   [[ "$output" == *"help called"* ]]
 }
+
+@test "on a host with WSL interop it warns that Windows programs are not network-isolated" {
+  [ "$can_isolate" -eq 1 ] || skip "unshare -rn is unavailable on this runner"
+  PY_WSL_INTEROP_FILE="$BATS_TEST_TMPDIR/interop"
+  : > "$PY_WSL_INTEROP_FILE"
+  run py-hermetic-run probe.py
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"WSL interop is enabled"* ]]
+  PY_WSL_INTEROP_FILE="$BATS_TEST_TMPDIR/absent"
+  run py-hermetic-run probe.py
+  [[ "$output" != *"WSL interop"* ]]
+}

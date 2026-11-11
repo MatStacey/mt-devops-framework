@@ -319,7 +319,6 @@ __mt_menu_pick_default_ide() { __mt_menu_pick_enum "💻 Default IDE" mt-set-def
 __mt_menu_pick_cicd() { __mt_menu_pick_enum "⚙️  CI/CD Provider" mt-set-cicd github bitbucket gitlab azure jenkins; }
 __mt_menu_add_sync_url() { __mt_menu_prompt_arg "Git sync repository URL" mt-add-sync-url; }
 
-__mt_menu_bq_query() { __mt_menu_prompt_arg "BigQuery SQL" bq-query; }
 __mt_menu_gcp_crf_logs() { __mt_menu_prompt_arg "Cloud Run Function name" gcp-crf-logs; }
 __mt_menu_gcp_gar_docker() { __mt_menu_prompt_arg "Artifact Registry region" gcp-gar-docker; }
 __mt_menu_gcp_get_secret() { __mt_menu_prompt_arg "Secret Manager secret name" gcp-get-secret; }
