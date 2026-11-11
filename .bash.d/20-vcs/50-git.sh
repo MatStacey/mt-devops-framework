@@ -1473,12 +1473,13 @@ git-review-start() {
 # review companion to git-review-start.
 # Usage: git-review-prs [-n <pr>] [-b [<base>]] [-s]
 # Options:
-#   -n, --pr <number>    Show this pull request's diff (via gh)
+#   -n, --pr <number>    Show this pull request's diff (via gh, or bb-pr on Bitbucket Cloud remotes)
 #   -b, --base <branch>  Show HEAD's diff against this branch (merge-base diff);
 #                        defaults to the repo's default branch when omitted
 #   -s, --stat           Show a diffstat instead of the full diff
 #   -h, --help           Show this help
 # With no -n or -b, lists open pull requests.
+# Supports both GitHub (gh) and Bitbucket Cloud (bb-pr) origin remotes.
 # Returns:
 #   0 on success, 1 on usage errors or when not in a git repository
 #######################################
@@ -1519,8 +1520,17 @@ git-review-prs() {
     return 1
   fi
 
+  local is_bitbucket=0
+  [[ "$(git remote get-url origin 2> /dev/null)" == *bitbucket.org* ]] && is_bitbucket=1
+
   if [ -n "$pr_number" ]; then
-    if [ "$stat_only" -eq 1 ]; then
+    if [ "$is_bitbucket" -eq 1 ]; then
+      if [ "$stat_only" -eq 1 ]; then
+        bb-pr --diffstat "$pr_number"
+      else
+        bb-pr --diff "$pr_number"
+      fi
+    elif [ "$stat_only" -eq 1 ]; then
       gh pr diff "$pr_number" --name-only
     else
       gh pr diff "$pr_number"
@@ -1542,7 +1552,11 @@ git-review-prs() {
   fi
 
   echo -e "${CB_BLUE}🔀 Open Pull Requests${C_RESET}"
-  gh pr list
+  if [ "$is_bitbucket" -eq 1 ]; then
+    bb-pr --list
+  else
+    gh pr list
+  fi
 }
 
 #######################################

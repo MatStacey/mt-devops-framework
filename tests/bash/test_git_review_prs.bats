@@ -66,3 +66,31 @@ setup() {
   run git-review-prs --bogus
   [ "$status" -eq 1 ]
 }
+
+@test "Bitbucket remote: list mode calls bb-pr --list, never gh" {
+  git remote add origin git@bitbucket.org:ws/r.git
+  # shellcheck disable=SC2317
+  bb-pr() { echo "bb-pr $*"; }
+  run git-review-prs
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"bb-pr --list"* ]]
+  [[ "$output" != *"gh "* ]]
+}
+
+@test "Bitbucket remote: --pr calls bb-pr --diff, never gh" {
+  git remote add origin git@bitbucket.org:ws/r.git
+  # shellcheck disable=SC2317
+  bb-pr() { echo "bb-pr $*"; }
+  run git-review-prs -n 42
+  [[ "$output" == *"bb-pr --diff 42"* ]]
+  [[ "$output" != *"gh "* ]]
+}
+
+@test "Bitbucket remote: --pr --stat calls bb-pr --diffstat, never gh" {
+  git remote add origin git@bitbucket.org:ws/r.git
+  # shellcheck disable=SC2317
+  bb-pr() { echo "bb-pr $*"; }
+  run git-review-prs -n 42 -s
+  [[ "$output" == *"bb-pr --diffstat 42"* ]]
+  [[ "$output" != *"gh "* ]]
+}

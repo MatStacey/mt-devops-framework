@@ -27,6 +27,8 @@ setup() {
     echo "$*" >> "$HTTP_LOG"
     [ -n "${STUB_FAIL:-}" ] && return 4
     case "$last" in
+      *pullrequests?state=MERGED*) echo '{"values":[]}' ;;
+      *pullrequests?state=*) echo '{"values":[{"id":7,"title":"Fix \u001b[31mbug","author":{"display_name":"Al"},"source":{"branch":{"name":"fix"}},"destination":{"branch":{"name":"main"}},"updated_on":"2026-10-01T10:00:00+00:00"}]}' ;;
       */diff) printf 'diff --git a/f b/f\n+\033]0;pwned\007evil\r\n' ;;
       */diffstat*) echo '{"values":[{"status":"modified","lines_added":3,"lines_removed":1,"new":{"path":"src/a.py"}}]}' ;;
       */comments*page=2*) echo '{"values":[{"id":2,"deleted":false,"user":{"display_name":"Bo"},"content":{"raw":"second"},"created_on":"t2"}]}' ;;
@@ -137,4 +139,67 @@ setup() {
   [[ "$output" != *$'\033'* ]]
   [[ "$output" != *$'\r'* ]]
   [[ "$output" == *"evil"* ]]
+}
+
+@test "--list requests OPEN pull requests and prints one row each" {
+  run bb-pr -r ws/r --list
+  [ "$status" -eq 0 ]
+  grep -q 'pullrequests?state=OPEN' "$HTTP_LOG"
+  [ "$output" = "$(printf '#7\tFix [31mbug\tfix -> main\tAl\t2026-10-01')" ]
+}
+
+@test "--list --state is case-insensitive" {
+  run bb-pr -r ws/r --list --state merged
+  [ "$status" -eq 0 ]
+  grep -q 'state=MERGED' "$HTTP_LOG"
+}
+
+@test "--list with an empty result reports it and exits 0" {
+  run bb-pr -r ws/r --list --state MERGED
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No MERGED pull requests in ws/r."* ]]
+}
+
+@test "--list rejects an invalid state without a request" {
+  run bb-pr -r ws/r --list --state bogus
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"OPEN MERGED DECLINED SUPERSEDED"* ]]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "--list with a PR number is a usage error" {
+  run bb-pr -r ws/r --list 9
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Usage: bb-pr"* ]]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "--list with --diff is a usage error" {
+  run bb-pr -r ws/r --list --diff
+  [ "$status" -eq 1 ]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "--state without --list is a usage error" {
+  run bb-pr -r ws/r --state OPEN 9
+  [ "$status" -eq 1 ]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "--list surfaces an API failure" {
+  STUB_FAIL=1 run bb-pr -r ws/r --list
+  [ "$status" -eq 4 ]
+}
+
+@test "--list rejects a space-joined state without a request" {
+  run bb-pr -r ws/r --list --state "OPEN MERGED"
+  [ "$status" -eq 1 ]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "--state with no value is a usage error" {
+  run bb-pr -r ws/r --list --state
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Usage: bb-pr"* ]]
+  [ ! -f "$HTTP_LOG" ]
 }

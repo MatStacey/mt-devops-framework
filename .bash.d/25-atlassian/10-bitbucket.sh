@@ -8,6 +8,9 @@ BITBUCKET_API_BASE="https://api.bitbucket.org/2.0"
 BITBUCKET_PAGE_LENGTH=100
 BITBUCKET_MAX_PAGES=20
 BITBUCKET_JQ_DIR="$HOME/.bash.d/lib/jq"
+BITBUCKET_PR_STATES=(OPEN MERGED DECLINED SUPERSEDED)
+BITBUCKET_PR_DEFAULT_STATE="OPEN"
+BITBUCKET_PR_USAGE="Usage: bb-pr [-r <workspace/repo>] (--list [--state OPEN|MERGED|DECLINED|SUPERSEDED] | [--diff|--diffstat|--comments] <pr-number>)"
 
 #######################################
 # Bitbucket: Print "workspace/repo" for the current directory's Bitbucket
@@ -97,12 +100,48 @@ __mt_bb_collect() {
 }
 
 #######################################
-# Bitbucket: Show a pull request's metadata, diff, diffstat or comments
-# Usage: bb-pr [-r <workspace/repo>] [--diff|--diffstat|--comments] <pr-number>
+# Bitbucket: Print the pull requests of a repository in a given state.
 # Arguments:
-#   <pr-number>          Pull request number
+#   $1 - Optional explicit "workspace/repo"
+#   $2 - Optional state (default OPEN), case-insensitive
+# Returns:
+#   0 on success (including no results), 1 on an invalid state or repository,
+#   mt-http's code on API failure
+# Outputs:
+#   One tab-separated line per pull request on stdout
+#######################################
+__mt_bb_list_prs() {
+  local repo="$1" state="${2:-$BITBUCKET_PR_DEFAULT_STATE}"
+  state="${state^^}"
+  local valid=false candidate
+  for candidate in "${BITBUCKET_PR_STATES[@]}"; do
+    [ "$candidate" = "$state" ] && valid=true
+  done
+  if [ "$valid" = false ]; then
+    echo -e "${CB_RED}❌ Invalid state '$state'. Allowed: ${BITBUCKET_PR_STATES[*]}${C_RESET}" >&2
+    return 1
+  fi
+  repo=$(__mt_bb_resolve_repo "$repo") || return 1
+
+  local data
+  data=$(__mt_bb_collect "repositories/${repo}/pullrequests?state=${state}") || return $?
+  if [ "$(jq 'length' <<< "$data")" -eq 0 ]; then
+    echo -e "ℹ️  No ${state} pull requests in ${repo}." >&2
+    return 0
+  fi
+  jq -r -f "$BITBUCKET_JQ_DIR/bb_pr_list.jq" <<< "$data" | __mt_strip_control_chars
+}
+
+#######################################
+# Bitbucket: List a repository's pull requests, or show one pull request's
+# metadata, diff, diffstat or comments
+# Usage: bb-pr [-r <workspace/repo>] (--list [--state OPEN|MERGED|DECLINED|SUPERSEDED] | [--diff|--diffstat|--comments] <pr-number>)
+# Arguments:
+#   <pr-number>          Pull request number (not accepted with --list)
 # Options:
 #   -r, --repo <w/r>     Repository (default: the current directory's Bitbucket remote)
+#   --list               List pull requests, one per line
+#   --state <state>      With --list: OPEN (default), MERGED, DECLINED or SUPERSEDED (case-insensitive)
 #   --diff               Print the full unified diff
 #   --diffstat           Print status, lines added/removed and path per file
 #   --comments           Print every comment with its file and line
@@ -110,11 +149,12 @@ __mt_bb_collect() {
 # Returns:
 #   0 on success, 1 on bad usage or missing credentials, mt-http's code on API failure
 # Outputs:
-#   Summary, diff, diffstat or comments on stdout, with terminal control
-#   characters removed
+#   Summary, diff, diffstat, comments or list on stdout, with terminal control
+#   characters removed. --list prints: #<id> <title> <source -> destination>
+#   <author> <updated date>, tab-separated; an empty result is reported on stderr
 #######################################
 bb-pr() {
-  local repo="" mode="summary" pr_number=""
+  local repo="" mode="summary" pr_number="" list_mode=0 state=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -h | --help)
@@ -128,6 +168,15 @@ bb-pr() {
       --diff) mode="diff" ;;
       --diffstat) mode="diffstat" ;;
       --comments) mode="comments" ;;
+      --list) list_mode=1 ;;
+      --state)
+        if [ -z "${2:-}" ]; then
+          echo "$BITBUCKET_PR_USAGE" >&2
+          return 1
+        fi
+        state="$2"
+        shift
+        ;;
       -*)
         echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
         return 1
@@ -137,8 +186,16 @@ bb-pr() {
     shift
   done
 
-  if [[ ! "$pr_number" =~ ^[0-9]+$ ]]; then
-    echo "Usage: bb-pr [-r <workspace/repo>] [--diff|--diffstat|--comments] <pr-number>" >&2
+  if [ "$list_mode" -eq 1 ]; then
+    if [ -n "$pr_number" ] || [ "$mode" != "summary" ]; then
+      echo "$BITBUCKET_PR_USAGE" >&2
+      return 1
+    fi
+    __mt_bb_list_prs "$repo" "$state"
+    return $?
+  fi
+  if [ -n "$state" ] || [[ ! "$pr_number" =~ ^[0-9]+$ ]]; then
+    echo "$BITBUCKET_PR_USAGE" >&2
     return 1
   fi
   repo=$(__mt_bb_resolve_repo "$repo") || return 1
