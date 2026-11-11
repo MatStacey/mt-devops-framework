@@ -9,6 +9,16 @@ GCL_NETWORK_REGION_REGEX='^[a-z0-9-]+$'
 GCL_NETWORK_DEPS_JQ="$HOME/.bash.d/lib/jq/gcl_network_deps.jq"
 GCL_NETWORK_REGIONS_JQ="$HOME/.bash.d/lib/jq/gcl_network_regions.jq"
 GCL_NETWORK_EMPTY_LIST="[]"
+GCL_NETWORK_TRAFFIC_MAX_DAYS=42
+GCL_NETWORK_TRAFFIC_JQ="$HOME/.bash.d/lib/jq/gcl_network_traffic.jq"
+GCL_NETWORK_TRAFFIC_COUNTS_JQ="$HOME/.bash.d/lib/jq/gcl_network_traffic_counts.jq"
+# "kind:metric type:resource label" -- request-count metrics, summed per forwarding rule / Cloud Run service
+GCL_NETWORK_TRAFFIC_METRICS=(
+  "lb:loadbalancing.googleapis.com/https/request_count:forwarding_rule_name"
+  "lb:loadbalancing.googleapis.com/https/external/regional/request_count:forwarding_rule_name"
+  "lb:loadbalancing.googleapis.com/https/internal/request_count:forwarding_rule_name"
+  "run:run.googleapis.com/request_count:service_name"
+)
 # "section:gcloud words" -- listed in the project and filtered by exact network match in jq
 GCL_NETWORK_SECTIONS=(
   "instances:compute instances list"
@@ -105,6 +115,43 @@ __mt_gcl_network_collect_regional() {
 }
 
 #######################################
+# GCP: Read request counts for the last N days from Cloud Monitoring and
+# write them to <scratch>/traffic.json as
+# {lb, run, lb_failed, run_failed}.
+# Arguments:
+#   $1 - Scratch directory, $2 - Project, $3 - Days
+# Returns:
+#   0 if every metric was read, otherwise the worst code (GCL_EXIT_DENIED outranks 1)
+#######################################
+__mt_gcl_network_traffic_counts() {
+  local scratch="$1" project="$2" days="$3" overall=0 spec kind metric label series metric_rc
+  local lb_json="{}" run_json="{}" lb_failed=false run_failed=false
+  for spec in "${GCL_NETWORK_TRAFFIC_METRICS[@]}"; do
+    kind="${spec%%:*}"
+    metric="${spec#*:}"
+    label="${metric##*:}"
+    metric="${metric%:*}"
+    metric_rc=0
+    series=$(gcl-metric-read "$metric" -p "$project" --since "${days}d" --align window --aligner ALIGN_SUM \
+      --reducer REDUCE_SUM --group-by "resource.label.${label}" --json) || metric_rc=$?
+    if [ "$metric_rc" -ne 0 ]; then
+      [ "$kind" = "lb" ] && lb_failed=true || run_failed=true
+      overall=$(__mt_gcl_network_merge_rc "$overall" "$metric_rc")
+      continue
+    fi
+    [ -z "$series" ] && continue
+    if [ "$kind" = "lb" ]; then
+      lb_json=$(jq -c --arg label "$label" --argjson base "$lb_json" -f "$GCL_NETWORK_TRAFFIC_COUNTS_JQ" <<< "$series")
+    else
+      run_json=$(jq -c --arg label "$label" --argjson base "$run_json" -f "$GCL_NETWORK_TRAFFIC_COUNTS_JQ" <<< "$series")
+    fi
+  done
+  jq -nc --argjson lb "$lb_json" --argjson run "$run_json" --argjson lb_failed "$lb_failed" --argjson run_failed "$run_failed" \
+    '{lb: $lb, run: $run, lb_failed: $lb_failed, run_failed: $run_failed}' > "$scratch/traffic.json"
+  return "$overall"
+}
+
+#######################################
 # GCP: Collect every section for a network and print the dependency rows.
 # Arguments:
 #   $1 - Scratch directory, $2 - Network, $3 - Project, $4 - "1" for every region,
@@ -115,8 +162,8 @@ __mt_gcl_network_collect_regional() {
 #   Rows on stdout; progress and the summary on stderr
 #######################################
 __mt_gcl_network_scan() {
-  local scratch="$1" network="$2" project="$3" all_regions="$4" overall=0 section_rc spec name
-  shift 4
+  local scratch="$1" network="$2" project="$3" all_regions="$4" traffic_days="$5" overall=0 section_rc spec name
+  shift 5
   local -a explicit_regions=("$@") words
   local network_path="projects/${project}/global/networks/${network}"
 
@@ -191,10 +238,20 @@ __mt_gcl_network_scan() {
     __mt_strip_control_chars)
   count=0
   [ -n "$rows" ] && count=$(wc -l <<< "$rows")
+  local served=""
+  if [ -n "$traffic_days" ] && [ -n "$rows" ]; then
+    section_rc=0
+    __mt_gcl_network_traffic_counts "$scratch" "$project" "$traffic_days" || section_rc=$?
+    overall=$(__mt_gcl_network_merge_rc "$overall" "$section_rc")
+    rows=$(jq -R -r --slurpfile traffic "$scratch/traffic.json" --slurpfile forwarding_rules "$scratch/forwarding_rules.json" \
+      -f "$GCL_NETWORK_TRAFFIC_JQ" <<< "$rows")
+    served=$(awk -F'\t' '$5 ~ /^[0-9]+$/ && $5 > 0' <<< "$rows" | wc -l)
+  fi
   [ -n "$rows" ] && echo "$rows"
 
   if [ "$count" -gt 0 ]; then
     echo -e "${CB_YELLOW}⚠️  ${count} resources reference ${network}; it is not safe to delete.${C_RESET}" >&2
+    [ -n "$served" ] && echo -e "${CB_YELLOW}${served} of them served requests in the last ${traffic_days}d.${C_RESET}" >&2
   else
     echo -e "${CB_GREEN}✅ Nothing in ${project} references ${network}.${C_RESET}" >&2
   fi
@@ -212,29 +269,37 @@ __mt_gcl_network_scan() {
 # denied or fails is reported and the rest are still listed. Read-only. Needs
 # compute.viewer, run.viewer, cloudfunctions.viewer, vpcaccess.viewer,
 # cloudscheduler.viewer, redis.viewer and cloudsql.viewer.
-# Usage: gcl-network-deps <network> [-p <project>] [-r <region>]... [--all-regions]
+# With --traffic-days it also reads request counts from Cloud Monitoring (needs
+# monitoring.viewer) and adds a fifth column: the summed requests over the window for
+# forwarding rules and Cloud Run services, "0" when a matched resource served none,
+# "?" when the metric could not be read, and "n/a" for every other kind. Only
+# forwarding rules whose target is an HTTP(S) proxy are counted; every other rule
+# (L4 passthrough, TCP/SSL proxy, Private Service Connect endpoints) is "n/a",
+# because the request-count metrics do not cover them.
+# Usage: gcl-network-deps <network> [-p <project>] [-r <region>]... [--all-regions] [--traffic-days <n>]
 # Options:
 #   -p, --project <id>    Project that owns the network (default: the active gcloud project)
 #   -r, --region <name>   Region to check for VPC connectors and Scheduler jobs, repeatable;
 #                         default: scan regions + the network's subnet regions + the regions of
 #                         every Cloud Run service and function
 #   --all-regions         Check every region (cannot be combined with -r)
+#   --traffic-days <n>    Add a requests_<n>d column (1-42 days; default: no metrics are read)
 #   -h, --help            Show this help
 # Returns:
 #   0 for a complete scan, 1 on a failed section, bad usage or an unknown network,
 #   5 if any section was permission-denied
 # Outputs:
-#   "kind<TAB>name<TAB>location<TAB>detail" per dependent resource on stdout; regions checked and
-#   a summary on stderr
-# Example: gcl-network-deps legacy-net -p my-project
+#   "kind<TAB>name<TAB>location<TAB>detail" per dependent resource on stdout (plus
+#   "<TAB>requests" with --traffic-days); regions checked and a summary on stderr
+# Example: gcl-network-deps legacy-net -p my-project --traffic-days 30
 #######################################
 gcl-network-deps() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
-  local usage="Usage: gcl-network-deps <network> [-p <project>] [-r <region>]... [--all-regions]"
-  local network="" project="" all_regions=""
+  local usage="Usage: gcl-network-deps <network> [-p <project>] [-r <region>]... [--all-regions] [--traffic-days <n>]"
+  local network="" project="" all_regions="" traffic_days="" traffic_set=""
   local -a regions=()
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -247,6 +312,11 @@ gcl-network-deps() {
         shift
         ;;
       --all-regions) all_regions="1" ;;
+      --traffic-days)
+        traffic_days="${2:-}"
+        traffic_set="1"
+        shift
+        ;;
       -*)
         echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
         return 1
@@ -261,6 +331,10 @@ gcl-network-deps() {
   fi
   if [[ ! "$network" =~ $GCL_NETWORK_NAME_REGEX ]]; then
     echo -e "${CB_RED}❌ Invalid network name: ${network}${C_RESET}" >&2
+    return 1
+  fi
+  if [ -n "$traffic_set" ] && { [[ ! "$traffic_days" =~ ^[1-9][0-9]*$ ]] || [ "$traffic_days" -gt "$GCL_NETWORK_TRAFFIC_MAX_DAYS" ]; }; then
+    echo -e "${CB_RED}❌ --traffic-days must be a whole number from 1 to ${GCL_NETWORK_TRAFFIC_MAX_DAYS}.${C_RESET}" >&2
     return 1
   fi
   local region
@@ -279,7 +353,7 @@ gcl-network-deps() {
 
   local scratch rc=0
   scratch=$(mktemp -d) || return 1
-  __mt_gcl_network_scan "$scratch" "$network" "$project" "$all_regions" "${regions[@]}" || rc=$?
+  __mt_gcl_network_scan "$scratch" "$network" "$project" "$all_regions" "$traffic_days" "${regions[@]}" || rc=$?
   rm -rf "$scratch"
   return "$rc"
 }

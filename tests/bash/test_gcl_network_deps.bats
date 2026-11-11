@@ -86,6 +86,22 @@ STUB
   gcl-get-project() { echo "proj-a"; }
   gcl-get-user() { echo "me@example.test"; }
   gcl-auth-check() { return 0; }
+  METRIC_CALLS="$BATS_TEST_TMPDIR/metric_calls"
+  export METRIC_CALLS
+  # shellcheck disable=SC2317
+  gcl-metric-read() {
+    echo "gcl-metric-read $*" >> "$METRIC_CALLS"
+    case "$1" in
+      run.googleapis.com/request_count)
+        [ -n "${STUB_RUN_METRIC_DENIED:-}" ] && return 5
+        echo '[{"resource":{"labels":{"service_name":"svc-a"}},"points":[{"value":{"int64Value":"12"}}]},{"resource":{"labels":{"service_name":"elsewhere"}},"points":[{"value":{"int64Value":"99"}}]}]'
+        ;;
+      loadbalancing.googleapis.com/https/request_count)
+        echo '[{"resource":{"labels":{"forwarding_rule_name":"fr1"}},"points":[{"value":{"doubleValue":7.0}}]}]'
+        ;;
+      *) return 0 ;;
+    esac
+  }
 }
 
 kinds_of() { cut -f1,2 <<< "$output"; }
@@ -249,4 +265,65 @@ kinds_of() { cut -f1,2 <<< "$output"; }
   run --separate-stderr gcl-network-deps legacy-net -r europe-west1
   [ "$status" -eq 1 ]
   [[ "$stderr" == *"gcloud returned non-JSON output"* ]]
+}
+
+@test "--traffic-days adds request counts: matched rules and services, zero for no series, n/a elsewhere" {
+  run --separate-stderr gcl-network-deps legacy-net --traffic-days 30
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'forwarding-rule\tfr1\tglobal\tEXTERNAL_MANAGED\t7'* ]]
+  [[ "$output" == *$'cloud-run\tsvc-a\teurope-west1\tconnector=conn-1\t12'* ]]
+  [[ "$output" == *$'cloud-run\tsvc-b\teurope-west1\tdirect-vpc\t0'* ]]
+  [[ "$output" == *$'instance\ti1\teurope-west1-b\t-\tn/a'* ]]
+  [[ "$output" == *$'cloud-run-job\tjob-conn\teurope-west1\tconnector=conn-1\tn/a'* ]]
+  [[ "$stderr" == *"of them served requests in the last 30d"* ]]
+  grep -q -- '--since 30d --align window --aligner ALIGN_SUM --reducer REDUCE_SUM --group-by resource.label.service_name --json' "$METRIC_CALLS"
+  [ "$(wc -l < "$METRIC_CALLS")" -eq 4 ]
+}
+
+@test "forwarding rules that do not target an HTTP(S) proxy are n/a, whatever their scheme" {
+  run --separate-stderr gcl-network-deps legacy-net --traffic-days 7
+  [[ "$output" == *$'forwarding-rule\tfr3\t'*$'\tINTERNAL\tn/a'* ]]
+  [[ "$output" == *$'forwarding-rule\tfr4\t'*$'\tEXTERNAL_MANAGED\tn/a'* ]]
+  [[ "$output" == *$'forwarding-rule\tfr5\t'*$'\t-\tn/a'* ]]
+}
+
+@test "a denied metric call gives ? in that metric's rows and exit 5" {
+  STUB_RUN_METRIC_DENIED=1 run --separate-stderr gcl-network-deps legacy-net --traffic-days 30
+  [ "$status" -eq 5 ]
+  [[ "$output" == *$'cloud-run\tsvc-a\teurope-west1\tconnector=conn-1\t?'* ]]
+  [[ "$output" == *$'forwarding-rule\tfr1\tglobal\tEXTERNAL_MANAGED\t7'* ]]
+}
+
+@test "without --traffic-days no metrics are read and rows keep four columns" {
+  run --separate-stderr gcl-network-deps legacy-net
+  [ ! -f "$METRIC_CALLS" ]
+  [ -z "$(awk -F'\t' 'NF != 4' <<< "$output")" ]
+}
+
+@test "invalid --traffic-days values exit 1 without any call" {
+  local value
+  for value in 0 abc 43 -1 ""; do
+    run gcl-network-deps legacy-net --traffic-days "$value"
+    [ "$status" -eq 1 ]
+  done
+  [ ! -f "$CALLS" ]
+  [ ! -f "$METRIC_CALLS" ]
+}
+
+@test "a non-denied metric failure gives ? and exit 1" {
+  gcl-metric-read() {
+    echo "gcl-metric-read $*" >> "$METRIC_CALLS"
+    [ "$1" = "run.googleapis.com/request_count" ] && return 1
+    return 0
+  }
+  run --separate-stderr gcl-network-deps legacy-net --traffic-days 30
+  [ "$status" -eq 1 ]
+  [[ "$output" == *$'cloud-run\tsvc-a\teurope-west1\tconnector=conn-1\t?'* ]]
+}
+
+@test "the first four columns with --traffic-days are exactly the plain output" {
+  run --separate-stderr gcl-network-deps legacy-net
+  local plain="$output"
+  run --separate-stderr gcl-network-deps legacy-net --traffic-days 30
+  [ "$(cut -f1-4 <<< "$output")" = "$plain" ]
 }
