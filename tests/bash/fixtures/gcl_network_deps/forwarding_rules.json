@@ -1,2 +1,29 @@
-[{"name":"fr1","loadBalancingScheme":"EXTERNAL_MANAGED","target":"https://www.googleapis.com/compute/v1/projects/proj-a/global/targetHttpsProxies/px1"},
- {"name":"fr2","loadBalancingScheme":"EXTERNAL_MANAGED","target":"https://www.googleapis.com/compute/v1/projects/proj-a/global/targetHttpsProxies/px2"}]
+[
+ {
+  "name": "fr1",
+  "loadBalancingScheme": "EXTERNAL_MANAGED",
+  "target": "https://www.googleapis.com/compute/v1/projects/proj-a/global/targetHttpsProxies/px1"
+ },
+ {
+  "name": "fr2",
+  "loadBalancingScheme": "EXTERNAL_MANAGED",
+  "target": "https://www.googleapis.com/compute/v1/projects/proj-a/global/targetHttpsProxies/px2"
+ },
+ {
+  "name": "fr3",
+  "loadBalancingScheme": "INTERNAL",
+  "network": "https://www.googleapis.com/compute/v1/projects/proj-a/global/networks/legacy-net",
+  "backendService": "https://www.googleapis.com/compute/v1/projects/proj-a/regions/europe-west1/backendServices/ilb"
+ },
+ {
+  "name": "fr4",
+  "loadBalancingScheme": "EXTERNAL_MANAGED",
+  "network": "https://www.googleapis.com/compute/v1/projects/proj-a/global/networks/legacy-net",
+  "target": "https://www.googleapis.com/compute/v1/projects/proj-a/global/targetTcpProxies/tp1"
+ },
+ {
+  "name": "fr5",
+  "network": "https://www.googleapis.com/compute/v1/projects/proj-a/global/networks/legacy-net",
+  "target": "https://www.googleapis.com/compute/v1/projects/proj-a/regions/europe-west1/serviceAttachments/sa1"
+ }
+]
