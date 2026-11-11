@@ -6,7 +6,6 @@
 
 BITBUCKET_PIPELINES_DEFAULT_COUNT=10
 BITBUCKET_LOG_DEFAULT_TAIL=100
-BITBUCKET_PR_TITLE_MAX=250
 BITBUCKET_PIPELINE_POLL_SECONDS=10
 BITBUCKET_PIPELINE_WAIT_TIMEOUT=1800
 BITBUCKET_EXIT_WAIT_TIMEOUT=124
@@ -52,21 +51,6 @@ __mt_bb_resolve_pipeline() {
     return 1
   fi
   __mt_bb_encode_uuid "$found"
-}
-
-#######################################
-# Bitbucket: Print a JSON request body to a private temp file, so secret
-# values never appear on a command line. The caller removes the directory.
-# Arguments:
-#   $1 - JSON text
-# Outputs:
-#   Path of the body file on stdout
-#######################################
-__mt_bb_body_file() {
-  local dir
-  dir=$(mktemp -d) || return 1
-  printf '%s' "$1" > "$dir/body.json"
-  echo "$dir/body.json"
 }
 
 #######################################

@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- `bb-pr` can now change and merge pull requests: `--set-title <text>` and `--set-description <@file|->` edit an open PR (reviewers are preserved, markdown is sent byte for byte), and `--merge <n> [--strategy ...] [--keep-branch] [--yes]` merges it after confirming, refusing unless the PR is open and every build status is successful. A matching entry is in `mt-menu`.
 - `bb-pipelines --wait` waits for an already-running pipeline (by build number or UUID, or `--commit <sha>` for a push-triggered run that may not exist yet), with `--timeout`, then prints the step table; exits 0 on success, 1 on failure, 124 on timeout. `bb-pipeline-run --wait` now shares the same wait helper.
 - `bb-pr --list [--state OPEN|MERGED|DECLINED|SUPERSEDED]` lists a Bitbucket repository's pull requests, and `git-review-prs` now uses `bb-pr` (list, `-n`, `-n -s`) on Bitbucket Cloud remotes instead of failing in `gh`.
 - Added `py-hermetic-run`: runs an ad-hoc Python script or module with the repo interpreter under a cleared environment, an empty temp HOME and gcloud config, no Google credential variables, and no network unless `--allow-network`. It is not a filesystem sandbox (the docstring lists what stays reachable).
