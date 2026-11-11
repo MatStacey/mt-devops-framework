@@ -37,7 +37,9 @@ except OSError:
 sys.exit(int(os.environ.get("PROBE_EXIT", "0")))
 PY
   can_isolate=0
-  unshare -rn true 2> /dev/null && can_isolate=1
+  if unshare -rn true 2> /dev/null; then
+    can_isolate=1
+  fi
 }
 
 @test "the environment is cleared: no credentials, an empty temp HOME and gcloud config, no inherited secrets" {
