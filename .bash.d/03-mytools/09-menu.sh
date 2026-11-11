@@ -796,6 +796,7 @@ __mt_menu_git_repos() {
     "Bulk-Update Repos, Background (mt-bulk-update -b)" __mt_menu_bulk_update_bg \
     "Search Across All Repos (mt-grep-repos)" __mt_menu_grep_repos \
     "Audit Retired Branches Across Repos (mt-branch-audit)" mt-branch-audit \
+    "Check Repo Before Publishing (git-publish-check)" git-publish-check \
     "List Open Pull Requests (git-review-prs)" git-review-prs \
     "Diff All Uncommitted Changes incl. Untracked (git-diff-all)" git-diff-all \
     "Show Bitbucket Pull Request (bb-pr)" __mt_menu_bb_pr \

@@ -222,6 +222,20 @@ def load_env():
     # mt-radar's own top-contributors heuristic (20-vcs/53-vcs-insight.sh) --
     # how far back its `git log` window looks, in months.
     export("CONTRIBUTOR_LOOKBACK_MONTHS", git_cfg.get("contributor_lookback_months", 12))
+    # git-publish-check (20-vcs/62-publish-check.sh) -- acceptable commit
+    # email addresses and AI-attribution text.
+    export(
+        "GIT_PUBLIC_EMAIL_REGEX",
+        git_cfg.get("public_email_regex", r"@users\.noreply\.github\.com$"),
+    )
+    export(
+        "GIT_AI_ATTRIBUTION_REGEX",
+        git_cfg.get(
+            "ai_attribution_regex",
+            r"(co-authored-by:.*(claude|copilot|chatgpt|openai|anthropic|gemini|cursor)"
+            r"|generated with \[?claude|claude-session:)",
+        ),
+    )
     # mt-branch-audit (20-vcs/61-branch-audit.sh) -- branch names treated as retired.
     export(
         "GIT_RETIRED_BRANCH_REGEX",
