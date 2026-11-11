@@ -94,9 +94,11 @@ STUB
     case "$1" in
       run.googleapis.com/request_count)
         [ -n "${STUB_RUN_METRIC_DENIED:-}" ] && return 5
-        echo '[{"resource":{"labels":{"service_name":"svc-a"}},"points":[{"value":{"int64Value":"12"}}]},{"resource":{"labels":{"service_name":"elsewhere"}},"points":[{"value":{"int64Value":"99"}}]}]' ;;
+        echo '[{"resource":{"labels":{"service_name":"svc-a"}},"points":[{"value":{"int64Value":"12"}}]},{"resource":{"labels":{"service_name":"elsewhere"}},"points":[{"value":{"int64Value":"99"}}]}]'
+        ;;
       loadbalancing.googleapis.com/https/request_count)
-        echo '[{"resource":{"labels":{"forwarding_rule_name":"fr1"}},"points":[{"value":{"doubleValue":7.0}}]}]' ;;
+        echo '[{"resource":{"labels":{"forwarding_rule_name":"fr1"}},"points":[{"value":{"doubleValue":7.0}}]}]'
+        ;;
       *) return 0 ;;
     esac
   }
