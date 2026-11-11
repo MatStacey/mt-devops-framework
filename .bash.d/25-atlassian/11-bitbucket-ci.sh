@@ -185,7 +185,7 @@ __mt_bb_find_pipeline_by_commit() {
 # Outputs:
 #   "#<build> <RESULT>" then the step table on stdout
 #######################################
-__mt_bb_pipelines_wait() {
+__mt_bb_wait_existing_pipeline() {
   local repo="$1" ref="$2" commit="$3" timeout="$4" started="$SECONDS"
   local pipeline_uuid found steps wait_rc=0
   if [ -n "$commit" ]; then
@@ -304,7 +304,7 @@ bb-pipelines() {
   fi
   repo=$(__mt_bb_resolve_repo "$repo") || return 1
   if [ -n "$wait_for" ]; then
-    __mt_bb_pipelines_wait "$repo" "$ref" "$commit" "$timeout"
+    __mt_bb_wait_existing_pipeline "$repo" "$ref" "$commit" "$timeout"
     return $?
   fi
 
