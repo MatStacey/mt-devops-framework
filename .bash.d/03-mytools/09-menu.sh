@@ -339,6 +339,7 @@ __mt_menu_scheduler_describe() { __mt_menu_prompt_arg "Scheduler job ID" __mt_me
 __mt_menu_firestore_get() { __mt_menu_prompt_arg "Firestore document path (e.g. users/abc)" __mt_menu_firestore_get_doc; }
 __mt_menu_firestore_get_doc() { gcl-firestore get "$1"; }
 __mt_menu_logging_search() { __mt_menu_prompt_arg "Text to search for in Cloud Logging" gcl-logging-search; }
+__mt_menu_monitoring_inventory() { gcl-monitoring-inventory; }
 __mt_menu_wif_describe() { __mt_menu_prompt_arg "Workload Identity Pool ID" gcl-wif-describe; }
 __mt_menu_bb_pipelines() { bb-pipelines; }
 __mt_menu_bb_env() { bb-env list; }
@@ -672,6 +673,7 @@ __mt_menu_gcp_project() {
     "List Audit-Log Changes (gcl-audit-changes)" gcl-audit-changes \
     "Search Logs Across Services (gcl-logging-search)" __mt_menu_logging_search \
     "Read Monitoring Metric (gcl-metric-read)" __mt_menu_metric_read \
+    "Monitoring Inventory (gcl-monitoring-inventory)" __mt_menu_monitoring_inventory \
     "List Scheduler Jobs (gcl-scheduler list)" __mt_menu_scheduler_list \
     "Read Firestore Document (gcl-firestore get)" __mt_menu_firestore_get \
     "Describe Scheduler Job (gcl-scheduler describe)" __mt_menu_scheduler_describe \

@@ -16,6 +16,10 @@ GCL_SEARCH_DEFAULT_SINCE="1d"
 GCL_SEARCH_DEFAULT_LIMIT=1000
 GCL_SEARCH_TERM_MAX_LENGTH=200
 GCL_SEARCH_HITS_JQ="$HOME/.bash.d/lib/jq/gcl_log_hits.jq"
+GCL_INVENTORY_SECTIONS=(alerts dashboards uptime metrics logmetrics)
+GCL_INVENTORY_FILTER_MAX_LENGTH=120
+GCL_INVENTORY_CUSTOM_METRICS_FILTER='metric.type = starts_with("custom.googleapis.com/") OR metric.type = starts_with("workload.googleapis.com/") OR metric.type = starts_with("external.googleapis.com/")'
+GCL_INVENTORY_JQ="$HOME/.bash.d/lib/jq/gcl_monitoring_inventory.jq"
 GCL_METRIC_DEFAULT_SINCE="1h"
 GCL_METRIC_DEFAULT_ALIGN="60s"
 GCL_METRIC_API="https://monitoring.googleapis.com/v3/projects"
@@ -156,6 +160,23 @@ gcl-audit-changes() {
 }
 
 #######################################
+# GCP: List Cloud Monitoring metric descriptors matching a filter
+# Arguments:
+#   $1 - Project, $2 - descriptor filter (e.g. metric.type = starts_with("custom.googleapis.com/"))
+# Returns:
+#   0 on success, otherwise the failing call's result
+# Outputs:
+#   "type<TAB>kind<TAB>value type<TAB>unit<TAB>description" rows
+#######################################
+__mt_gcl_metric_descriptors() {
+  local project="$1" descriptor_filter="$2"
+  __mt_gcl_rest_collect "listing metric descriptors of ${project}" metricDescriptors \
+    "${GCL_METRIC_API}/${project}/metricDescriptors" -q "filter=${descriptor_filter}" |
+    jq -r -f "$GCL_METRIC_DESCRIPTORS_JQ" | __mt_strip_control_chars
+  return "${PIPESTATUS[0]}"
+}
+
+#######################################
 # GCP: Read Cloud Monitoring time series for a metric over a time window (gcloud
 # has no command for this), or list the metric types under a prefix. Read-only;
 # needs roles/monitoring.viewer.
@@ -275,10 +296,8 @@ gcl-metric-read() {
   local url="${GCL_METRIC_API}/${project}"
 
   if [ -n "$list_prefix" ]; then
-    __mt_gcl_rest_collect "listing metric descriptors of ${project}" metricDescriptors "${url}/metricDescriptors" \
-      -q "filter=metric.type = starts_with(\"${list_prefix}\")" |
-      jq -r -f "$GCL_METRIC_DESCRIPTORS_JQ" | __mt_strip_control_chars
-    return "${PIPESTATUS[0]}"
+    __mt_gcl_metric_descriptors "$project" "metric.type = starts_with(\"${list_prefix}\")"
+    return $?
   fi
 
   local window window_start window_end
@@ -436,5 +455,93 @@ gcl-logging-search() {
   done
 
   [ -n "$result" ] && printf '%s' "$result" | sort -t$'\t' -k4,4nr -s | __mt_strip_control_chars
+  return "$rc"
+}
+
+#######################################
+# GCP: Inventory of a project's monitoring setup: alert policies, dashboards,
+# uptime checks, custom metric descriptors and log-based metrics. Read-only.
+# Each section is independent: a denied or failing one is reported and the
+# others still run.
+# Usage: gcl-monitoring-inventory [-p <project>]... [--section alerts|dashboards|uptime|metrics|logmetrics]
+# Options:
+#   -p, --project <id>    Project to inspect; repeatable (default: the active gcloud project)
+#   --section <name>      Only this section (alerts, dashboards, uptime, metrics, logmetrics)
+#   -h, --help            Show this help menu
+# Returns:
+#   0 on success, 1 on failure or bad usage, 5 if any section was permission denied
+# Outputs:
+#   A heading per project and section, then tab-separated rows
+#######################################
+gcl-monitoring-inventory() {
+  local only_section=""
+  local -a projects=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -p | --project)
+        projects+=("${2:-}")
+        shift
+        ;;
+      --section)
+        only_section="${2:-}"
+        shift
+        ;;
+      *)
+        echo -e "${CB_RED}❌ Unknown option or argument: $1${C_RESET}" >&2
+        return 1
+        ;;
+    esac
+    shift
+  done
+  local project section
+  for project in "${projects[@]}"; do
+    [[ "$project" =~ $GCL_PROJECT_ID_REGEX ]] || {
+      echo -e "${CB_RED}❌ Invalid project: ${project}${C_RESET}" >&2
+      return 1
+    }
+  done
+  if [ -n "$only_section" ] && [[ " ${GCL_INVENTORY_SECTIONS[*]} " != *" ${only_section} "* ]]; then
+    echo -e "${CB_RED}❌ --section must be one of: ${GCL_INVENTORY_SECTIONS[*]}.${C_RESET}" >&2
+    return 1
+  fi
+  __mt_gcl_preflight || return $?
+  [ "${#projects[@]}" -eq 0 ] && projects=("$(gcl-get-project)")
+
+  local rc=0 section_rc json
+  for project in "${projects[@]}"; do
+    for section in "${GCL_INVENTORY_SECTIONS[@]}"; do
+      [ -n "$only_section" ] && [ "$only_section" != "$section" ] && continue
+      echo -e "${CB_BLUE}== ${project} / ${section} ==${C_RESET}"
+      section_rc=0
+      case "$section" in
+        alerts | uptime | logmetrics)
+          local -a read_command
+          case "$section" in
+            alerts) read_command=(gcloud monitoring policies list) ;;
+            uptime) read_command=(gcloud monitoring uptime list-configs) ;;
+            logmetrics) read_command=(gcloud logging metrics list) ;;
+          esac
+          json=$(__mt_gcl_run "reading ${section} of ${project}" "${read_command[@]}" --project="$project" --format=json --quiet) || section_rc=$?
+          [ "$section_rc" -eq 0 ] && [ -n "$json" ] && jq -r --arg section "$section" --argjson filter_max "$GCL_INVENTORY_FILTER_MAX_LENGTH" \
+            -f "$GCL_INVENTORY_JQ" <<< "$json" | __mt_strip_control_chars
+          ;;
+        dashboards)
+          __mt_gcl_run "reading dashboards of ${project}" gcloud monitoring dashboards list --project="$project" \
+            --format='value(displayName,name.basename())' --quiet | __mt_strip_control_chars
+          section_rc="${PIPESTATUS[0]}"
+          ;;
+        metrics)
+          __mt_gcl_metric_descriptors "$project" "$GCL_INVENTORY_CUSTOM_METRICS_FILTER"
+          section_rc=$?
+          ;;
+      esac
+      [ "$rc" -eq 0 ] && rc="$section_rc"
+      [ "$section_rc" -eq "$GCL_EXIT_DENIED" ] && rc="$GCL_EXIT_DENIED"
+    done
+  done
   return "$rc"
 }
