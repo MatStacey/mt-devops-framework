@@ -25,8 +25,13 @@ def test_a_reply_without_server_uses_a_dash():
 
 
 def test_non_200_and_garbage_replies_are_ignored():
-    assert ssdp_discover.parse_response(b"NOTIFY * HTTP/1.1\r\n\r\n", "10.0.0.2") is None
-    assert ssdp_discover.parse_response(b"HTTP/1.1 404 Not Found\r\n\r\n", "10.0.0.2") is None
+    assert (
+        ssdp_discover.parse_response(b"NOTIFY * HTTP/1.1\r\n\r\n", "10.0.0.2") is None
+    )
+    assert (
+        ssdp_discover.parse_response(b"HTTP/1.1 404 Not Found\r\n\r\n", "10.0.0.2")
+        is None
+    )
     assert ssdp_discover.parse_response(b"", "10.0.0.2") is None
     assert ssdp_discover.parse_response(b"\xff\xfe\x00", "10.0.0.2") is None
 

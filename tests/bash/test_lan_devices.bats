@@ -176,6 +176,12 @@ STUB
   [[ "$output" == *"powershell.exe not found: SSDP discovery from WSL runs through the Windows host."* ]]
 }
 
+@test "a failing arp.exe exits 1 instead of printing an empty list" {
+  printf '#!/usr/bin/env bash\nexit 3\n' > "$bin/arp.exe"
+  OS_FAMILY=wsl run net-lan-devices
+  [ "$status" -eq 1 ]
+}
+
 @test "a failing discovery script exits 1" {
   printf '#!/usr/bin/env bash\nexit 3\n' > "$bin/python3"
   OS_FAMILY=linux run net-lan-devices --ssdp

@@ -92,7 +92,9 @@ def discover(address: str, port: int, timeout: int) -> list[dict[str, str]]:
         if reply:
             found[(reply["ip"], reply["location"])] = reply
     sock.close()
-    return sorted(found.values(), key=lambda r: tuple(int(p) for p in r["ip"].split(".")))
+    return sorted(
+        found.values(), key=lambda r: tuple(int(p) for p in r["ip"].split("."))
+    )
 
 
 def main(argv: list[str] | None = None) -> int:

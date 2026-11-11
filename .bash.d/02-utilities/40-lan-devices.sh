@@ -29,7 +29,8 @@ __mt_lan_neighbours() {
         echo -e "${CB_RED}❌ arp.exe not found: the LAN neighbour list on WSL comes from the Windows host.${C_RESET}" >&2
         return 1
       fi
-      table=$(arp.exe -a | tr -d '\r') || return 1
+      table=$(arp.exe -a) || return 1
+      table="${table//$'\r'/}"
       ;;
     macos)
       format="macos"
