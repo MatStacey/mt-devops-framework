@@ -78,7 +78,7 @@ git:
   public_email_regex: '@users\.noreply\.github\.com$'
   # git-publish-check: commit messages matching this extended regex
   # (case-insensitive) are reported as carrying an AI attribution.
-  ai_attribution_regex: '(co-authored-by:.*(claude|copilot|chatgpt|openai|anthropic|gemini|cursor)|generated with \[?claude)'
+  ai_attribution_regex: '(co-authored-by:.*(claude|copilot|chatgpt|openai|anthropic|gemini|cursor)|generated with \[?claude|claude-session:)'
 
 llm_exports:
   enable_auto_cleanup: true

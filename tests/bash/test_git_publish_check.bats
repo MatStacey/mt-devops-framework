@@ -31,6 +31,8 @@ while [ "$#" -gt 0 ]; do
   shift
 done
 case "${STUB_GITLEAKS_MODE:-clean}" in
+  badjson) echo 'not json' > "$report" ;;
+  null) echo 'null' > "$report" ;;
   findings) echo '[{"RuleID":"aws-key","File":"app.env","Commit":"abcdef1234567","StartLine":3,"Secret":"TOPSECRET123","Match":"KEY=TOPSECRET123"}]' > "$report" ;;
   clean) echo '[]' > "$report" ;;
   fail) exit 2 ;;
@@ -50,6 +52,9 @@ STUB
   mkdir -p "$work"
   cd "$work" || return 1
   git init -q -b main
+  origin="$BATS_TEST_TMPDIR/origin.git"
+  git init -q --bare -b main "$origin"
+  git remote add origin "$origin"
   commit_as() { # <email> <message>
     GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL="$1" GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL="$1" \
       git commit -q --allow-empty -m "$2"
@@ -133,6 +138,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
   run git-publish-check --make-public --yes
   [ "$status" -eq 0 ]
   grep -qF 'gh repo edit me/app --visibility public --accept-visibility-change-consequences' "$GH_LOG"
+  grep -qF "gh repo view $origin --json" "$GH_LOG"
 }
 
 @test "--make-public without --yes and without a terminal refuses" {
@@ -169,4 +175,103 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 @test "-h shows help" {
   run git-publish-check -h
   [ "$output" = "help called" ]
+}
+
+@test "an unreadable gitleaks report is blocking, never reported as none" {
+  commit_as 1+me@users.noreply.github.com clean
+  local mode
+  for mode in badjson null; do
+    STUB_GITLEAKS_MODE=$mode run git-publish-check --make-public --yes
+    [ "$status" -eq 1 ]
+    [[ "$output" == *"Could not read the gitleaks report"* ]]
+  done
+  [ ! -f "$GH_LOG" ]
+}
+
+@test "--make-public addresses origin by URL, not gh's default remote" {
+  commit_as 1+me@users.noreply.github.com clean
+  git remote add upstream https://github.com/cli/cli.git
+  run git-publish-check --make-public --yes
+  [ "$status" -eq 0 ]
+  grep -qF "gh repo view $origin --json" "$GH_LOG"
+}
+
+@test "--make-public without an origin exits 1 and never calls gh" {
+  commit_as 1+me@users.noreply.github.com clean
+  git remote remove origin
+  run git-publish-check --make-public --yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"No origin remote"* ]]
+  [ ! -f "$GH_LOG" ]
+}
+
+@test "a repo with no origin warns that only local history was checked" {
+  commit_as 1+me@users.noreply.github.com clean
+  git remote remove origin
+  run git-publish-check
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"only local history was checked"* ]]
+}
+
+# A commit that exists only on origin's refs/pull/1/head, with a personal email and an AI trailer.
+make_remote_only_commit() {
+  local seed="$BATS_TEST_TMPDIR/seed"
+  git init -q -b main "$seed"
+  GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=1+me@users.noreply.github.com GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=1+me@users.noreply.github.com \
+    git -C "$seed" commit -q --allow-empty -m base
+  git -C "$seed" push -q "$origin" main
+  GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=me@personal.example GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=me@personal.example \
+    git -C "$seed" commit -q --allow-empty -m "pr work
+
+Co-Authored-By: Claude <noreply@anthropic.com>"
+  git -C "$seed" push -q "$origin" HEAD:refs/pull/1/head
+  git clone -q "$origin" "$BATS_TEST_TMPDIR/clone"
+  cd "$BATS_TEST_TMPDIR/clone" || return 1
+}
+
+@test "commits only on a remote pull ref block the check and --make-public" {
+  make_remote_only_commit
+  run git-publish-check --make-public --yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"refs/pull/1/head"* ]]
+  [[ "$output" == *"Fetch them first"* ]]
+  [ ! -f "$GH_LOG" ]
+}
+
+@test "after fetching the remote-only refs the section is clean and the other checks see the commit" {
+  make_remote_only_commit
+  git fetch -q origin '+refs/*:refs/remotes/origin-all/*'
+  run git-publish-check
+  [ "$status" -eq 1 ]
+  local remote_section="${output%%Secrets in history*}"
+  [[ "$remote_section" == *"✅ none"* ]]
+  [[ "$output" == *$'me@personal.example\t'* ]]
+  [[ "$output" == *"pr work"* ]]
+}
+
+@test "a clone whose refs all exist locally has a clean remote-refs section" {
+  commit_as 1+me@users.noreply.github.com clean
+  git push -q origin main
+  GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=1+me@users.noreply.github.com git tag -a v1 -m release
+  git push -q origin v1
+  run git-publish-check
+  [ "$status" -eq 0 ]
+  [[ "${output%%Secrets in history*}" == *"✅ none"* ]]
+}
+
+@test "an unreachable origin blocks with a clear message" {
+  commit_as 1+me@users.noreply.github.com clean
+  rm -rf "$origin"
+  run git-publish-check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Could not list origin's refs"* ]]
+}
+
+@test "a Claude-Session trailer alone is reported" {
+  commit_as 1+me@users.noreply.github.com "chore: tidy
+
+Claude-Session: https://claude.ai/code/session_abc"
+  run git-publish-check
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"chore: tidy"* ]]
 }

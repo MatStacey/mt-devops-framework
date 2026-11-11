@@ -233,7 +233,7 @@ def load_env():
         git_cfg.get(
             "ai_attribution_regex",
             r"(co-authored-by:.*(claude|copilot|chatgpt|openai|anthropic|gemini|cursor)"
-            r"|generated with \[?claude)",
+            r"|generated with \[?claude|claude-session:)",
         ),
     )
 

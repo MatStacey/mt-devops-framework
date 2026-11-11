@@ -5,11 +5,53 @@
 # ~/.bash.d/20-vcs/62-publish-check.sh
 
 MT_PUBLISH_CHECK_DEFAULT_EMAIL_REGEX='@users\.noreply\.github\.com$'
-MT_PUBLISH_CHECK_DEFAULT_AI_REGEX='(co-authored-by:.*(claude|copilot|chatgpt|openai|anthropic|gemini|cursor)|generated with \[?claude)'
+MT_PUBLISH_CHECK_DEFAULT_AI_REGEX='(co-authored-by:.*(claude|copilot|chatgpt|openai|anthropic|gemini|cursor)|generated with \[?claude|claude-session:)'
 MT_PUBLISH_CHECK_GITLEAKS_JQ="$HOME/.bash.d/lib/jq/gitleaks_findings.jq"
 MT_PUBLISH_CHECK_ROTATE_HINT="Rotate the secret first; rewriting history does not un-leak it."
+MT_PUBLISH_CHECK_FETCH_HINT="Fetch them first: git fetch origin '+refs/*:refs/remotes/origin-all/*'"
 MT_PUBLISH_CHECK_EMAIL_HINT="Rewrite with: git filter-repo --mailmap <file>"
 MT_PUBLISH_CHECK_AI_HINT="Rewrite with: git filter-repo --message-callback '<python that strips the trailer>'"
+
+#######################################
+# Git: List refs on origin (for example refs/pull/N/head) whose commits are
+# not reachable from any local ref. Such commits become public with the
+# repository but are invisible to the history checks below until fetched.
+# Arguments:
+#   $1 - Repository root
+# Returns:
+#   0 if every remote ref is reachable locally (or there is no origin), 1 on
+#   unreachable refs or when origin's refs cannot be listed
+# Outputs:
+#   Header, then one ref per row
+#######################################
+__mt_publish_check_remote_refs() {
+  local repo_root="$1" remote_refs scratch_dir sha ref findings=""
+  echo -e "${CB_BLUE}📡 Remote refs not in local history${C_RESET}"
+  if ! git -C "$repo_root" remote get-url origin > /dev/null 2>&1; then
+    echo -e "${CB_YELLOW}⚠️  No origin remote: only local history was checked.${C_RESET}"
+    return 0
+  fi
+  remote_refs=$(GIT_TERMINAL_PROMPT=0 git -C "$repo_root" ls-remote origin 2> /dev/null) || {
+    echo -e "${CB_RED}❌ Could not list origin's refs.${C_RESET}"
+    return 1
+  }
+  scratch_dir=$(mktemp -d) || return 1
+  git -C "$repo_root" rev-list --all > "$scratch_dir/reachable"
+  while read -r sha ref; do
+    [ -z "$sha" ] && continue
+    ref="${ref%^\{\}}"
+    [ "$(git -C "$repo_root" cat-file -t "$sha" 2> /dev/null)" = "tag" ] && continue
+    grep -qxF "$sha" "$scratch_dir/reachable" || findings+="${ref}"$'\n'
+  done <<< "$remote_refs"
+  rm -rf "$scratch_dir"
+  if [ -z "$findings" ]; then
+    echo -e "${CB_GREEN}✅ none${C_RESET}"
+    return 0
+  fi
+  printf '%s' "$findings" | __mt_strip_control_chars
+  echo -e "${CB_YELLOW}${MT_PUBLISH_CHECK_FETCH_HINT}${C_RESET}"
+  return 1
+}
 
 #######################################
 # Git: Scan the full history of a repository for secrets with gitleaks,
@@ -37,8 +79,13 @@ __mt_publish_check_secrets() {
     rm -rf "$scratch_dir"
     return 1
   fi
-  findings=$(jq -r -f "$MT_PUBLISH_CHECK_GITLEAKS_JQ" "$report" 2> /dev/null | __mt_strip_control_chars)
+  findings=$(jq -r -f "$MT_PUBLISH_CHECK_GITLEAKS_JQ" "$report" 2> /dev/null) || {
+    echo -e "${CB_RED}❌ Could not read the gitleaks report.${C_RESET}"
+    rm -rf "$scratch_dir"
+    return 1
+  }
   rm -rf "$scratch_dir"
+  findings=$(__mt_strip_control_chars <<< "$findings")
   if [ -z "$findings" ]; then
     echo -e "${CB_GREEN}✅ none${C_RESET}"
     return 0
@@ -107,14 +154,19 @@ __mt_publish_check_ai_attribution() {
 
 #######################################
 # Git: Make the current repository public on GitHub after confirmation.
+# Always addresses origin by URL, never gh's default remote choice.
 # Arguments:
-#   $1 - "1" to skip the confirmation
+#   $1 - Repository root, $2 - "1" to skip the confirmation
 # Returns:
 #   0 if the repository is now (or already was) public, 1 on failure or refusal
 #######################################
 __mt_publish_make_public() {
-  local assume_yes="$1" repo_info repo_name visibility reply
-  repo_info=$(gh repo view --json nameWithOwner,visibility 2> /dev/null) || {
+  local repo_root="$1" assume_yes="$2" origin_url repo_info repo_name visibility reply
+  origin_url=$(git -C "$repo_root" remote get-url origin 2> /dev/null) || {
+    echo -e "${CB_RED}🚨 No origin remote.${C_RESET}"
+    return 1
+  }
+  repo_info=$(gh repo view "$origin_url" --json nameWithOwner,visibility 2> /dev/null) || {
     echo -e "${CB_RED}🚨 Could not read this repository from GitHub (is origin a GitHub repo and gh logged in?).${C_RESET}"
     return 1
   }
@@ -145,6 +197,7 @@ __mt_publish_make_public() {
 
 #######################################
 # Git: Check a repository's whole history before it is made public --
+# remote-only refs (such as refs/pull/N/head) missing from local history,
 # secrets (gitleaks), personal email addresses in author/committer fields,
 # and AI-attribution trailers in commit messages -- and optionally make it
 # public. Fail-closed: a missing gitleaks counts as a blocking result.
@@ -190,6 +243,7 @@ git-publish-check() {
   local repo_root exit_code=0
   repo_root=$(git rev-parse --show-toplevel)
 
+  __mt_publish_check_remote_refs "$repo_root" || exit_code=1
   __mt_publish_check_secrets "$repo_root" || exit_code=1
   __mt_publish_check_emails "$repo_root" "${GIT_PUBLIC_EMAIL_REGEX:-$MT_PUBLISH_CHECK_DEFAULT_EMAIL_REGEX}" || exit_code=1
   __mt_publish_check_ai_attribution "$repo_root" "${GIT_AI_ATTRIBUTION_REGEX:-$MT_PUBLISH_CHECK_DEFAULT_AI_REGEX}" || exit_code=1
@@ -201,5 +255,5 @@ git-publish-check() {
     echo -e "${CB_RED}🚫 Not changing visibility: resolve the findings above first.${C_RESET}"
     return 1
   fi
-  (cd "$repo_root" && __mt_publish_make_public "$assume_yes")
+  __mt_publish_make_public "$repo_root" "$assume_yes"
 }
