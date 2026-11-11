@@ -198,9 +198,18 @@ __mt_bb_edit_pr() {
     fi
   fi
 
-  repo=$(__mt_bb_resolve_repo "$repo") || return 1
-  local pr_path="repositories/${repo}/pullrequests/${pr_number}" pr state reviewers
-  pr=$(__mt_bb_api "$pr_path" --raw) || return $?
+  local resolve_rc=0
+  repo=$(__mt_bb_resolve_repo "$repo") || resolve_rc=$?
+  if [ "$resolve_rc" -ne 0 ]; then
+    [ -n "$scratch_dir" ] && rm -rf "$scratch_dir"
+    return 1
+  fi
+  local pr_path="repositories/${repo}/pullrequests/${pr_number}" pr state reviewers fetch_rc=0
+  pr=$(__mt_bb_api "$pr_path" --raw) || fetch_rc=$?
+  if [ "$fetch_rc" -ne 0 ]; then
+    [ -n "$scratch_dir" ] && rm -rf "$scratch_dir"
+    return "$fetch_rc"
+  fi
   state=$(jq -r '.state // "UNKNOWN"' <<< "$pr")
   if [ "$state" != "OPEN" ]; then
     echo -e "${CB_RED}🚫 PR #${pr_number} is ${state}; only open pull requests can be edited.${C_RESET}" >&2
@@ -239,7 +248,8 @@ __mt_bb_edit_pr() {
 #   0 on success or an accepted asynchronous merge, 1 on refusal (no terminal
 #   without --yes, not open, statuses not green, cancelled), mt-http's code on API failure
 # Outputs:
-#   Failing statuses as "key<TAB>state<TAB>name", then the result line
+#   All build statuses as "key<TAB>state<TAB>name" when any is not successful,
+#   then the result line
 #######################################
 __mt_bb_merge_pr() {
   local repo="$1" pr_number="$2" strategy="$3" keep_branch="$4" assume_yes="$5"

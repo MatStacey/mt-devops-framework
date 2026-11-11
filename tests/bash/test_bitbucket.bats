@@ -369,3 +369,20 @@ setup() {
   run bb-pr -r ws/r --merge 9 --strategy bogus --yes
   [[ "$output" == *"merge_commit squash fast_forward"* ]]
 }
+
+@test "a failed edit removes the stdin description copy" {
+  local scratch="$BATS_TEST_TMPDIR/tmp"
+  mkdir -p "$scratch"
+  TMPDIR="$scratch" STUB_FAIL=1 run bb-pr -r ws/r 9 --set-description - <<< "secret desc"
+  [ "$status" -eq 4 ]
+  [ -z "$(ls -A "$scratch")" ]
+}
+
+@test "an edit on a non-Bitbucket remote removes the stdin description copy" {
+  local scratch="$BATS_TEST_TMPDIR/tmp"
+  mkdir -p "$scratch"
+  git remote add origin git@github.com:ws/r.git
+  TMPDIR="$scratch" run bb-pr 9 --set-description - <<< "secret desc"
+  [ "$status" -eq 1 ]
+  [ -z "$(ls -A "$scratch")" ]
+}
