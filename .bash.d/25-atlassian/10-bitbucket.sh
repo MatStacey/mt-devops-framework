@@ -10,7 +10,7 @@ BITBUCKET_MAX_PAGES=20
 BITBUCKET_JQ_DIR="$HOME/.bash.d/lib/jq"
 BITBUCKET_PR_STATES=(OPEN MERGED DECLINED SUPERSEDED)
 BITBUCKET_PR_DEFAULT_STATE="OPEN"
-BB_PR_USAGE="Usage: bb-pr [-r <workspace/repo>] (--list [--state OPEN|MERGED|DECLINED|SUPERSEDED] | [--diff|--diffstat|--comments] <pr-number>)"
+BITBUCKET_PR_USAGE="Usage: bb-pr [-r <workspace/repo>] (--list [--state OPEN|MERGED|DECLINED|SUPERSEDED] | [--diff|--diffstat|--comments] <pr-number>)"
 
 #######################################
 # Bitbucket: Print "workspace/repo" for the current directory's Bitbucket
@@ -113,7 +113,11 @@ __mt_bb_collect() {
 __mt_bb_list_prs() {
   local repo="$1" state="${2:-$BITBUCKET_PR_DEFAULT_STATE}"
   state="${state^^}"
-  if [[ ! " ${BITBUCKET_PR_STATES[*]} " == *" $state "* ]]; then
+  local valid=false candidate
+  for candidate in "${BITBUCKET_PR_STATES[@]}"; do
+    [ "$candidate" = "$state" ] && valid=true
+  done
+  if [ "$valid" = false ]; then
     echo -e "${CB_RED}❌ Invalid state '$state'. Allowed: ${BITBUCKET_PR_STATES[*]}${C_RESET}" >&2
     return 1
   fi
@@ -166,7 +170,11 @@ bb-pr() {
       --comments) mode="comments" ;;
       --list) list_mode=1 ;;
       --state)
-        state="${2:-}"
+        if [ -z "${2:-}" ]; then
+          echo "$BITBUCKET_PR_USAGE" >&2
+          return 1
+        fi
+        state="$2"
         shift
         ;;
       -*)
@@ -180,14 +188,14 @@ bb-pr() {
 
   if [ "$list_mode" -eq 1 ]; then
     if [ -n "$pr_number" ] || [ "$mode" != "summary" ]; then
-      echo "$BB_PR_USAGE" >&2
+      echo "$BITBUCKET_PR_USAGE" >&2
       return 1
     fi
     __mt_bb_list_prs "$repo" "$state"
     return $?
   fi
   if [ -n "$state" ] || [[ ! "$pr_number" =~ ^[0-9]+$ ]]; then
-    echo "$BB_PR_USAGE" >&2
+    echo "$BITBUCKET_PR_USAGE" >&2
     return 1
   fi
   repo=$(__mt_bb_resolve_repo "$repo") || return 1

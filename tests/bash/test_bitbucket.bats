@@ -190,3 +190,16 @@ setup() {
   STUB_FAIL=1 run bb-pr -r ws/r --list
   [ "$status" -eq 4 ]
 }
+
+@test "--list rejects a space-joined state without a request" {
+  run bb-pr -r ws/r --list --state "OPEN MERGED"
+  [ "$status" -eq 1 ]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "--state with no value is a usage error" {
+  run bb-pr -r ws/r --list --state
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Usage: bb-pr"* ]]
+  [ ! -f "$HTTP_LOG" ]
+}
