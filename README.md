@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added `gcl-monitoring-inventory`: alert policies, dashboards, uptime checks, custom metric descriptors and log-based metrics for one or more projects, with independent sections so one denied section does not stop the rest.
 - `gcl-dataflow-describe` gains `--timeline` (job messages oldest first, marking relaunches) and `--workers` (worker VMs), both read from Cloud Logging and Compute so they work without `dataflow.jobs.get`; they accept a job ID or name.
 - Added `gcl-logging-search`: counts where a text term appears in Cloud Logging across projects, grouped by resource type and service, without printing log payloads; warns when a project hit the entry limit.
 - `bb-pipeline-run --wait` now retries a failed status check with backoff, gives up after five in a row with the API error code, and never reports success unless the pipeline completed as SUCCESSFUL.

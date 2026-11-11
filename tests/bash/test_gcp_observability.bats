@@ -39,6 +39,21 @@ if [ -n "${STUB_FULL:-}" ]; then
   printf '[%s,%s]' "$(entry 2026-10-05T01:00:00Z a@example.test)" "$(entry 2026-10-05T02:00:00Z a@example.test)"
   exit 0
 fi
+case "$1 $2" in
+  "monitoring policies" | "monitoring uptime" | "monitoring dashboards" | "logging metrics")
+    if [ "${STUB_DENY_SECTION:-}" = "$2" ]; then
+      echo "ERROR: (gcloud) PERMISSION_DENIED: Permission 'monitoring.alertPolicies.list' denied" >&2
+      exit 1
+    fi
+    case "$2" in
+      policies) echo '[{"displayName":"High latency","enabled":true,"conditions":[{},{}],"notificationChannels":["c1"]},{"displayName":"Muted","enabled":false,"conditions":[{}]}]' ;;
+      uptime) echo '[{"displayName":"Home page","monitoredResource":{"labels":{"host":"app.example.test"}},"httpCheck":{"path":"/health"},"period":"300s"}]' ;;
+      dashboards) printf 'Overview\t1234\n' ;;
+      metrics) echo '[{"name":"errors","filter":"resource.type=\"cloud_run_revision\"\n  AND severity>=ERROR"}]' ;;
+    esac
+    exit 0
+    ;;
+esac
 hit() {
   printf '{"timestamp":"%s","logName":"projects/p/logs/%s","resource":{"type":"%s","labels":{"%s":"%s"}},"textPayload":"SENSITIVE-PAYLOAD-TEXT"}' "$1" "$2" "$3" "$4" "$5"
 }
@@ -335,4 +350,53 @@ read_call() {
   run gcl-logging-search needle --bogus
   [ "$status" -eq 1 ]
   ! grep -q 'logging read' "$CALLS" 2> /dev/null
+}
+
+@test "inventory renders all five sections for a project" {
+  run gcl-monitoring-inventory -p proj-a
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"== proj-a / alerts =="* && "$output" == *"== proj-a / logmetrics =="* ]]
+  [[ "$output" == *$'High latency\ttrue\t2\t1'* ]]
+  [[ "$output" == *$'Muted\tfalse\t1\t0'* ]]
+  [[ "$output" == *$'Overview\t1234'* ]]
+  [[ "$output" == *$'Home page\tapp.example.test\t/health\t300s'* ]]
+  [[ "$output" == *"dataflow.googleapis.com/job/total_vcpu_time"* ]]
+  [[ "$output" == *$'errors\tresource.type="cloud_run_revision" AND severity>=ERROR'* ]]
+}
+
+@test "inventory --section limits the output to one section" {
+  run gcl-monitoring-inventory -p proj-a --section uptime
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"== proj-a / uptime =="* && "$output" != *"/ alerts"* && "$output" != *"/ dashboards"* ]]
+}
+
+@test "inventory asks for custom, workload and external metric prefixes" {
+  run gcl-monitoring-inventory -p proj-a --section metrics
+  [ "$status" -eq 0 ]
+  local call
+  call="$(head -1 "$HTTP_LOG")"
+  [[ "$call" == *'starts_with("custom.googleapis.com/")'* && "$call" == *'starts_with("workload.googleapis.com/")'* && "$call" == *'starts_with("external.googleapis.com/")'* ]]
+}
+
+@test "inventory: one denied section is reported, the others still run, the exit is 5" {
+  STUB_DENY_SECTION=policies run gcl-monitoring-inventory -p proj-a
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"monitoring.alertPolicies.list"* ]]
+  [[ "$output" == *$'Overview\t1234'* ]]
+  [[ "$output" == *$'Home page'* ]]
+}
+
+@test "inventory covers several projects with headings per project" {
+  run gcl-monitoring-inventory -p proj-a -p proj-b --section dashboards
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"== proj-a / dashboards =="*"== proj-b / dashboards =="* ]]
+}
+
+@test "inventory rejects a bad section or project" {
+  run gcl-monitoring-inventory --section nope
+  [ "$status" -eq 1 ]
+  run gcl-monitoring-inventory -p 'bad;proj'
+  [ "$status" -eq 1 ]
+  run gcl-monitoring-inventory --bogus
+  [ "$status" -eq 1 ]
 }
