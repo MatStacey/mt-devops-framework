@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- `bb-pr --list [--state OPEN|MERGED|DECLINED|SUPERSEDED]` lists a Bitbucket repository's pull requests, and `git-review-prs` now uses `bb-pr` (list, `-n`, `-n -s`) on Bitbucket Cloud remotes instead of failing in `gh`.
 - Added `py-hermetic-run`: runs an ad-hoc Python script or module with the repo interpreter under a cleared environment, an empty temp HOME and gcloud config, no Google credential variables, and no network unless `--allow-network`. It is not a filesystem sandbox (the docstring lists what stays reachable).
 - Added `gcl-crf-describe`: summarises a Cloud Run function (state, runtime, entry point, revision, update time, source, trigger, service account, deployment labels) across projects, with `(absent)` for projects that do not have it.
 - `gcl-run-compare --repo <path> [--branch <name>]` finds the commit each environment runs (commit-sha label, hex image tag, or a tag listed for a digest-pinned image) and reports how far it is behind the branch, using local refs only.
