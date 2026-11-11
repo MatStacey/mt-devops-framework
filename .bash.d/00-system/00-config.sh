@@ -836,6 +836,17 @@ mt-wizard-git() {
   read -r -p "Bitbucket Workspace [${BITBUCKET_WORKSPACE:-Not set}]: " bb_workspace
   [ -n "$bb_workspace" ] && python3 "$CONFIG_MANAGER" update "git" "bitbucket_workspace" "$bb_workspace"
 
+  echo -e "${C_DIM}💡 Branch names 'mt-branch-audit' treats as retired (extended regex).${C_RESET}"
+  read -r -p "Retired branch regex [${GIT_RETIRED_BRANCH_REGEX:-default}]: " retired_regex
+  [ -n "$retired_regex" ] && python3 "$CONFIG_MANAGER" update "git" "retired_branch_regex" "$retired_regex"
+
+  echo -e "${C_DIM}💡 Used by 'git-publish-check' before a repo is made public (extended regexes).${C_RESET}"
+  read -r -p "Acceptable commit email regex [${GIT_PUBLIC_EMAIL_REGEX:-default}]: " public_email_regex
+  [ -n "$public_email_regex" ] && python3 "$CONFIG_MANAGER" update "git" "public_email_regex" "$public_email_regex"
+
+  read -r -p "AI attribution regex [${GIT_AI_ATTRIBUTION_REGEX:-default}]: " ai_attribution_regex
+  [ -n "$ai_attribution_regex" ] && python3 "$CONFIG_MANAGER" update "git" "ai_attribution_regex" "$ai_attribution_regex"
+
   read -r -p "AI Max Diff Bytes [${AI_MAX_DIFF_BYTES:-4000}]: " bytes
   [ -n "$bytes" ] && python3 "$CONFIG_MANAGER" update "ai" "max_context_bytes" "$bytes"
   echo -e "${CB_GREEN}✅ Git config updated.${C_RESET}"

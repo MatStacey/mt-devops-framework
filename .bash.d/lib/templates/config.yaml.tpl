@@ -73,6 +73,16 @@ git:
   # into .vcs_radar.json alongside category/description/stack) looks when
   # counting commits per author on a repo's default branch.
   contributor_lookback_months: 12
+  # Branch names mt-branch-audit treats as retired (extended regex, matched
+  # against the whole branch name) when it checks them against each repo's
+  # live default branch before deletion.
+  retired_branch_regex: ^(master|develop|development|dev|test|testing|qa|uat|staging|stage|preprod|pre-prod|prod|production|release)$
+  # git-publish-check: author/committer addresses matching this extended
+  # regex are acceptable in a repository's history before it goes public.
+  public_email_regex: '@users\.noreply\.github\.com$'
+  # git-publish-check: commit messages matching this extended regex
+  # (case-insensitive) are reported as carrying an AI attribution.
+  ai_attribution_regex: '(co-authored-by:.*(claude|copilot|chatgpt|openai|anthropic|gemini|cursor)|generated with \[?claude|claude-session:)'
 
 llm_exports:
   enable_auto_cleanup: true

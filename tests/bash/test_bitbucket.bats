@@ -19,21 +19,45 @@ setup() {
   printf 'import sys\nopen(sys.argv[0] + ".called", "w").write(" ".join(sys.argv[1:]))\n' > "$SECRETS_MANAGER"
   export SECRETS_MANAGER
   HTTP_LOG="$BATS_TEST_TMPDIR/http.log"
-  export HTTP_LOG
+  BODY_FILE="$BATS_TEST_TMPDIR/body.json"
+  export HTTP_LOG BODY_FILE
 
   # shellcheck disable=SC2317
   mt-http() {
-    local last="${*: -1}"
+    local last="${*: -1}" arg prev=""
     echo "$*" >> "$HTTP_LOG"
+    for arg in "$@"; do
+      if [[ "$prev" == "-d" && "$arg" == @* ]]; then
+        cat "${arg#@}" >> "$HTTP_LOG"
+        echo >> "$HTTP_LOG"
+        cp "${arg#@}" "$BODY_FILE"
+      fi
+      prev="$arg"
+    done
     [ -n "${STUB_FAIL:-}" ] && return 4
     case "$last" in
+      */merge)
+        [ -n "${STUB_MERGE_EMPTY:-}" ] || echo '{"state":"MERGED","merge_commit":{"hash":"abcdef1234567"}}'
+        return 0
+        ;;
+      */statuses*)
+        local statuses='[{"key":"b1","state":"SUCCESSFUL","name":"Build"}]'
+        jq -nc --argjson values "${STUB_STATUSES:-$statuses}" '{values: $values}'
+        return 0
+        ;;
       *pullrequests?state=MERGED*) echo '{"values":[]}' ;;
       *pullrequests?state=*) echo '{"values":[{"id":7,"title":"Fix \u001b[31mbug","author":{"display_name":"Al"},"source":{"branch":{"name":"fix"}},"destination":{"branch":{"name":"main"}},"updated_on":"2026-10-01T10:00:00+00:00"}]}' ;;
       */diff) printf 'diff --git a/f b/f\n+\033]0;pwned\007evil\r\n' ;;
       */diffstat*) echo '{"values":[{"status":"modified","lines_added":3,"lines_removed":1,"new":{"path":"src/a.py"}}]}' ;;
       */comments*page=2*) echo '{"values":[{"id":2,"deleted":false,"user":{"display_name":"Bo"},"content":{"raw":"second"},"created_on":"t2"}]}' ;;
       */comments*) echo '{"values":[{"id":1,"deleted":false,"user":{"display_name":"Al"},"inline":{"path":"src/a.py","to":7},"content":{"raw":"first"},"created_on":"t1"}],"next":"https://api.bitbucket.org/2.0/repositories/ws/r/pullrequests/9/comments?page=2"}' ;;
-      *) echo '{"id":9,"title":"Add thing","state":"OPEN","author":{"display_name":"Al"},"source":{"branch":{"name":"feat"}},"destination":{"branch":{"name":"main"}},"created_on":"c","updated_on":"u","participants":[{"role":"REVIEWER","approved":true,"user":{"display_name":"Bo"}}],"links":{"html":{"href":"https://bitbucket.org/ws/r/pull-requests/9"}},"description":"Body text"}' ;;
+      *)
+        if [[ "$*" == *"-X PUT"* ]]; then
+          echo '{"id":9,"links":{"html":{"href":"https://bitbucket.org/ws/r/pull-requests/9"}}}'
+          return 0
+        fi
+        echo '{"id":9,"title":"Add thing","state":"'"${STUB_PR_STATE:-OPEN}"'","reviewers":[{"uuid":"{u-1}","display_name":"Bo"},{"uuid":"{u-2}","display_name":"Cy"}],"author":{"display_name":"Al"},"source":{"branch":{"name":"feat"}},"destination":{"branch":{"name":"main"}},"created_on":"c","updated_on":"u","participants":[{"role":"REVIEWER","approved":true,"user":{"display_name":"Bo"}}],"links":{"html":{"href":"https://bitbucket.org/ws/r/pull-requests/9"}},"description":"Body text"}'
+        ;;
     esac
   }
   # shellcheck disable=SC2317
@@ -202,4 +226,163 @@ setup() {
   [ "$status" -eq 1 ]
   [[ "$output" == *"Usage: bb-pr"* ]]
   [ ! -f "$HTTP_LOG" ]
+}
+
+@test "--set-title sends a PUT with the title and the existing reviewers, no description" {
+  run bb-pr -r ws/r 9 --set-title "New title"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Updated PR #9 (title)"* ]]
+  grep -q -- '-X PUT' "$HTTP_LOG"
+  [ "$(jq -c '.reviewers' "$BODY_FILE")" = '[{"uuid":"{u-1}"},{"uuid":"{u-2}"}]' ]
+  [ "$(jq -r '.title' "$BODY_FILE")" = "New title" ]
+  [ "$(jq 'has("description")' "$BODY_FILE")" = "false" ]
+}
+
+@test "--set-description @file keeps the markdown byte for byte" {
+  local desc="$BATS_TEST_TMPDIR/desc.md"
+  printf 'Uses `code` and $(id)\n\nSecond paragraph\n' > "$desc"
+  run bb-pr -r ws/r 9 --set-description "@$desc"
+  [ "$status" -eq 0 ]
+  jq -j '.description' "$BODY_FILE" > "$BATS_TEST_TMPDIR/out.md"
+  cmp "$desc" "$BATS_TEST_TMPDIR/out.md"
+  [ "$(jq 'has("title")' "$BODY_FILE")" = "false" ]
+}
+
+@test "--set-description - reads stdin" {
+  run bb-pr -r ws/r 9 --set-description - <<< 'from `stdin`'
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.description' "$BODY_FILE")" = 'from `stdin`' ]
+}
+
+@test "--set-description rejects an empty file, a missing file and literal text without a PUT" {
+  : > "$BATS_TEST_TMPDIR/empty.md"
+  run bb-pr -r ws/r 9 --set-description "@$BATS_TEST_TMPDIR/empty.md"
+  [ "$status" -eq 1 ]
+  run bb-pr -r ws/r 9 --set-description "@$BATS_TEST_TMPDIR/missing.md"
+  [ "$status" -eq 1 ]
+  run bb-pr -r ws/r 9 --set-description "literal text"
+  [ "$status" -eq 1 ]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "--set-title longer than the maximum is rejected, not truncated" {
+  run bb-pr -r ws/r 9 --set-title "$(printf 'x%.0s' $(seq 1 251))"
+  [ "$status" -eq 1 ]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "editing a merged PR is refused without a PUT" {
+  STUB_PR_STATE=MERGED run bb-pr -r ws/r 9 --set-title "New"
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"PR #9 is MERGED"* ]]
+  ! grep -q -- '-X PUT' "$HTTP_LOG"
+}
+
+@test "--merge posts close_source_branch true and no strategy by default" {
+  run bb-pr -r ws/r --merge 9 --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Merged PR #9 (abcdef1)"* ]]
+  [ "$(jq -c '.' "$BODY_FILE")" = '{"close_source_branch":true}' ]
+}
+
+@test "--merge --strategy squash --keep-branch sends both" {
+  run bb-pr -r ws/r --merge 9 --strategy squash --keep-branch --yes
+  [ "$status" -eq 0 ]
+  [ "$(jq -c '.' "$BODY_FILE")" = '{"close_source_branch":false,"merge_strategy":"squash"}' ]
+}
+
+@test "--merge without --yes and without a terminal makes no request" {
+  run bb-pr -r ws/r --merge 9
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pass --yes"* ]]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "--merge refuses a PR that is not open" {
+  STUB_PR_STATE=DECLINED run bb-pr -r ws/r --merge 9 --yes
+  [ "$status" -eq 1 ]
+  ! grep -q 'merge$' "$HTTP_LOG"
+}
+
+@test "--merge refuses when a build status is not successful and lists the statuses" {
+  STUB_STATUSES='[{"key":"b1","state":"FAILED","name":"Build"},{"key":"b2","state":"SUCCESSFUL","name":"Lint"}]' run bb-pr -r ws/r --merge 9 --yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"b1"*"FAILED"*"Build"* ]]
+  [[ "$output" == *"not all successful"* ]]
+  ! grep -q 'merge$' "$HTTP_LOG"
+}
+
+@test "--merge refuses while a build is in progress" {
+  STUB_STATUSES='[{"key":"b1","state":"INPROGRESS","name":"Build"}]' run bb-pr -r ws/r --merge 9 --yes
+  [ "$status" -eq 1 ]
+  ! grep -q 'merge$' "$HTTP_LOG"
+}
+
+@test "--merge with no build statuses warns and merges" {
+  STUB_STATUSES='[]' run bb-pr -r ws/r --merge 9 --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"has no build statuses"* ]]
+  [[ "$output" == *"Merged PR #9"* ]]
+}
+
+@test "--merge with an empty 2xx response reports it is still running" {
+  STUB_MERGE_EMPTY=1 run bb-pr -r ws/r --merge 9 --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"still running"* ]]
+}
+
+@test "--merge surfaces an API failure" {
+  STUB_FAIL=1 run bb-pr -r ws/r --merge 9 --yes
+  [ "$status" -eq 4 ]
+}
+
+@test "mode-rule violations are usage errors that make no request" {
+  local -a bad=(
+    "--merge 9 --set-title x"
+    "--merge 9 --set-description @f"
+    "--merge 9 --list"
+    "--merge 9 --diff"
+    "--merge 9 --diffstat"
+    "--merge 9 --comments"
+    "9 --set-title x --diff"
+    "9 --set-title x --comments"
+    "--list --set-title x"
+    "9 --strategy squash"
+    "9 --keep-branch"
+    "9 --yes"
+    "--merge 9 --strategy bogus --yes"
+    "--merge"
+    "--merge 9 --strategy"
+    "9 --set-title"
+  )
+  local args
+  for args in "${bad[@]}"; do
+    rm -f "$HTTP_LOG"
+    # shellcheck disable=SC2086
+    run bb-pr -r ws/r $args
+    [ "$status" -eq 1 ]
+    [ ! -f "$HTTP_LOG" ]
+  done
+}
+
+@test "an unknown strategy prints the allowed list" {
+  run bb-pr -r ws/r --merge 9 --strategy bogus --yes
+  [[ "$output" == *"merge_commit squash fast_forward"* ]]
+}
+
+@test "a failed edit removes the stdin description copy" {
+  local scratch="$BATS_TEST_TMPDIR/tmp"
+  mkdir -p "$scratch"
+  TMPDIR="$scratch" STUB_FAIL=1 run bb-pr -r ws/r 9 --set-description - <<< "secret desc"
+  [ "$status" -eq 4 ]
+  [ -z "$(ls -A "$scratch")" ]
+}
+
+@test "an edit on a non-Bitbucket remote removes the stdin description copy" {
+  local scratch="$BATS_TEST_TMPDIR/tmp"
+  mkdir -p "$scratch"
+  git remote add origin git@github.com:ws/r.git
+  TMPDIR="$scratch" run bb-pr 9 --set-description - <<< "secret desc"
+  [ "$status" -eq 1 ]
+  [ -z "$(ls -A "$scratch")" ]
 }

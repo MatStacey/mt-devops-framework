@@ -33,6 +33,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
+      - name: Fall Back to a Non-Canonical apt Mirror If Ubuntu DNS Is Down
+        env:
+          UBUNTU_ARCHIVE_HOST: azure.archive.ubuntu.com
+          FALLBACK_APT_MIRROR: http://mirrors.edge.kernel.org/ubuntu/
+          APT_MIRROR_LIST: /etc/apt/apt-mirrors.txt
+        run: |
+          if getent hosts "$UBUNTU_ARCHIVE_HOST" > /dev/null; then
+            exit 0
+          fi
+          echo "::warning::${UBUNTU_ARCHIVE_HOST} does not resolve; installing packages from ${FALLBACK_APT_MIRROR}"
+          printf '%s\tpriority:1\n' "$FALLBACK_APT_MIRROR" | sudo tee "$APT_MIRROR_LIST"
+
       - name: Install System Dependencies
         run: sudo apt-get update && sudo apt-get install -y shellcheck shfmt yamllint jq python3-yaml python3-pytest bats
 
