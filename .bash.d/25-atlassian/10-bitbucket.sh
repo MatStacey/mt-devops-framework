@@ -232,7 +232,10 @@ __mt_bb_edit_pr() {
   [ "$rc" -ne 0 ] && return "$rc"
 
   local changed_list
-  changed_list=$(IFS=,; echo "${changed[*]}")
+  changed_list=$(
+    IFS=,
+    echo "${changed[*]}"
+  )
   echo -e "${CB_GREEN}✅ Updated PR #${pr_number} (${changed_list//,/, }): $(jq -r '.links.html.href // ""' <<< "$response" | __mt_strip_control_chars)${C_RESET}"
 }
 
