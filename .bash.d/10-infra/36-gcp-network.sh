@@ -41,7 +41,7 @@ GCL_NETWORK_SECTIONS=(
 #######################################
 __mt_gcl_network_collect() {
   local out_file="$1" context="$2" data rc=0
-  shift 2
+  shift 2 || return 1
   data=$(__mt_gcl_run "$context" gcloud "$@") || rc=$?
   if [ "$rc" -eq 0 ] && { [ -z "$data" ] || jq -e . > /dev/null 2>&1 <<< "$data"; }; then
     printf '%s\n' "${data:-$GCL_NETWORK_EMPTY_LIST}" > "$out_file"

@@ -1,0 +1,3 @@
+[{"name":"projects/proj-a/locations/europe-west1/jobs/job-1","httpTarget":{"uri":"https://svc-a-abc-ew.a.run.app/run"}},
+ {"name":"projects/proj-a/locations/europe-west1/jobs/job-2","httpTarget":{"uri":"https://unrelated.example.test/x"}},
+ {"name":"projects/proj-a/locations/europe-west1/jobs/job-3","httpTarget":{"uri":"https://svc-c-abc-ew.a.run.app/run"}}]

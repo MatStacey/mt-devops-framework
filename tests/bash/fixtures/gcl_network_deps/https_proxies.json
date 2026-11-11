@@ -1,0 +1,2 @@
+[{"name":"px1","selfLink":"https://www.googleapis.com/compute/v1/projects/proj-a/global/targetHttpsProxies/px1","urlMap":"https://www.googleapis.com/compute/v1/projects/proj-a/global/urlMaps/um1"},
+ {"name":"px2","selfLink":"https://www.googleapis.com/compute/v1/projects/proj-a/global/targetHttpsProxies/px2","urlMap":"https://www.googleapis.com/compute/v1/projects/proj-a/global/urlMaps/um2"}]
