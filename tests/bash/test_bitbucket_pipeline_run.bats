@@ -22,8 +22,10 @@ setup() {
   : > "$SECRETS_MANAGER"
   HTTP_LOG="$BATS_TEST_TMPDIR/http.log"
   POLLS="$BATS_TEST_TMPDIR/polls"
-  export SECRETS_MANAGER HTTP_LOG POLLS
+  LISTS="$BATS_TEST_TMPDIR/lists"
+  export SECRETS_MANAGER HTTP_LOG POLLS LISTS
   : > "$POLLS"
+  : > "$LISTS"
   BITBUCKET_PIPELINE_POLL_SECONDS=0
   # shellcheck disable=SC2034
   CB_RED="" CB_GREEN="" CB_BLUE="" CB_YELLOW="" C_RESET=""
@@ -47,7 +49,22 @@ setup() {
       fi
     fi
     case "$last" in
-      */pipelines/) echo '{"uuid":"{p-1}","build_number":61}' ;;
+      */pipelines/)
+        if [[ "$*" == *" -d "* ]]; then
+          echo '{"uuid":"{p-1}","build_number":61}'
+        else
+          local lists
+          lists=$(wc -l < "$LISTS")
+          echo list >> "$LISTS"
+          if [ "$lists" -lt "${STUB_LIST_EMPTY_POLLS:-0}" ]; then
+            echo '{"values":[{"uuid":"{p-0}","build_number":60,"target":{"commit":{"hash":"ffff000"}}}]}'
+          else
+            echo '{"values":[{"uuid":"{p-0}","build_number":60,"target":{"commit":{"hash":"ffff000"}}},{"uuid":"{p-1}","build_number":61,"target":{"commit":{"hash":"abc1234def"}}}]}'
+          fi
+        fi
+        ;;
+      */pipelines/42) echo '{"uuid":"{p-1}","build_number":42}' ;;
+      */steps/\?*) echo '{"values":[{"name":"Build","state":{"name":"COMPLETED","result":{"name":"SUCCESSFUL"}},"duration_in_seconds":5,"uuid":"{s-1}"}]}' ;;
       */pipelines/%7Bp-1%7D)
         local -a states=(${STUB_STATES:-COMPLETED/SUCCESSFUL})
         local n
@@ -175,4 +192,77 @@ setup() {
 @test "--wait times out with 124 when status checks keep failing within the allowed retries" {
   BITBUCKET_POLL_MAX_FAILURES=99999 STUB_POLL_FAILS=99999 run bb-pipeline-run -r ws/r --branch main --wait --timeout 1 --yes
   [ "$status" -eq 124 ]
+}
+
+@test "bb-pipelines --wait on a build number waits and prints the result and step table" {
+  STUB_STATES="IN_PROGRESS COMPLETED/SUCCESSFUL" run bb-pipelines -r ws/r 42 --wait
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"#42 SUCCESSFUL"* ]]
+  [[ "$output" == *"Build"* ]]
+}
+
+@test "bb-pipelines --wait exits 1 for a failed run and still prints the step table" {
+  STUB_STATES="COMPLETED/FAILED" run bb-pipelines -r ws/r 42 --wait
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"#42 FAILED"* ]]
+  [[ "$output" == *"Build"* ]]
+}
+
+@test "bb-pipelines --wait on an already completed run polls once" {
+  STUB_STATES="COMPLETED/SUCCESSFUL" run bb-pipelines -r ws/r 42 --wait
+  [ "$status" -eq 0 ]
+  [ "$(wc -l < "$POLLS")" -eq 1 ]
+}
+
+@test "bb-pipelines --wait times out with 124 and prints no step table" {
+  STUB_STATES="IN_PROGRESS" run bb-pipelines -r ws/r 42 --wait --timeout 1
+  [ "$status" -eq 124 ]
+  [[ "$output" != *"Build"* ]]
+  ! grep -q 'steps/' "$HTTP_LOG"
+}
+
+@test "bb-pipelines --wait passes through the API code when polls keep failing" {
+  STUB_POLL_FAILS=99 STUB_STATES="IN_PROGRESS" run bb-pipelines -r ws/r 42 --wait
+  [ "$status" -eq 4 ]
+  [[ "$output" != *"Build"* ]]
+}
+
+@test "bb-pipelines --commit --wait waits for the run to appear, then reports it" {
+  STUB_LIST_EMPTY_POLLS=1 STUB_STATES="COMPLETED/SUCCESSFUL" run bb-pipelines -r ws/r --commit abc1234 --wait
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Waiting for a pipeline on abc1234"* ]]
+  [[ "$output" == *"#61 SUCCESSFUL"* ]]
+  [[ "$output" == *"Build"* ]]
+  [ "$(wc -l < "$LISTS")" -eq 2 ]
+}
+
+@test "bb-pipelines --commit --wait times out with 124 when no run appears" {
+  STUB_LIST_EMPTY_POLLS=999 run bb-pipelines -r ws/r --commit abc1234 --wait --timeout 1
+  [ "$status" -eq 124 ]
+  [[ "$output" == *"No pipeline for abc1234 appeared within 1s"* ]]
+}
+
+@test "bb-pipelines --commit --wait returns the API code after repeated list failures" {
+  STUB_FAIL=1 run bb-pipelines -r ws/r --commit abc1234 --wait
+  [ "$status" -eq 4 ]
+}
+
+@test "bb-pipelines wait usage errors make no request" {
+  local -a bad=(
+    "--wait"
+    "42 --commit abc1234 --wait"
+    "--commit abc1234"
+    "42 --wait --log 1"
+    "42 --timeout 5"
+    "--commit nothex --wait"
+    "42 --wait --timeout 0"
+  )
+  local args
+  for args in "${bad[@]}"; do
+    : > "$HTTP_LOG"
+    # shellcheck disable=SC2086
+    run bb-pipelines -r ws/r $args
+    [ "$status" -eq 1 ]
+    [ ! -s "$HTTP_LOG" ]
+  done
 }
