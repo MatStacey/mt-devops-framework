@@ -1,2 +1,33 @@
-[{"name":"projects/proj-a/locations/europe-west1/functions/fn-1","environment":"GEN_2","serviceConfig":{"vpcConnector":"projects/proj-a/locations/europe-west1/connectors/conn-1","uri":"https://fn-1-xyz.a.run.app"}},
- {"name":"projects/proj-a/locations/europe-west1/functions/fn-2","environment":"GEN_2","serviceConfig":{"vpcConnector":"projects/proj-a/locations/europe-west1/connectors/conn-2","uri":"https://fn-2-xyz.a.run.app"}}]
+[
+ {
+  "name": "projects/proj-a/locations/europe-west1/functions/fn-1",
+  "environment": "GEN_2",
+  "serviceConfig": {
+   "vpcConnector": "projects/proj-a/locations/europe-west1/connectors/conn-1",
+   "uri": "https://fn-1-xyz.a.run.app"
+  }
+ },
+ {
+  "name": "projects/proj-a/locations/europe-west1/functions/fn-2",
+  "environment": "GEN_2",
+  "serviceConfig": {
+   "vpcConnector": "projects/proj-a/locations/europe-west1/connectors/conn-2",
+   "uri": "https://fn-2-xyz.a.run.app"
+  }
+ },
+ {
+  "name": "projects/proj-a/locations/europe-west1/functions/on",
+  "environment": "GEN_1",
+  "vpcConnector": "projects/proj-a/locations/europe-west1/connectors/conn-1",
+  "httpsTrigger": {
+   "url": "https://europe-west1-proj-a.cloudfunctions.net/on"
+  }
+ },
+ {
+  "name": "projects/proj-a/locations/europe-west1/functions/off",
+  "environment": "GEN_1",
+  "httpsTrigger": {
+   "url": "https://europe-west1-proj-a.cloudfunctions.net/off"
+  }
+ }
+]

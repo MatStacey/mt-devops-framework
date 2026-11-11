@@ -26,6 +26,7 @@ GCL_NETWORK_SECTIONS=(
   "subnets:compute networks subnets list"
   "addresses:compute addresses list"
   "run:run services list"
+  "run_jobs:run jobs list"
   "functions:functions list"
   "redis:redis instances list --region=-"
   "sql:sql instances list"
@@ -48,7 +49,10 @@ __mt_gcl_network_collect() {
     return 0
   fi
   echo "$GCL_NETWORK_EMPTY_LIST" > "$out_file"
-  [ "$rc" -eq 0 ] && rc=1
+  if [ "$rc" -eq 0 ]; then
+    echo -e "${CB_RED}❌ ${context}: gcloud returned non-JSON output.${C_RESET}" >&2
+    rc=1
+  fi
   return "$rc"
 }
 
@@ -137,16 +141,30 @@ __mt_gcl_network_scan() {
     connector_regions=("${explicit_regions[@]}")
     scheduler_regions=("${explicit_regions[@]}")
   elif [ "$all_regions" = "1" ]; then
-    mapfile -t connector_regions < <(__mt_gcl_run "listing VPC connector locations of ${project}" gcloud compute networks vpc-access locations list \
-      --project="$project" --format='value(locationId)' --quiet)
-    mapfile -t scheduler_regions < <(__mt_gcl_scheduler_locations "$project" 1)
+    local connector_list scheduler_list discovery_rc=0
+    connector_list=$(__mt_gcl_run "listing VPC connector locations of ${project}" gcloud compute networks vpc-access locations list \
+      --project="$project" --format='value(locationId)' --quiet) || discovery_rc=$?
+    overall=$(__mt_gcl_network_merge_rc "$overall" "$discovery_rc")
+    discovery_rc=0
+    scheduler_list=$(__mt_gcl_scheduler_locations "$project" 1) || discovery_rc=$?
+    overall=$(__mt_gcl_network_merge_rc "$overall" "$discovery_rc")
+    mapfile -t connector_regions < <(printf '%s' "$connector_list" | sed '/^$/d')
+    mapfile -t scheduler_regions < <(printf '%s' "$scheduler_list" | sed '/^$/d')
+    if [ "${#connector_regions[@]}" -eq 0 ]; then
+      echo -e "${CB_RED}❌ No regions to check for VPC connectors.${C_RESET}" >&2
+      overall=$(__mt_gcl_network_merge_rc "$overall" 1)
+    fi
+    if [ "${#scheduler_regions[@]}" -eq 0 ]; then
+      echo -e "${CB_RED}❌ No regions to check for Scheduler jobs.${C_RESET}" >&2
+      overall=$(__mt_gcl_network_merge_rc "$overall" 1)
+    fi
   else
     local -a scan_regions
     read -ra scan_regions <<< "${GCP_SCAN_REGIONS:-$GCL_SCHEDULER_DEFAULT_LOCATIONS}"
     mapfile -t connector_regions < <({
       printf '%s\n' "${scan_regions[@]}"
       jq -r --arg net "$network_path" --slurpfile subnets "$scratch/subnets.json" --slurpfile run "$scratch/run.json" \
-        --slurpfile functions "$scratch/functions.json" -n -f "$GCL_NETWORK_REGIONS_JQ"
+        --slurpfile run_jobs "$scratch/run_jobs.json" --slurpfile functions "$scratch/functions.json" -n -f "$GCL_NETWORK_REGIONS_JQ"
     } | sort -u)
     scheduler_regions=("${connector_regions[@]}")
   fi
@@ -189,7 +207,7 @@ __mt_gcl_network_scan() {
 # instances, instance groups and NEGs, the whole load-balancer chain,
 # routers/NAT, firewall rules, subnets, reserved addresses, VPC peerings,
 # Memorystore Redis, Cloud SQL private IP, VPC connectors, and the Cloud Run
-# services, functions and Cloud Scheduler jobs that depend on them. Every
+# services and jobs, functions and Cloud Scheduler jobs that depend on them. Every
 # match is by exact network path, never a name substring. A section that is
 # denied or fails is reported and the rest are still listed. Read-only. Needs
 # compute.viewer, run.viewer, cloudfunctions.viewer, vpcaccess.viewer,

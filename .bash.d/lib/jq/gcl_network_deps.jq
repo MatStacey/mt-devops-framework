@@ -34,24 +34,31 @@ def row($kind; $name; $location; $detail): [$kind, $name, $location, $detail] | 
 | ([$connectors_matched[] | .name]) as $connector_names
 | def connector_matches($value; $region):
     $value != null and ($value | IN($connector_names[]) or ("projects/\($project)/locations/\($region)/connectors/\($value)" | IN($connector_names[])));
-  ([$run[0][] | . as $svc
-    | (.metadata.labels["cloud.googleapis.com/location"] // "-") as $region
-    | (annotations["run.googleapis.com/vpc-access-connector"]) as $connector
-    | ((annotations["run.googleapis.com/network-interfaces"] // "[]") | (try fromjson catch [])) as $interfaces
-    | ([ (if connector_matches($connector; $region) then "connector=\($connector | last_segment)" else empty end),
-         (if any($interfaces[]?; (.network == $name) or ((.network | norm) == $net)) then "direct-vpc" else empty end) ]) as $reasons
-    | select(($reasons | length) > 0)
-    | {name: .metadata.name, region: $region, detail: ($reasons | join(",")), hosts: ([.status.url] + ((annotations["run.googleapis.com/urls"] // "[]") | (try fromjson catch [])) | map(host))}
-  ]) as $run_matched
+  def interface_matches($region):
+    (.network == $name) or ((.network | norm) == $net)
+    or (.subnetwork as $s | $s != null and any($my_subnets[];
+        (.name == $s or (.selfLink | norm) == ($s | norm)) and ((.region | last_segment) == $region)));
+  def base_urls: [.[] | select(type == "string" and . != "") | rtrimstr("/")];
+  def run_consumers($kind):
+    [.[] | (.metadata.labels["cloud.googleapis.com/location"] // "-") as $region
+      | (annotations["run.googleapis.com/vpc-access-connector"]) as $connector
+      | ((annotations["run.googleapis.com/network-interfaces"] // "[]") | (try fromjson catch [])) as $interfaces
+      | ([ (if connector_matches($connector; $region) then "connector=\($connector | last_segment)" else empty end),
+           (if any($interfaces[]?; interface_matches($region)) then "direct-vpc" else empty end) ]) as $reasons
+      | select(($reasons | length) > 0)
+      | {name: .metadata.name, region: $region, detail: ($reasons | join(",")),
+         bases: ([.status.url] + ((annotations["run.googleapis.com/urls"] // "[]") | (try fromjson catch [])) | base_urls)}
+    ];
+  ($run[0] | run_consumers("service")) as $run_matched
+| ($run_jobs[0] | run_consumers("job")) as $run_jobs_matched
 | ([$functions[0][]
     | (.vpcConnector // .serviceConfig.vpcConnector) as $connector
     | select($connector != null and ($connector | IN($connector_names[])))
     | {name: (.name | last_segment), region: (.name | split("/") | .[3] // "-"),
        detail: "\(.environment // "-") connector=\($connector | last_segment)",
-       hosts: ([.httpsTrigger.url, .serviceConfig.uri, .url] | map(host))}
+       bases: ([.httpsTrigger.url, .serviceConfig.uri, .url] | base_urls)}
   ]) as $functions_matched
-| ([$run_matched[].hosts[], $functions_matched[].hosts[]]) as $consumer_hosts
-
+| ([$run_matched[].bases[], $functions_matched[].bases[]]) as $consumer_bases
 | (
     ($peerings[]? | row("peering"; .name; "global"; (.peerNetwork // .network // "-"))),
     ($instances[0][] | select(any(.networkInterfaces[]?; (.network | norm) == $net)) | row("instance"; .name; where; "-")),
@@ -76,6 +83,12 @@ def row($kind; $name; $location; $detail): [$kind, $name, $location, $detail] | 
     ($sql[0][] | select((.settings.ipConfiguration.privateNetwork | norm) == $net) | row("cloud-sql"; .name; (.region // "-"); "-")),
     ($connectors_matched[] | row("vpc-connector"; (.name | last_segment); (.name | split("/") | .[3] // "-"); "-")),
     ($run_matched[] | row("cloud-run"; .name; .region; .detail)),
+    ($run_jobs_matched[] | row("cloud-run-job"; .name; .region; .detail)),
     ($functions_matched[] | row("function"; .name; .region; .detail)),
-    ($scheduler[0][] | select((.httpTarget.uri | host) as $h | $h != null and ($h | IN($consumer_hosts[]))) | row("scheduler"; (.name | last_segment); (.name | split("/") | .[3] // "-"); (.httpTarget.uri | host)))
+    ($scheduler[0][] | (.httpTarget.uri // "") as $uri
+      | select($uri != "" and (
+          any($consumer_bases[]; . as $b | $uri == $b or ($uri | startswith($b + "/")) or ($uri | startswith($b + "?")))
+          or any($run_jobs_matched[]; . as $j | ($uri | host) == "\($j.region)-run.googleapis.com" and (($uri | split("?")[0]) | endswith("/jobs/\($j.name):run")))
+        ))
+      | row("scheduler"; (.name | last_segment); (.name | split("/") | .[3] // "-"); ($uri | host)))
   )

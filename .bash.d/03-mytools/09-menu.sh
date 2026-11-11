@@ -285,6 +285,7 @@ __mt_menu_list_alias() { mt-list --alias; }
 __mt_menu_docker_start() { docker-daemon start; }
 __mt_menu_docker_stop() { docker-daemon stop; }
 __mt_menu_gce_ls() { gce-ls; }
+__mt_menu_gcl_network_deps() { __mt_menu_prompt_arg "VPC network name" gcl-network-deps; }
 __mt_menu_gcs_ls() { gcs-ls; }
 __mt_menu_bq_ls() { bq-ls; }
 __mt_menu_gcl_gar_ls() { gcl-gar-ls; }
@@ -344,7 +345,6 @@ __mt_menu_bb_pipelines() { bb-pipelines; }
 __mt_menu_bb_env() { bb-env list; }
 __mt_menu_bb_deployments() { bb-deployments; }
 __mt_menu_bb_var() { bb-var list; }
-__mt_menu_gcl_network_deps() { __mt_menu_prompt_arg "VPC network name" gcl-network-deps; }
 __mt_menu_bb_pr() { __mt_menu_prompt_arg "Bitbucket PR number" bb-pr; }
 __mt_menu_bb_pr_merge_number() { bb-pr --merge "$1"; }
 __mt_menu_bb_pr_merge() { __mt_menu_prompt_arg "Bitbucket PR number to merge" __mt_menu_bb_pr_merge_number; }

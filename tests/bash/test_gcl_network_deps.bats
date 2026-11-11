@@ -36,7 +36,10 @@ case "$1 $2 $3" in
     if [ -f "$FIXTURES/network-$4.json" ]; then cat "$FIXTURES/network-$4.json"; else echo "ERROR: (gcloud) The resource '$4' was not found" >&2; exit 1; fi ;;
   "compute networks subnets") serve subnets ;;
   "compute networks vpc-access")
-    if [ "$4" = "locations" ]; then printf 'europe-west1\nus-central1\n'; else serve "connectors-$region"; fi ;;
+    if [ "$4" = "locations" ] && [ -n "${STUB_LOCATIONS_FAIL:-}" ]; then
+      echo "ERROR: (gcloud) PERMISSION_DENIED: Permission 'vpcaccess.locations.list' denied" >&2
+      exit 1
+    elif [ "$4" = "locations" ]; then printf 'europe-west1\nus-central1\n'; else serve "connectors-$region"; fi ;;
   "compute instances list") serve instances ;;
   "compute instance-groups list") serve instance_groups ;;
   "compute network-endpoint-groups list") serve negs ;;
@@ -55,7 +58,13 @@ case "$1 $2 $3" in
   "redis instances list") serve redis ;;
   "sql instances list") serve sql ;;
   "scheduler jobs list") serve "scheduler-$region" ;;
-  "scheduler locations list") printf 'europe-west1\nus-central1\n' ;;
+  "run jobs list") serve run_jobs ;;
+  "scheduler locations list")
+    if [ -n "${STUB_LOCATIONS_FAIL:-}" ]; then
+      echo "ERROR: (gcloud) PERMISSION_DENIED: Permission 'cloudscheduler.locations.list' denied" >&2
+      exit 1
+    fi
+    printf 'europe-west1\nus-central1\n' ;;
   *) echo '[]' ;;
 esac
 STUB
@@ -199,4 +208,45 @@ kinds_of() { cut -f1,2 <<< "$output"; }
 @test "-h shows help" {
   run gcl-network-deps -h
   [ "$output" = "help called" ]
+}
+
+@test "a failed region discovery under --all-regions is not reported as a complete scan" {
+  STUB_LOCATIONS_FAIL=1 run --separate-stderr gcl-network-deps legacy-net --all-regions
+  [ "$status" -eq 5 ]
+  [[ "$stderr" == *"No regions to check for VPC connectors"* ]]
+  [[ "$stderr" == *"No regions to check for Scheduler jobs"* ]]
+}
+
+@test "a Scheduler job is matched by URL prefix, so a job on another function sharing the host is not" {
+  run --separate-stderr gcl-network-deps legacy-net
+  [[ "$output" == *$'function\ton\teurope-west1\tGEN_1 connector=conn-1'* ]]
+  [[ "$output" == *$'scheduler\thits-on\t'* ]]
+  [[ "$output" != *"hits-off"* ]]
+  [[ "$output" != *$'\tfunction\toff'* && "$output" != *$'function\toff\t'* ]]
+  [[ "$output" != *"job-prefix"* ]]
+}
+
+@test "a Direct VPC service that names only a subnetwork is matched in the subnet's region" {
+  run --separate-stderr gcl-network-deps legacy-net
+  [[ "$output" == *$'cloud-run\tsvc-sub\teurope-west1\tdirect-vpc'* ]]
+}
+
+@test "Cloud Run jobs are scanned, with the jobs that run them" {
+  run --separate-stderr gcl-network-deps legacy-net
+  [[ "$output" == *$'cloud-run-job\tjob-conn\teurope-west1\tconnector=conn-1'* ]]
+  [[ "$output" == *$'cloud-run-job\tjob-direct\teurope-west1\tdirect-vpc'* ]]
+  [[ "$output" == *$'scheduler\tjob-runs-job\teurope-west1\teurope-west1-run.googleapis.com'* ]]
+  [[ "$output" != *"job-other"* && "$output" != *"job-runs-other"* ]]
+}
+
+@test "the jobs' regions join the region union" {
+  GCP_SCAN_REGIONS="us-central1" run --separate-stderr gcl-network-deps legacy-net
+  grep -q 'connectors list --region=europe-west1' "$CALLS"
+}
+
+@test "a section whose gcloud output is not JSON is reported once" {
+  printf '#!/usr/bin/env bash\necho "gcloud $*" >> "$CALLS"\ncase "$1 $2 $3" in\n  "compute networks describe") cat "$FIXTURES/network-legacy-net.json" ;;\n  "compute firewall-rules list") echo "not json" ;;\n  *) echo "[]" ;;\nesac\n' > "$BATS_TEST_TMPDIR/bin/gcloud"
+  run --separate-stderr gcl-network-deps legacy-net -r europe-west1
+  [ "$status" -eq 1 ]
+  [[ "$stderr" == *"gcloud returned non-JSON output"* ]]
 }
