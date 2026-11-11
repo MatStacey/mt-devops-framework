@@ -438,6 +438,7 @@ Complex bash functions, framework utilities, and automated workflows.
 ### Python Development Helpers
 | Command | Description |
 |---|---|
+| `py-hermetic-run` | Dev: Python - Run an ad-hoc script or module with the repo's interpreter in a |
 | `uv-pytest` | Dev: Python - Run a uv project's pytest suite with coverage from the |
 
 ### Secrets Management
