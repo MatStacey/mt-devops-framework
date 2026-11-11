@@ -81,12 +81,52 @@ setup() {
   [ "$(git -C "$VCS_ROOT/personal/app" symbolic-ref --short refs/remotes/origin/HEAD)" = "origin/develop" ]
 }
 
-@test "--no-fetch ignores a branch pushed after cloning; fetching reports it" {
+@test "--no-fetch reports a live branch pushed after cloning as not fetched; fetching reports it" {
   git -C "$seed" push -q origin main:qa
   run mt-branch-audit --no-fetch
-  [[ "$output" != *"qa"* ]]
+  [ "$status" -eq 1 ]
+  [[ "$output" == *$'personal/app\tmain\tqa\t-\t-\tERROR (not fetched)'* ]]
   run mt-branch-audit
+  [ "$status" -eq 0 ]
   [[ "$output" == *$'personal/app\tmain\tqa\t0\t'*$'\tSAFE'* ]]
+}
+
+@test "a branch deleted on the remote is no longer reported" {
+  git -C "$seed" push -q origin :develop
+  run mt-branch-audit --no-fetch
+  [[ "$output" != *"develop"* ]]
+}
+
+@test "a single-branch clone still reports an unmerged retired branch" {
+  rm -rf "$VCS_ROOT/personal/app"
+  git clone -q --single-branch "$remote" "$VCS_ROOT/personal/app"
+  run mt-branch-audit -pr app
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'personal/app\tmain\tdevelop\t1\t'*$'\tUNSAFE'* ]]
+}
+
+@test "a single-branch clone with --no-fetch reports develop as not fetched" {
+  rm -rf "$VCS_ROOT/personal/app"
+  git clone -q --single-branch "$remote" "$VCS_ROOT/personal/app"
+  run mt-branch-audit -pr app --no-fetch
+  [ "$status" -eq 1 ]
+  [[ "$output" == *$'personal/app\tmain\tdevelop\t-\t-\tERROR (not fetched)'* ]]
+}
+
+@test "a shallow clone is an error" {
+  rm -rf "$VCS_ROOT/personal/app"
+  git clone -q --depth 1 "file://$remote" "$VCS_ROOT/personal/app"
+  run mt-branch-audit -pr app
+  [ "$status" -eq 1 ]
+  [[ "$output" == *$'personal/app\t-\t-\t-\t-\tERROR (shallow clone)'* ]]
+}
+
+@test "a clone whose only fetched branch is not the remote default reports the default as not fetched" {
+  rm -rf "$VCS_ROOT/personal/app"
+  git clone -q --single-branch -b develop "$remote" "$VCS_ROOT/personal/app"
+  run mt-branch-audit -pr app --no-fetch
+  [ "$status" -eq 1 ]
+  [[ "$output" == *$'personal/app\tmain\t-\t-\t-\tERROR (default branch not fetched)'* ]]
 }
 
 @test "an unreachable remote gives an ERROR row and exit 1 while other repos are still reported" {

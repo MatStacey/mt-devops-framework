@@ -6,11 +6,14 @@
 
 MT_BRANCH_AUDIT_DEFAULT_REGEX='^(master|develop|development|dev|test|testing|qa|uat|staging|stage|preprod|pre-prod|prod|production|release)$'
 MT_BRANCH_AUDIT_NO_BRANCH="-"
+MT_BRANCH_AUDIT_FETCH_REFSPEC="+refs/heads/*:refs/remotes/origin/*"
 MT_BRANCH_AUDIT_REGEX_INVALID_STATUS=2
 
 #######################################
 # Git: Audit one repository's retired-name branches against its live
-# default branch. Read-only apart from the optional fetch.
+# default branch. The branch list comes from the live remote, and the fetch
+# covers every branch whatever the clone's refspec is. Read-only apart from
+# the optional fetch.
 # Arguments:
 #   $1 - Repository path
 #   $2 - Path shown in the output (relative to the VCS root)
@@ -18,6 +21,7 @@ MT_BRANCH_AUDIT_REGEX_INVALID_STATUS=2
 #   $4 - "fetch" to run 'git fetch --prune' first, anything else to skip it
 # Returns:
 #   0 if the repository was audited or skipped (no origin), 1 if an ERROR row was printed
+#   (including shallow clones, whose commit counts are unreliable)
 # Outputs:
 #   Tab-separated audit rows on stdout; skips and stale-origin/HEAD warnings on stderr
 #######################################
@@ -28,14 +32,18 @@ __mt_branch_audit_repo() {
     echo -e "${CB_YELLOW}⚠️  ${display_path}: no origin remote, skipped.${C_RESET}" >&2
     return 0
   fi
-  if [ "$fetch_mode" = "fetch" ] && ! git -C "$repo_path" fetch --prune --quiet origin 2> /dev/null; then
+  if [ "$(git -C "$repo_path" rev-parse --is-shallow-repository 2> /dev/null)" = "true" ]; then
+    printf '%s\t-\t-\t-\t-\tERROR (shallow clone)\n' "$display_path"
+    return 1
+  fi
+  if [ "$fetch_mode" = "fetch" ] && ! GIT_TERMINAL_PROMPT=0 git -C "$repo_path" fetch --prune --quiet origin "$MT_BRANCH_AUDIT_FETCH_REFSPEC" 2> /dev/null; then
     printf '%s\t-\t-\t-\t-\tERROR (fetch failed)\n' "$display_path"
     return 1
   fi
 
-  local default_branch
-  default_branch=$(git -C "$repo_path" ls-remote --symref origin HEAD 2> /dev/null |
-    sed -n 's#^ref: refs/heads/\([^[:space:]]*\)[[:space:]]HEAD$#\1#p')
+  local remote_refs default_branch
+  remote_refs=$(GIT_TERMINAL_PROMPT=0 git -C "$repo_path" ls-remote --symref origin HEAD 'refs/heads/*' 2> /dev/null)
+  default_branch=$(sed -n 's#^ref: refs/heads/\([^[:space:]]*\)[[:space:]]HEAD$#\1#p' <<< "$remote_refs")
   if [ -z "$default_branch" ]; then
     printf '%s\t-\t-\t-\t-\tERROR (ls-remote failed)\n' "$display_path"
     return 1
@@ -52,22 +60,27 @@ __mt_branch_audit_repo() {
     echo -e "${CB_YELLOW}⚠️  ${display_path}: local origin/HEAD is ${local_head} but the remote default is ${default_branch} (git remote set-head origin -a)${C_RESET}" >&2
   fi
 
-  local branch unique last_commit_date found=0
+  local branch unique last_commit_date found=0 exit_code=0
   while IFS= read -r branch; do
     [ "$branch" = "HEAD" ] && continue
     [ "$branch" = "$default_branch" ] && continue
     grep -qE -- "$branch_regex" <<< "$branch" || continue
     found=1
+    if ! git -C "$repo_path" rev-parse --verify --quiet "refs/remotes/origin/${branch}" > /dev/null; then
+      printf '%s\t%s\t%s\t-\t-\tERROR (not fetched)\n' "$display_path" "$default_branch" "$branch"
+      exit_code=1
+      continue
+    fi
     unique=$(git -C "$repo_path" rev-list --count "refs/remotes/origin/${default_branch}..refs/remotes/origin/${branch}")
     last_commit_date=$(git -C "$repo_path" log -1 --format=%cs "refs/remotes/origin/${branch}")
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$display_path" "$default_branch" "$branch" "$unique" "$last_commit_date" \
       "$([ "$unique" -eq 0 ] && echo SAFE || echo UNSAFE)"
-  done < <(git -C "$repo_path" for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin/)
+  done < <(sed -n 's#^[0-9a-f]\{40,64\}[[:space:]]refs/heads/\(.*\)$#\1#p' <<< "$remote_refs")
 
   if [ "$found" -eq 0 ]; then
     printf '%s\t%s\t%s\t0\t%s\tCLEAN\n' "$display_path" "$default_branch" "$MT_BRANCH_AUDIT_NO_BRANCH" "$MT_BRANCH_AUDIT_NO_BRANCH"
   fi
-  return 0
+  return "$exit_code"
 }
 
 #######################################
@@ -77,7 +90,7 @@ __mt_branch_audit_repo() {
 # live default branch ('git ls-remote --symref'), then counts the commits on
 # each matching branch that the default branch cannot reach. Never deletes or
 # changes anything (apart from the 'git fetch --prune' of origin, which
-# --no-fetch skips). UNSAFE means the branch has commits unreachable from the
+# --no-fetch skips). Shallow clones are reported as errors. UNSAFE means the branch has commits unreachable from the
 # default branch; a squash- or rebase-merged branch also shows as UNSAFE even
 # though its changes landed, so treat UNSAFE as "review before deleting", not
 # as proof of unmerged work.
@@ -96,7 +109,9 @@ __mt_branch_audit_repo() {
 # Outputs:
 #   "repo<TAB>default<TAB>branch<TAB>unique commits<TAB>last commit date<TAB>SAFE|UNSAFE" per branch;
 #   "repo<TAB>default<TAB>-<TAB>0<TAB>-<TAB>CLEAN" when nothing matches;
-#   "repo<TAB>-<TAB>-<TAB>-<TAB>-<TAB>ERROR (reason)" when a repo could not be audited
+#   "repo<TAB>default or -<TAB>branch or -<TAB>-<TAB>-<TAB>ERROR (reason)" when a repo or branch could not
+#   be audited. Reasons: fetch failed, ls-remote failed, shallow clone, default branch not fetched,
+#   not fetched (--no-fetch and a live branch with no local remote-tracking ref)
 # Globals:
 #   VCS_ROOT, GIT_RETIRED_BRANCH_REGEX
 # Example: mt-branch-audit -s work -w platform --pattern '^(develop|qa)$'
