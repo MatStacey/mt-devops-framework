@@ -270,7 +270,7 @@ Complex bash functions, framework utilities, and automated workflows.
 | Command | Description |
 |---|---|
 | `gcl-api-check` | GCP: Check whether an API is enabled across one or more projects |
-| `gcl-dataflow-describe` | GCP: Describe a single Dataflow job |
+| `gcl-dataflow-describe` | GCP: Describe a single Dataflow job, or -- without needing dataflow.jobs.get -- |
 | `gcl-iam-keys` | GCP: List a service account's IAM keys and its own IAM policy bindings |
 | `gcl-logging-read` | GCP: Read logs with a custom filter and optional custom output format |
 | `gcl-network-survey` | GCP: Read-only survey of a project's networking surface -- VPC |

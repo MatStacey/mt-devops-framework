@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Wed Nov 11 12:47:18 PM GMT 2026  
+> Generated: Wed Nov 11 12:48:55 PM GMT 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -4224,15 +4224,26 @@ gcl-api-check() {
 
 #### `gcl-dataflow-describe`
 
-> GCP: Describe a single Dataflow job
+> GCP: Describe a single Dataflow job, or -- without needing dataflow.jobs.get --
 
 ```bash
 #######################################
-# GCP: Describe a single Dataflow job
-# Usage: gcl-dataflow-describe <job-id> [-p <project>] [--full]
+# GCP: Describe a single Dataflow job, or -- without needing dataflow.jobs.get --
+# read its job-message timeline from Cloud Logging and list its worker VMs
+# from Compute. With --timeline or --workers the argument may be a job ID or
+# a job name, and `dataflow jobs describe` is not called.
+# Usage: gcl-dataflow-describe <job-id|name> [-p <project>] [--full] [--timeline [--since <dur>]] [--workers]
 # Options:
 #   -p, --project <id>   Project to inspect (default: the active gcloud project)
 #   --full               Include full job details (steps, environment)
+#   --timeline           Job messages, oldest first, with a marker when the job ID changes (relaunch or update)
+#   --since <dur>        With --timeline, how far back to read, e.g. 6h, 7d (default: 7d)
+#   --workers            Worker VMs of the job (name, zone, machine type, status, created)
+#   -h, --help           Show this help menu
+# Returns:
+#   0 on success, 1 on failure or bad usage, 5 on permission denied
+# Outputs:
+#   The job description, or timeline rows "timestamp<TAB>severity<TAB>job_id<TAB>message", or a worker table
 #######################################
 gcl-dataflow-describe() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -4242,12 +4253,12 @@ gcl-dataflow-describe() {
 
   local job_id="$1"
   if [[ -z "$job_id" ]]; then
-    echo "Usage: gcl-dataflow-describe <job-id> [-p <project>] [--full]" >&2
+    echo "Usage: gcl-dataflow-describe <job-id|name> [-p <project>] [--full] [--timeline [--since <dur>]] [--workers]" >&2
     return 1
   fi
   shift
 
-  local project="" full=false
+  local project="" full=false timeline=false workers=false since="$GCL_DATAFLOW_TIMELINE_DEFAULT_SINCE"
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -p | --project)
@@ -4258,13 +4269,30 @@ gcl-dataflow-describe() {
         full=true
         shift
         ;;
+      --timeline)
+        timeline=true
+        shift
+        ;;
+      --workers)
+        workers=true
+        shift
+        ;;
+      --since)
+        since="${2:-}"
+        shift 2 || shift
+        ;;
       *)
-        echo "Usage: gcl-dataflow-describe <job-id> [-p <project>] [--full]" >&2
+        echo "Usage: gcl-dataflow-describe <job-id|name> [-p <project>] [--full] [--timeline [--since <dur>]] [--workers]" >&2
         return 1
         ;;
     esac
   done
   [ -z "$project" ] && project=$(gcl-get-project)
+
+  if $timeline || $workers; then
+    __mt_gcl_dataflow_inspect "$job_id" "$project" "$timeline" "$workers" "$since"
+    return $?
+  fi
 
   local -a full_flag=()
   $full && full_flag=(--full)
