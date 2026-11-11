@@ -70,9 +70,146 @@ __mt_bb_body_file() {
 }
 
 #######################################
+# Bitbucket: Poll a pipeline until it completes or the timeout passes. Prints
+# state changes on stderr and "#<label> <RESULT>" on stdout once completed. A
+# failed status check is retried with backoff.
+# Arguments:
+#   $1 - workspace/repo
+#   $2 - Percent-encoded pipeline UUID
+#   $3 - Label used in messages (the build number)
+#   $4 - Timeout in seconds
+# Globals:
+#   BITBUCKET_PIPELINE_POLL_SECONDS, BITBUCKET_POLL_MAX_FAILURES,
+#   BITBUCKET_POLL_BACKOFF_MAX_SECONDS, BITBUCKET_EXIT_WAIT_TIMEOUT
+# Returns:
+#   0 if the pipeline completed SUCCESSFUL, 1 for any other result,
+#   BITBUCKET_EXIT_WAIT_TIMEOUT on timeout, mt-http's code after
+#   BITBUCKET_POLL_MAX_FAILURES failed status checks in a row
+#######################################
+__mt_bb_wait_pipeline() {
+  local repo="$1" encoded_uuid="$2" label="$3" timeout="$4"
+  local started="$SECONDS" state last_state="" result poll_rc failures=0 delay response
+  while true; do
+    poll_rc=0
+    response=$(__mt_bb_api "repositories/${repo}/pipelines/${encoded_uuid}" --raw) || poll_rc=$?
+    if [ "$poll_rc" -ne 0 ]; then
+      failures=$((failures + 1))
+      if [ "$failures" -ge "$BITBUCKET_POLL_MAX_FAILURES" ]; then
+        echo -e "${CB_RED}🚨 ${failures} status checks in a row failed; the state of pipeline #${label} is unknown.${C_RESET}" >&2
+        return "$poll_rc"
+      fi
+      echo -e "${CB_YELLOW}⚠️  Status check failed (${failures}/${BITBUCKET_POLL_MAX_FAILURES}); retrying.${C_RESET}" >&2
+      delay=$((BITBUCKET_PIPELINE_POLL_SECONDS << failures))
+      [ "$delay" -gt "$BITBUCKET_POLL_BACKOFF_MAX_SECONDS" ] && delay="$BITBUCKET_POLL_BACKOFF_MAX_SECONDS"
+    else
+      failures=0
+      delay="$BITBUCKET_PIPELINE_POLL_SECONDS"
+      state=$(jq -r '.state.name // "UNKNOWN"' <<< "$response")
+      if [ "$state" != "$last_state" ]; then
+        echo -e "⏳ #${label}: ${state}" >&2
+        last_state="$state"
+      fi
+      if [ "$state" = "COMPLETED" ]; then
+        result=$(jq -r '.state.result.name // "UNKNOWN"' <<< "$response")
+        echo "#${label} ${result}"
+        [ "$result" = "SUCCESSFUL" ]
+        return $?
+      fi
+    fi
+    if [ $((SECONDS - started)) -ge "$timeout" ]; then
+      echo -e "${CB_YELLOW}⌛ Gave up waiting after ${timeout}s; pipeline #${label} is ${last_state:-unknown}.${C_RESET}" >&2
+      return "$BITBUCKET_EXIT_WAIT_TIMEOUT"
+    fi
+    sleep "$delay"
+  done
+}
+
+#######################################
+# Bitbucket: Wait for a pipeline to appear for a commit, then print it.
+# Arguments:
+#   $1 - workspace/repo
+#   $2 - Commit SHA or prefix (7-40 hex characters)
+#   $3 - Timeout in seconds
+# Globals:
+#   BITBUCKET_PIPELINES_DEFAULT_COUNT, BITBUCKET_PIPELINE_POLL_SECONDS,
+#   BITBUCKET_POLL_MAX_FAILURES, BITBUCKET_EXIT_WAIT_TIMEOUT
+# Returns:
+#   0 when a run is found, BITBUCKET_EXIT_WAIT_TIMEOUT if none appears in time,
+#   mt-http's code after BITBUCKET_POLL_MAX_FAILURES failed list requests in a row
+# Outputs:
+#   "uuid<TAB>build number" of the newest matching run on stdout
+#######################################
+__mt_bb_find_pipeline_by_commit() {
+  local repo="$1" sha="$2" timeout="$3" started="$SECONDS"
+  local response match poll_rc failures=0 announced=false
+  while true; do
+    poll_rc=0
+    response=$(__mt_bb_api "repositories/${repo}/pipelines/" --raw -q "pagelen=${BITBUCKET_PIPELINES_DEFAULT_COUNT}" -q "sort=-created_on") || poll_rc=$?
+    if [ "$poll_rc" -ne 0 ]; then
+      failures=$((failures + 1))
+      if [ "$failures" -ge "$BITBUCKET_POLL_MAX_FAILURES" ]; then
+        echo -e "${CB_RED}🚨 ${failures} pipeline list requests in a row failed.${C_RESET}" >&2
+        return "$poll_rc"
+      fi
+    else
+      failures=0
+      match=$(jq -r --arg sha "$sha" '[.values[]? | select((.target.commit.hash // "") | startswith($sha))][0] // empty | "\(.uuid)\t\(.build_number)"' <<< "$response")
+      if [ -n "$match" ]; then
+        echo "$match"
+        return 0
+      fi
+    fi
+    if [ "$announced" = false ]; then
+      echo -e "⏳ Waiting for a pipeline on ${sha}" >&2
+      announced=true
+    fi
+    if [ $((SECONDS - started)) -ge "$timeout" ]; then
+      echo -e "${CB_YELLOW}⌛ No pipeline for ${sha} appeared within ${timeout}s.${C_RESET}" >&2
+      return "$BITBUCKET_EXIT_WAIT_TIMEOUT"
+    fi
+    sleep "$BITBUCKET_PIPELINE_POLL_SECONDS"
+  done
+}
+
+#######################################
+# Bitbucket: Wait for an existing pipeline (by build number, UUID or commit)
+# to finish, then print its step table.
+# Arguments:
+#   $1 - workspace/repo
+#   $2 - Build number or UUID (empty when waiting by commit)
+#   $3 - Commit SHA (empty when waiting by ref)
+#   $4 - Timeout in seconds
+# Returns:
+#   0 if the pipeline succeeded, 1 if it did not, BITBUCKET_EXIT_WAIT_TIMEOUT on
+#   timeout, mt-http's code on API failure (no step table in those last two cases)
+# Outputs:
+#   "#<build> <RESULT>" then the step table on stdout
+#######################################
+__mt_bb_wait_existing_pipeline() {
+  local repo="$1" ref="$2" commit="$3" timeout="$4" started="$SECONDS"
+  local pipeline_uuid found steps wait_rc=0
+  if [ -n "$commit" ]; then
+    found=$(__mt_bb_find_pipeline_by_commit "$repo" "$commit" "$timeout") || return $?
+    pipeline_uuid=$(__mt_bb_encode_uuid "${found%%$'\t'*}")
+    ref="${found#*$'\t'}"
+    timeout=$((timeout - (SECONDS - started)))
+    [ "$timeout" -lt 0 ] && timeout=0
+  else
+    pipeline_uuid=$(__mt_bb_resolve_pipeline "$repo" "$ref") || return $?
+  fi
+
+  __mt_bb_wait_pipeline "$repo" "$pipeline_uuid" "$ref" "$timeout" || wait_rc=$?
+  [ "$wait_rc" -gt 1 ] && return "$wait_rc"
+  steps=$(__mt_bb_collect "repositories/${repo}/pipelines/${pipeline_uuid}/steps/") || return $?
+  jq -r -f "$BITBUCKET_JQ_DIR/bb_pipeline_steps.jq" <<< "$steps" | __mt_strip_control_chars
+  return "$wait_rc"
+}
+
+#######################################
 # Bitbucket: List recent pipeline runs, show a run's steps, or print a
 # step's log tail with credentials redacted
 # Usage: bb-pipelines [-r <workspace/repo>] [-n <count>] [<build#|uuid> [--log <step#|uuid>] [--tail <lines>]]
+# Usage: bb-pipelines [-r <w/r>] (<build#|uuid> | --commit <sha>) --wait [--timeout <s>]
 # Arguments:
 #   <build#|uuid>        Pipeline build number or UUID (omit to list recent runs)
 # Options:
@@ -80,16 +217,25 @@ __mt_bb_body_file() {
 #   -n, --count <n>      Number of runs to list (default: 10)
 #   --log <step>         Print the log of a step, by 1-based number or UUID
 #   --tail <lines>       Lines of log to keep (default: 100)
+#   --wait               Wait for the run to finish, then print its step table
+#   --commit <sha>       With --wait: wait for the run triggered by this commit (7-40 hex
+#                        characters), which may not exist yet; replaces <build#|uuid>
+#   --timeout <seconds>  With --wait, give up after this long (default: 1800)
 #   -h, --help           Show this help menu
 # Returns:
-#   0 on success, 1 on bad usage or missing credentials, mt-http's code on API failure
+#   0 on success (with --wait: the pipeline succeeded), 1 on bad usage, a failed/stopped/errored
+#   pipeline or missing credentials, 124 if --wait timed out, mt-http's code on API failure
+#   (with --wait, after 5 failed polls in a row)
 # Outputs:
 #   Runs as "#build<TAB>state<TAB>duration<TAB>branch<TAB>creator<TAB>created" lines,
 #   steps as "n<TAB>result<TAB>name<TAB>duration<TAB>started_on<TAB>completed_on<TAB>uuid"
-#   lines (- when not yet set); logs as redacted text
+#   lines (- when not yet set); logs as redacted text; with --wait, state changes on
+#   stderr, then "#build RESULT" and the step table on stdout
+# Example: bb-pipelines --commit "$(git rev-parse HEAD)" --wait --timeout 900
 #######################################
 bb-pipelines() {
   local repo="" count="$BITBUCKET_PIPELINES_DEFAULT_COUNT" ref="" log_step="" tail_lines="$BITBUCKET_LOG_DEFAULT_TAIL"
+  local wait_for="" commit="" timeout="$BITBUCKET_PIPELINE_WAIT_TIMEOUT" timeout_set=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -h | --help)
@@ -112,6 +258,16 @@ bb-pipelines() {
         tail_lines="${2:-}"
         shift
         ;;
+      --wait) wait_for="1" ;;
+      --commit)
+        commit="${2:-}"
+        shift
+        ;;
+      --timeout)
+        timeout="${2:-}"
+        timeout_set="1"
+        shift
+        ;;
       -*)
         echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
         return 1
@@ -128,7 +284,29 @@ bb-pipelines() {
     echo "Usage: bb-pipelines [-r <w/r>] <build#|uuid> --log <step#|uuid>" >&2
     return 1
   fi
+  if [ -z "$wait_for" ] && { [ -n "$commit" ] || [ -n "$timeout_set" ]; }; then
+    echo "Usage: bb-pipelines [-r <w/r>] (<build#|uuid> | --commit <sha>) --wait [--timeout <s>]" >&2
+    return 1
+  fi
+  if [ -n "$wait_for" ]; then
+    if { [ -z "$ref" ] && [ -z "$commit" ]; } || { [ -n "$ref" ] && [ -n "$commit" ]; } || [ -n "$log_step" ]; then
+      echo "Usage: bb-pipelines [-r <w/r>] (<build#|uuid> | --commit <sha>) --wait [--timeout <s>]" >&2
+      return 1
+    fi
+    if [ -n "$commit" ] && [[ ! "$commit" =~ $BITBUCKET_COMMIT_REGEX ]]; then
+      echo -e "${CB_RED}❌ --commit must be 7-40 hex characters.${C_RESET}" >&2
+      return 1
+    fi
+    if [[ ! "$timeout" =~ ^[1-9][0-9]*$ ]]; then
+      echo -e "${CB_RED}❌ --timeout must be a positive number of seconds.${C_RESET}" >&2
+      return 1
+    fi
+  fi
   repo=$(__mt_bb_resolve_repo "$repo") || return 1
+  if [ -n "$wait_for" ]; then
+    __mt_bb_wait_existing_pipeline "$repo" "$ref" "$commit" "$timeout"
+    return $?
+  fi
 
   local data
   if [ -z "$ref" ]; then
@@ -393,41 +571,8 @@ bb-pipeline-run() {
   echo -e "${CB_GREEN}✅ Triggered pipeline #${build} ${uuid}${C_RESET}"
   [ -z "$wait_for" ] && return 0
 
-  local started="$SECONDS" state last_state="" result encoded poll_rc failures=0 delay
-  encoded=$(__mt_bb_encode_uuid "$uuid")
-  while true; do
-    poll_rc=0
-    response=$(__mt_bb_api "repositories/${repo}/pipelines/${encoded}" --raw) || poll_rc=$?
-    if [ "$poll_rc" -ne 0 ]; then
-      failures=$((failures + 1))
-      if [ "$failures" -ge "$BITBUCKET_POLL_MAX_FAILURES" ]; then
-        echo -e "${CB_RED}🚨 ${failures} status checks in a row failed; the state of pipeline #${build} is unknown.${C_RESET}" >&2
-        return "$poll_rc"
-      fi
-      echo -e "${CB_YELLOW}⚠️  Status check failed (${failures}/${BITBUCKET_POLL_MAX_FAILURES}); retrying.${C_RESET}" >&2
-      delay=$((BITBUCKET_PIPELINE_POLL_SECONDS << failures))
-      [ "$delay" -gt "$BITBUCKET_POLL_BACKOFF_MAX_SECONDS" ] && delay="$BITBUCKET_POLL_BACKOFF_MAX_SECONDS"
-    else
-      failures=0
-      delay="$BITBUCKET_PIPELINE_POLL_SECONDS"
-      state=$(jq -r '.state.name // "UNKNOWN"' <<< "$response")
-      if [ "$state" != "$last_state" ]; then
-        echo -e "⏳ #${build}: ${state}" >&2
-        last_state="$state"
-      fi
-      if [ "$state" = "COMPLETED" ]; then
-        result=$(jq -r '.state.result.name // "UNKNOWN"' <<< "$response")
-        echo "#${build} ${result}"
-        [ "$result" = "SUCCESSFUL" ]
-        return $?
-      fi
-    fi
-    if [ $((SECONDS - started)) -ge "$timeout" ]; then
-      echo -e "${CB_YELLOW}⌛ Gave up waiting after ${timeout}s; pipeline #${build} is ${last_state:-unknown}.${C_RESET}" >&2
-      return "$BITBUCKET_EXIT_WAIT_TIMEOUT"
-    fi
-    sleep "$delay"
-  done
+  __mt_bb_wait_pipeline "$repo" "$(__mt_bb_encode_uuid "$uuid")" "$build" "$timeout"
+  return $?
 }
 
 #######################################
