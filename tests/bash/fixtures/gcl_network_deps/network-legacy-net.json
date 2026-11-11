@@ -1,0 +1,1 @@
+{"name":"legacy-net","selfLink":"https://www.googleapis.com/compute/v1/projects/proj-a/global/networks/legacy-net","autoCreateSubnetworks":false,"peerings":[{"name":"peer-1","network":"https://www.googleapis.com/compute/v1/projects/proj-a/../other/global/networks/other-net"}]}

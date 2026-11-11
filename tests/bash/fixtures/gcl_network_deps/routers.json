@@ -1,0 +1,2 @@
+[{"name":"r1","region":"https://www.googleapis.com/compute/v1/projects/proj-a/regions/europe-west1","network":"https://www.googleapis.com/compute/v1/projects/proj-a/global/networks/legacy-net","nats":[{"name":"nat-1"}]},
+ {"name":"r2","region":"https://www.googleapis.com/compute/v1/projects/proj-a/regions/europe-west1","network":"https://www.googleapis.com/compute/v1/projects/proj-a/global/networks/legacy-net-2","nats":[]}]

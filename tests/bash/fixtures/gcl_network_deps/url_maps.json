@@ -1,0 +1,2 @@
+[{"name":"um1","selfLink":"https://www.googleapis.com/compute/v1/projects/proj-a/global/urlMaps/um1","defaultService":"https://www.googleapis.com/compute/v1/projects/proj-a/global/backendServices/bs1"},
+ {"name":"um2","selfLink":"https://www.googleapis.com/compute/v1/projects/proj-a/global/urlMaps/um2","defaultService":"https://www.googleapis.com/compute/v1/projects/proj-a/global/backendServices/bs2"}]

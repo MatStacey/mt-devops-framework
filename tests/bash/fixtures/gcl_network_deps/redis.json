@@ -1,0 +1,2 @@
+[{"name":"projects/proj-a/locations/europe-west1/instances/red1","locationId":"europe-west1-b","authorizedNetwork":"projects/proj-a/global/networks/legacy-net"},
+ {"name":"projects/proj-a/locations/europe-west1/instances/red2","locationId":"europe-west1-b","authorizedNetwork":"projects/proj-a/global/networks/legacy-net-2"}]

@@ -1,0 +1,2 @@
+[{"name":"i1","zone":"https://www.googleapis.com/compute/v1/projects/proj-a/zones/europe-west1-b","networkInterfaces":[{"network":"https://www.googleapis.com/compute/v1/projects/proj-a/global/networks/legacy-net"}]},
+ {"name":"i2","zone":"https://www.googleapis.com/compute/v1/projects/proj-a/zones/europe-west1-b","networkInterfaces":[{"network":"https://www.googleapis.com/compute/v1/projects/proj-a/global/networks/legacy-net-2"}]}]

@@ -1,0 +1,98 @@
+[
+ {
+  "metadata": {
+   "name": "svc-a",
+   "labels": {
+    "cloud.googleapis.com/location": "europe-west1"
+   }
+  },
+  "status": {
+   "url": "https://svc-a-abc-ew.a.run.app"
+  },
+  "spec": {
+   "template": {
+    "metadata": {
+     "annotations": {
+      "run.googleapis.com/vpc-access-connector": "conn-1"
+     }
+    }
+   }
+  }
+ },
+ {
+  "metadata": {
+   "name": "svc-b",
+   "labels": {
+    "cloud.googleapis.com/location": "europe-west1"
+   }
+  },
+  "status": {
+   "url": "https://svc-b-abc-ew.a.run.app"
+  },
+  "spec": {
+   "template": {
+    "metadata": {
+     "annotations": {
+      "run.googleapis.com/network-interfaces": "[{\"network\":\"legacy-net\",\"subnetwork\":\"s1\"}]"
+     }
+    }
+   }
+  }
+ },
+ {
+  "metadata": {
+   "name": "svc-c",
+   "labels": {
+    "cloud.googleapis.com/location": "europe-west1"
+   }
+  },
+  "status": {
+   "url": "https://svc-c-abc-ew.a.run.app"
+  },
+  "spec": {
+   "template": {
+    "metadata": {
+     "annotations": {
+      "run.googleapis.com/vpc-access-connector": "conn-2"
+     }
+    }
+   }
+  }
+ },
+ {
+  "metadata": {
+   "name": "svc-d",
+   "labels": {
+    "cloud.googleapis.com/location": "europe-west1"
+   }
+  },
+  "status": {
+   "url": "https://svc-d-abc-ew.a.run.app"
+  },
+  "spec": {
+   "template": {
+    "metadata": {}
+   }
+  }
+ },
+ {
+  "metadata": {
+   "name": "svc-sub",
+   "labels": {
+    "cloud.googleapis.com/location": "europe-west1"
+   }
+  },
+  "status": {
+   "url": "https://svc-sub-abc-ew.a.run.app"
+  },
+  "spec": {
+   "template": {
+    "metadata": {
+     "annotations": {
+      "run.googleapis.com/network-interfaces": "[{\"subnetwork\":\"s1\"}]"
+     }
+    }
+   }
+  }
+ }
+]

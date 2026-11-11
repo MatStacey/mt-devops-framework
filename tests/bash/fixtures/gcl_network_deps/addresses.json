@@ -1,0 +1,3 @@
+[{"name":"a1","region":"https://www.googleapis.com/compute/v1/projects/proj-a/regions/europe-west1","status":"RESERVED","subnetwork":"https://www.googleapis.com/compute/v1/projects/proj-a/regions/europe-west1/subnetworks/s1","users":["u"]},
+ {"name":"a2","region":"https://www.googleapis.com/compute/v1/projects/proj-a/regions/europe-west1","status":"IN_USE","subnetwork":"https://www.googleapis.com/compute/v1/projects/proj-a/regions/europe-west1/subnetworks/auto-net","users":["u","v"]},
+ {"name":"a3","region":"https://www.googleapis.com/compute/v1/projects/proj-a/regions/europe-west1","status":"RESERVED","subnetwork":"https://www.googleapis.com/compute/v1/projects/proj-a/regions/europe-west1/subnetworks/s2"}]

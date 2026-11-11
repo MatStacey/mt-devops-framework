@@ -285,6 +285,7 @@ __mt_menu_list_alias() { mt-list --alias; }
 __mt_menu_docker_start() { docker-daemon start; }
 __mt_menu_docker_stop() { docker-daemon stop; }
 __mt_menu_gce_ls() { gce-ls; }
+__mt_menu_gcl_network_deps() { __mt_menu_prompt_arg "VPC network name" gcl-network-deps; }
 __mt_menu_gcs_ls() { gcs-ls; }
 __mt_menu_bq_ls() { bq-ls; }
 __mt_menu_gcl_gar_ls() { gcl-gar-ls; }
@@ -699,7 +700,8 @@ __mt_menu_gcp_iam() {
 __mt_menu_gcp_compute() {
   __mt_menu_submenu "🖥️  Compute Engine" \
     "List VM Instances (gce-ls)" __mt_menu_gce_ls \
-    "SSH into Instance (gce-ssh)" __mt_menu_gce_ssh
+    "SSH into Instance (gce-ssh)" __mt_menu_gce_ssh \
+    "Network Dependency Scan (gcl-network-deps)" __mt_menu_gcl_network_deps
 }
 
 #######################################

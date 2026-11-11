@@ -1,0 +1,50 @@
+[
+ {
+  "name": "projects/proj-a/locations/europe-west1/jobs/job-1",
+  "httpTarget": {
+   "uri": "https://svc-a-abc-ew.a.run.app/run"
+  }
+ },
+ {
+  "name": "projects/proj-a/locations/europe-west1/jobs/job-2",
+  "httpTarget": {
+   "uri": "https://unrelated.example.test/x"
+  }
+ },
+ {
+  "name": "projects/proj-a/locations/europe-west1/jobs/job-3",
+  "httpTarget": {
+   "uri": "https://svc-c-abc-ew.a.run.app/run"
+  }
+ },
+ {
+  "name": "projects/proj-a/locations/europe-west1/jobs/job-runs-job",
+  "httpTarget": {
+   "uri": "https://europe-west1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/proj-a/jobs/job-conn:run"
+  }
+ },
+ {
+  "name": "projects/proj-a/locations/europe-west1/jobs/job-runs-other",
+  "httpTarget": {
+   "uri": "https://europe-west1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/proj-a/jobs/job-other:run"
+  }
+ },
+ {
+  "name": "projects/proj-a/locations/europe-west1/jobs/job-prefix",
+  "httpTarget": {
+   "uri": "https://svc-a-abc-ew.a.run.app.evil.example/x"
+  }
+ },
+ {
+  "name": "projects/proj-a/locations/europe-west1/jobs/hits-on",
+  "httpTarget": {
+   "uri": "https://europe-west1-proj-a.cloudfunctions.net/on?x=1"
+  }
+ },
+ {
+  "name": "projects/proj-a/locations/europe-west1/jobs/hits-off",
+  "httpTarget": {
+   "uri": "https://europe-west1-proj-a.cloudfunctions.net/off"
+  }
+ }
+]

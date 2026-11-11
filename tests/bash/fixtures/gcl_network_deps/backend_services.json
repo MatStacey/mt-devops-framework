@@ -1,0 +1,2 @@
+[{"name":"bs1","selfLink":"https://www.googleapis.com/compute/v1/projects/proj-a/global/backendServices/bs1","backends":[{"group":"https://www.googleapis.com/compute/v1/projects/proj-a/zones/europe-west1-b/instanceGroups/ig1"}]},
+ {"name":"bs2","selfLink":"https://www.googleapis.com/compute/v1/projects/proj-a/global/backendServices/bs2","backends":[{"group":"https://www.googleapis.com/compute/v1/projects/proj-a/zones/europe-west1-b/instanceGroups/ig2"}]}]
