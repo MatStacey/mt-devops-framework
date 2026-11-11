@@ -39,6 +39,17 @@ if [ -n "${STUB_FULL:-}" ]; then
   printf '[%s,%s]' "$(entry 2026-10-05T01:00:00Z a@example.test)" "$(entry 2026-10-05T02:00:00Z a@example.test)"
   exit 0
 fi
+hit() {
+  printf '{"timestamp":"%s","logName":"projects/p/logs/%s","resource":{"type":"%s","labels":{"%s":"%s"}},"textPayload":"SENSITIVE-PAYLOAD-TEXT"}' "$1" "$2" "$3" "$4" "$5"
+}
+if [[ "$*" == *"--format=json"* && "$*" != *"cloudaudit"* ]]; then
+  case "$project" in
+    proj-a) printf '[%s,%s,%s]' "$(hit 2026-10-05T01:00:00Z stdout cloud_run_revision service_name api)" "$(hit 2026-10-05T02:00:00Z stdout cloud_run_revision service_name api)" "$(hit 2026-10-05T03:00:00Z stderr cloud_function function_name fn)" ;;
+    proj-b) printf '[%s]' "$(hit 2026-10-05T04:00:00Z stdout cloud_run_revision service_name api)" ;;
+    *) printf '[]' ;;
+  esac
+  exit 0
+fi
 case "$project" in
   proj-a) printf '[%s,%s]' "$(entry 2026-10-05T03:00:00Z a@example.test)" "$(entry 2026-10-05T01:00:00Z b@example.test)" ;;
   proj-b) printf '[%s]' "$(entry 2026-10-05T02:00:00Z c@example.test)" ;;
@@ -269,4 +280,59 @@ read_call() {
   [ "$(__mt_gcl_epoch 1970-01-02T00:00:00Z)" = "86400" ]
   run __mt_gcl_window 1d bad-start ""
   [ "$status" -eq 1 ]
+}
+
+@test "log search groups hits by project, resource type and service, most hits first" {
+  run gcl-logging-search needle -p proj-a -p proj-b
+  [ "$status" -eq 0 ]
+  [ "$(wc -l <<< "$output")" -eq 3 ]
+  [ "$(sed -n 1p <<< "$output")" = "$(printf 'proj-a\tcloud_run_revision\tapi\t2\t2026-10-05T01:00:00Z\t2026-10-05T02:00:00Z')" ]
+  [[ "$output" == *$'proj-a\tcloud_function\tfn\t1\t'* ]]
+  [[ "$output" == *$'proj-b\tcloud_run_revision\tapi\t1\t'* ]]
+}
+
+@test "log search prints counts only, never payload text" {
+  run gcl-logging-search needle -p proj-a
+  [ "$status" -eq 0 ]
+  [[ "$output" != *SENSITIVE-PAYLOAD-TEXT* ]]
+}
+
+@test "log search quotes the term, escapes embedded quotes and backslashes, and adds the window and extra filter" {
+  run gcl-logging-search 'say "hi" \ now' -p proj-a --since 6h --filter 'severity>=ERROR' --limit 50
+  [ "$status" -eq 0 ]
+  local call
+  call="$(read_call)"
+  [[ "$call" == *'"say \"hi\" \\ now" AND timestamp>="'* ]]
+  [[ "$call" == *' AND (severity>=ERROR)'* ]]
+  [[ "$call" == *"--limit=50"* ]]
+}
+
+@test "log search flags a project that reached the limit as a lower bound" {
+  run gcl-logging-search needle -p proj-a --limit 3
+  [[ "$output" == *"proj-a: reached the 3-entry limit"* ]]
+  run gcl-logging-search needle -p proj-a --limit 100
+  [[ "$output" != *"reached"* ]]
+}
+
+@test "log search with a denied project names the permission, still shows the others, exits 5" {
+  STUB_DENY_PROJECT=proj-a run gcl-logging-search needle -p proj-a -p proj-b
+  [ "$status" -eq 5 ]
+  [[ "$output" == *"Permission denied"* ]]
+  [[ "$output" == *$'proj-b\tcloud_run_revision\tapi\t1\t'* ]]
+}
+
+@test "log search rejects bad input before any request" {
+  run gcl-logging-search
+  [ "$status" -eq 1 ]
+  run gcl-logging-search needle --since 2w
+  [ "$status" -eq 1 ]
+  run gcl-logging-search needle --limit 0
+  [ "$status" -eq 1 ]
+  run gcl-logging-search needle -p 'bad;proj'
+  [ "$status" -eq 1 ]
+  run gcl-logging-search $'bad\nterm'
+  [ "$status" -eq 1 ]
+  run gcl-logging-search needle --bogus
+  [ "$status" -eq 1 ]
+  ! grep -q 'logging read' "$CALLS" 2> /dev/null
 }

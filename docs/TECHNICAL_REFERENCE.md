@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Wed Nov 11 12:45:33 PM GMT 2026  
+> Generated: Wed Nov 11 12:47:18 PM GMT 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -5645,6 +5645,123 @@ gcl-audit-changes() {
   done
 
   [ -n "$result" ] && printf '%s' "$result" | sort -t$'\t' -k1,1 -s | __mt_strip_control_chars
+  return "$rc"
+}
+```
+
+#### `gcl-logging-search`
+
+> GCP: Count where a text term appears in Cloud Logging across projects --
+
+```bash
+#######################################
+# GCP: Count where a text term appears in Cloud Logging across projects --
+# grouped by resource type and service, never printing log payloads (results
+# can contain customer data). Full-text search is slow and billed per scan, so
+# the window and entry limit default tight; a project that reaches the limit
+# is flagged because its counts are then a lower bound.
+# Usage: gcl-logging-search <term> [-p <project>]... [--since <dur>] [--filter '<extra>'] [--limit <n>]
+# Arguments:
+#   <term>                 Text to search for (matched as a quoted global text search)
+# Options:
+#   -p, --project <id>     Project to search; repeatable (default: the active gcloud project)
+#   --since <dur>          How far back, e.g. 6h, 2d (default: 1d)
+#   --filter <expr>        Extra Cloud Logging filter ANDed onto the search
+#   --limit <n>            Maximum entries to read per project (default: 1000)
+#   -h, --help             Show this help menu
+# Returns:
+#   0 on success, 1 on failure or bad usage, 5 if any project was permission denied
+# Outputs:
+#   "project<TAB>resource type<TAB>service<TAB>hits<TAB>first seen<TAB>last seen" rows, most hits first
+#######################################
+gcl-logging-search() {
+  local term="" since="$GCL_SEARCH_DEFAULT_SINCE" extra_filter="" limit="$GCL_SEARCH_DEFAULT_LIMIT"
+  local -a projects=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -p | --project)
+        projects+=("${2:-}")
+        shift
+        ;;
+      --since)
+        since="${2:-}"
+        shift
+        ;;
+      --filter)
+        extra_filter="${2:-}"
+        shift
+        ;;
+      --limit)
+        limit="${2:-}"
+        shift
+        ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) term="$1" ;;
+    esac
+    shift
+  done
+
+  if [ -z "$term" ]; then
+    echo "Usage: gcl-logging-search <term> [-p <project>]... [--since <dur>] [--filter '<extra>'] [--limit <n>]" >&2
+    return 1
+  fi
+  if [ "${#term}" -gt "$GCL_SEARCH_TERM_MAX_LENGTH" ] || [[ "$term" == *[[:cntrl:]]* ]]; then
+    echo -e "${CB_RED}❌ The search term must be printable text of at most ${GCL_SEARCH_TERM_MAX_LENGTH} characters.${C_RESET}" >&2
+    return 1
+  fi
+  [[ "$limit" =~ ^[1-9][0-9]*$ ]] || {
+    echo -e "${CB_RED}❌ --limit must be a positive number.${C_RESET}" >&2
+    return 1
+  }
+  local project
+  for project in "${projects[@]}"; do
+    [[ "$project" =~ $GCL_PROJECT_ID_REGEX ]] || {
+      echo -e "${CB_RED}❌ Invalid project: ${project}${C_RESET}" >&2
+      return 1
+    }
+  done
+  local window_start window_end time_filter
+  read -r window_start window_end < <(__mt_gcl_window "$since" "" "") || true
+  if [ -z "$window_end" ]; then
+    echo -e "${CB_RED}❌ Invalid --since (use e.g. 6h, 2d).${C_RESET}" >&2
+    return 1
+  fi
+  time_filter="timestamp>=\"${window_start}\" AND timestamp<=\"${window_end}\""
+
+  local escaped_term="${term//\\/\\\\}"
+  escaped_term="${escaped_term//\"/\\\"}"
+  local log_filter="\"${escaped_term}\" AND ${time_filter}"
+  [ -n "$extra_filter" ] && log_filter="${log_filter} AND (${extra_filter})"
+
+  __mt_gcl_preflight || return $?
+  [ "${#projects[@]}" -eq 0 ] && projects=("$(gcl-get-project)")
+
+  local result="" rc=0 step_rc entries entry_count rows
+  for project in "${projects[@]}"; do
+    step_rc=0
+    entries=$(__mt_gcl_run "searching logs of ${project}" gcloud logging read "$log_filter" \
+      --project="$project" --limit="$limit" --format=json --quiet) || step_rc=$?
+    if [ "$step_rc" -ne 0 ]; then
+      [ "$rc" -eq 0 ] && rc="$step_rc"
+      continue
+    fi
+    [ -z "$entries" ] && continue
+    entry_count=$(jq 'length' <<< "$entries")
+    rows=$(jq -r --arg project "$project" -f "$GCL_SEARCH_HITS_JQ" <<< "$entries")
+    [ -n "$rows" ] && result+="${rows}"$'\n'
+    if [ "$entry_count" -ge "$limit" ]; then
+      echo -e "${CB_YELLOW}⚠️  ${project}: reached the ${limit}-entry limit; counts are a lower bound (narrow --since or --filter).${C_RESET}" >&2
+    fi
+  done
+
+  [ -n "$result" ] && printf '%s' "$result" | sort -t$'\t' -k4,4nr -s | __mt_strip_control_chars
   return "$rc"
 }
 ```
