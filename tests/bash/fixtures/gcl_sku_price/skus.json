@@ -1,0 +1,5 @@
+{"skus":[
+ {"description":"CPU Allocation Time","serviceRegions":["europe-west1"],"pricingInfo":[{"pricingExpression":{"usageUnit":"s","tieredRates":[{"startUsageAmount":0,"unitPrice":{"units":"0","nanos":12500}},{"startUsageAmount":180000,"unitPrice":{"units":"0","nanos":0}}]}}]},
+ {"description":"Memory Allocation Time","serviceRegions":["europe-west1","us-central1"],"pricingInfo":[{"pricingExpression":{"usageUnit":"GiBy.s","tieredRates":[{"startUsageAmount":0,"unitPrice":{"units":"1","nanos":500000000}}]}}]},
+ {"description":"Requests","serviceRegions":["us-central1"],"pricingInfo":[{"pricingExpression":{"usageUnit":"count","tieredRates":[{"startUsageAmount":0,"unitPrice":{"units":"10","nanos":0}}]}}]}
+]}

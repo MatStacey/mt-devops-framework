@@ -30,6 +30,16 @@ GCL_METRIC_ALIGNER_REGEX='^ALIGN_[A-Z0-9_]+$'
 GCL_METRIC_REDUCER_REGEX='^REDUCE_[A-Z0-9_]+$'
 GCL_METRIC_GROUP_REGEX='^[A-Za-z0-9_.:-]+$'
 
+GCL_BILLING_API="https://cloudbilling.googleapis.com/v1"
+GCL_BILLING_PAGE_SIZE=5000
+GCL_BILLING_SERVICES_CACHE_NAME="gcp_billing_services.tsv"
+GCL_BILLING_SERVICES_CACHE_TTL_MINUTES=10080
+GCL_BILLING_DEFAULT_CURRENCY="USD"
+GCL_BILLING_CURRENCY_REGEX='^[A-Z]{3}$'
+GCL_BILLING_REGION_REGEX='^[a-z0-9-]+$'
+GCL_BILLING_MATCH_AWK="$HOME/.bash.d/lib/awk/billing_service_match.awk"
+GCL_SKU_PRICES_JQ="$HOME/.bash.d/lib/jq/gcl_sku_prices.jq"
+
 #######################################
 # GCP: List audit-log changes (who changed what) in projects over a time window.
 # Reads the Admin Activity audit log (metadata only, no request bodies).
@@ -544,4 +554,134 @@ gcl-monitoring-inventory() {
     done
   done
   return "$rc"
+}
+
+#######################################
+# GCP: Print the Cloud Billing service list as "serviceId<TAB>displayName",
+# from a cache that is refreshed when older than the TTL. The cache file is
+# only replaced when the refresh succeeds and returns at least one service.
+# Globals:
+#   CACHE_DIR, GCL_BILLING_SERVICES_CACHE_NAME, GCL_BILLING_SERVICES_CACHE_TTL_MINUTES
+# Returns:
+#   0 on success, otherwise the failing call's result
+# Outputs:
+#   The cached services, one per line
+#######################################
+__mt_gcl_billing_services() {
+  local cache="${CACHE_DIR}/${GCL_BILLING_SERVICES_CACHE_NAME}" temp_file rc=0
+  if [ -n "$(find "$cache" -mmin "-${GCL_BILLING_SERVICES_CACHE_TTL_MINUTES}" 2> /dev/null)" ]; then
+    cat "$cache"
+    return 0
+  fi
+  mkdir -p "$CACHE_DIR"
+  temp_file=$(mktemp "${CACHE_DIR}/${GCL_BILLING_SERVICES_CACHE_NAME}.XXXXXX") || return 1
+  __mt_gcl_rest_collect "listing billing services" services "${GCL_BILLING_API}/services" -q "pageSize=${GCL_BILLING_PAGE_SIZE}" |
+    jq -r '"\(.serviceId)\t\(.displayName)"' > "$temp_file"
+  rc=${PIPESTATUS[0]}
+  if [ "$rc" -ne 0 ] || [ ! -s "$temp_file" ]; then
+    rm -f "$temp_file"
+    [ "$rc" -eq 0 ] && rc=1
+    return "$rc"
+  fi
+  mv "$temp_file" "$cache"
+  cat "$cache"
+}
+
+#######################################
+# GCP: Look up Cloud Billing catalogue prices (list prices, not your
+# negotiated or committed-use prices) for a service, optionally narrowed by
+# region and by a case-insensitive regex on the SKU description. Read-only.
+# The service is matched case-insensitively against its display name: an exact
+# match wins, otherwise a single substring match is used and several are
+# listed. The service list is cached for 7 days under $CACHE_DIR; delete
+# gcp_billing_services.tsv to force a refresh. Prices are catalogue prices,
+# one row per pricing tier.
+# Usage: gcl-sku-price <service-name-substring> [--region <r>] [--match <regex>] [--currency <ccy>]
+# Arguments:
+#   <service>               Billing service display name, or part of it (e.g. "Cloud Run")
+# Options:
+#   --region <r>            Only SKUs available in this region (e.g. europe-west1)
+#   --match <regex>         Only SKUs whose description matches (case-insensitive extended regex)
+#   --currency <ccy>        Three-letter currency code (default: gcp.billing_currency, USD)
+#   -h, --help              Show this help menu
+# Returns:
+#   0 on success (including no matching SKUs), 1 on failure, bad usage or an unmatched/ambiguous
+#   service, 5 on permission denied
+# Outputs:
+#   "description<TAB>usage unit<TAB>tier start<TAB>unit price" rows, sorted by description then tier
+# Example: gcl-sku-price "Cloud Run" --region europe-west1 --match 'cpu' --currency GBP
+#######################################
+gcl-sku-price() {
+  local service="" region="" match="" currency="${GCL_BILLING_CURRENCY:-$GCL_BILLING_DEFAULT_CURRENCY}"
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      --region)
+        region="${2:-}"
+        shift
+        ;;
+      --match)
+        match="${2:-}"
+        shift
+        ;;
+      --currency)
+        currency="${2:-}"
+        shift
+        ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) service="$1" ;;
+    esac
+    shift
+  done
+  if [ -z "$service" ]; then
+    echo "Usage: gcl-sku-price <service-name-substring> [--region <r>] [--match <regex>] [--currency <ccy>]" >&2
+    return 1
+  fi
+  [[ "$currency" =~ $GCL_BILLING_CURRENCY_REGEX ]] || {
+    echo -e "${CB_RED}❌ --currency must be a three-letter code such as USD.${C_RESET}" >&2
+    return 1
+  }
+  [ -z "$region" ] || [[ "$region" =~ $GCL_BILLING_REGION_REGEX ]] || {
+    echo -e "${CB_RED}❌ Invalid --region: ${region}${C_RESET}" >&2
+    return 1
+  }
+  jq -n --arg re "$match" '"" | test($re; "i")' > /dev/null 2>&1 || {
+    echo -e "${CB_RED}❌ Invalid --match regex.${C_RESET}" >&2
+    return 1
+  }
+
+  __mt_gcl_preflight || return $?
+  local services matches match_count rc=0
+  services=$(__mt_gcl_billing_services) || return $?
+  matches=$(SERVICE_QUERY="$service" awk -f "$GCL_BILLING_MATCH_AWK" <<< "$services")
+  match_count=0
+  [ -n "$matches" ] && match_count=$(wc -l <<< "$matches")
+  if [ "$match_count" -eq 0 ]; then
+    echo -e "${CB_RED}❌ No billing service matches '${service}'.${C_RESET}" >&2
+    return 1
+  fi
+  if [ "$match_count" -gt 1 ]; then
+    echo -e "${CB_RED}❌ '${service}' matches more than one billing service:${C_RESET}" >&2
+    __mt_strip_control_chars <<< "$matches" >&2
+    return 1
+  fi
+  local service_id display_name skus
+  IFS=$'\t' read -r service_id display_name <<< "$matches"
+  skus=$(__mt_gcl_rest_collect "listing SKUs of ${display_name}" skus "${GCL_BILLING_API}/services/${service_id}/skus" \
+    -q "pageSize=${GCL_BILLING_PAGE_SIZE}" -q "currencyCode=${currency}") || rc=$?
+  [ "$rc" -ne 0 ] && return "$rc"
+
+  local rows
+  rows=$(jq -s -r --arg region "$region" --arg match "$match" -f "$GCL_SKU_PRICES_JQ" <<< "$skus" | __mt_strip_control_chars)
+  if [ -z "$rows" ]; then
+    echo -e "ℹ️  No SKUs match." >&2
+    return 0
+  fi
+  echo "$rows"
 }

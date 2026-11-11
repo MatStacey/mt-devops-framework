@@ -118,6 +118,9 @@ gcp:
   # A query whose dry-run estimate exceeds it is refused, and the real run
   # carries it as --maximum_bytes_billed. 10737418240 = 10 GiB.
   bq_max_bytes_billed: 10737418240
+  # Currency gcl-sku-price quotes Cloud Billing catalogue prices in
+  # (three-letter code; --currency overrides it per call).
+  billing_currency: USD
 
 server:
   default_port: 8000

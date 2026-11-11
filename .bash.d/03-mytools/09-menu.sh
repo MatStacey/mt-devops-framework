@@ -332,6 +332,7 @@ __mt_menu_conftest_verify() { mt-conftest --verify; }
 __mt_menu_gcs_summary() { __mt_menu_prompt_arg "GCS location (gs://bucket[/prefix])" gcl-gcs-summary; }
 __mt_menu_run_log_summary() { __mt_menu_prompt_arg "Cloud Run service name" gcl-run-log-summary; }
 __mt_menu_bq_query() { __mt_menu_prompt_arg "Read-only SQL (SELECT/WITH)" gcl-bq-query; }
+__mt_menu_gcl_sku_price() { __mt_menu_prompt_arg "Billing service name (or part of it)" gcl-sku-price; }
 __mt_menu_metric_read() { __mt_menu_prompt_arg "Metric type (e.g. logging.googleapis.com/byte_count)" gcl-metric-read; }
 __mt_menu_scheduler_list() { gcl-scheduler list; }
 __mt_menu_scheduler_describe_job() { gcl-scheduler describe "$1"; }
@@ -675,6 +676,7 @@ __mt_menu_gcp_project() {
     "List Audit-Log Changes (gcl-audit-changes)" gcl-audit-changes \
     "Search Logs Across Services (gcl-logging-search)" __mt_menu_logging_search \
     "Read Monitoring Metric (gcl-metric-read)" __mt_menu_metric_read \
+    "Look Up SKU Prices (gcl-sku-price)" __mt_menu_gcl_sku_price \
     "Monitoring Inventory (gcl-monitoring-inventory)" __mt_menu_monitoring_inventory \
     "List Scheduler Jobs (gcl-scheduler list)" __mt_menu_scheduler_list \
     "Read Firestore Document (gcl-firestore get)" __mt_menu_firestore_get \
