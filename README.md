@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added `net-lan-devices [--ssdp] [--timeout <s>]`: lists the devices on your local network from the ARP/neighbour table (multicast, broadcast and incomplete entries dropped) and, with `--ssdp`, the devices that answer an SSDP/UPnP search. On WSL both lookups run through the Windows host, because WSL's own network only sees its virtual switch.
 - Added `gcl-sku-price <service>`: looks up Cloud Billing catalogue prices (list prices, one row per pricing tier) by service name, with `--region`, `--match <regex>` and `--currency` (default from `gcp.billing_currency`). The service list is cached for 7 days; prices are built as exact decimal strings.
 - `gcl-network-deps --traffic-days <n>` adds a request-count column (last 1-42 days) for forwarding rules and Cloud Run services from Cloud Monitoring, so you can see which attached resources still serve traffic; other kinds show `n/a`, and a metric that cannot be read shows `?`.
 - Added `gcl-network-deps <network>`: lists everything in a project that still references a VPC network (instances, the load-balancer chain, routers, firewalls, subnets, reserved IPs, peerings, Redis, Cloud SQL, VPC connectors, and the Cloud Run services and jobs, functions and Scheduler jobs that use them), matching by exact network path. A denied section is reported and the rest still print.
