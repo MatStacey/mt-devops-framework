@@ -1,7 +1,7 @@
 # 🛠️ MT DevOps Framework - Technical Command Reference
 
 > **Auto-generated Reference Document**  
-> Generated: Wed Nov 11 12:50:40 PM GMT 2026  
+> Generated: Wed Nov 11 12:52:37 PM GMT 2026  
 > Environment: Linux (x86_64)
 
 ---
@@ -4687,31 +4687,45 @@ gcl-redis-describe() {
 # (a literal value reads "set"; a secret reads "secret:<name>:<version>"), so
 # the output is safe to paste. Rows that differ are marked; a project without
 # the service shows (absent).
-# Usage: gcl-run-compare <service> -r <region> -p <project> -p <project> [...] [--all]
+# With --repo it also finds each deployed commit and reports how far it is
+# behind the repository's branch (local refs only; nothing is fetched).
+# Usage: gcl-run-compare <service> -r <region> -p <project> -p <project> [...] [--all] [--repo <path> [--branch <name>]]
 # Arguments:
 #   <service>              Cloud Run service name
 # Options:
 #   -r, --region <region>  Region of the service
 #   -p, --project <id>     Project to compare; repeat for each (at least two)
 #   --all                  Print every row, not only the ones that differ
+#   --repo <path>          Add commit and "behind origin/<branch>" rows from this local repository
+#                          (run mt-bulk-update --repo <path> first so its refs are current)
+#   --branch <name>        Branch to compare against (default: the repository's default branch)
 #   -h, --help             Show this help menu
 # Returns:
 #   0 on success, 1 on failure or bad usage, 5 if any project was permission denied
 # Outputs:
-#   A key x project table, differing rows marked with a warning sign
+#   A key x project table, differing rows marked with a warning sign; the behind row reads
+#   0, a number of commits, "not on branch" or "unknown (...)"
 #######################################
 gcl-run-compare() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
-  local service="" region="" show_all=""
+  local service="" region="" show_all="" repo="" branch=""
   local -a projects=()
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -h | --help)
         mt-help "${FUNCNAME[0]}"
         return 0
+        ;;
+      --repo)
+        repo="${2:-}"
+        shift
+        ;;
+      --branch)
+        branch="${2:-}"
+        shift
         ;;
       -r | --region)
         region="${2:-}"
@@ -4731,7 +4745,22 @@ gcl-run-compare() {
     shift
   done
   if [ -z "$service" ] || [ -z "$region" ] || [ "${#projects[@]}" -lt 2 ]; then
-    echo "Usage: gcl-run-compare <service> -r <region> -p <project> -p <project> [...] [--all]" >&2
+    echo "Usage: gcl-run-compare <service> -r <region> -p <project> -p <project> [...] [--all] [--repo <path> [--branch <name>]]" >&2
+    return 1
+  fi
+  if [ -n "$repo" ]; then
+    git -C "$repo" rev-parse --git-dir > /dev/null 2>&1 || {
+      echo -e "${CB_RED}❌ ${repo} is not a git repository.${C_RESET}" >&2
+      return 1
+    }
+    [ -z "$branch" ] && branch=$(git -C "$repo" symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null)
+    branch="${branch#origin/}"
+    [[ "$branch" =~ $GCL_RUN_BRANCH_REGEX ]] || {
+      echo -e "${CB_RED}❌ Could not determine the branch; pass --branch.${C_RESET}" >&2
+      return 1
+    }
+  elif [ -n "$branch" ]; then
+    echo -e "${CB_RED}❌ --branch needs --repo.${C_RESET}" >&2
     return 1
   fi
   [[ "$service" =~ ^[A-Za-z0-9_-]+$ && "$region" =~ ^[a-z0-9-]+$ ]] || {
@@ -4756,6 +4785,12 @@ gcl-run-compare() {
     if [ "$project_rc" -eq 0 ]; then
       shown+=("$project")
       profiles+=$(jq -r --arg project "$project" -f "$GCL_RUN_PROFILE_JQ" <<< "$description")$'\n'
+      if [ -n "$repo" ]; then
+        local deployed_sha
+        deployed_sha=$(__mt_gcl_run_deployed_commit "$description" "$project")
+        [ -n "$deployed_sha" ] && profiles+="${project}"$'\t'"commit"$'\t'"${deployed_sha:0:12}"$'\n'
+        profiles+="${project}"$'\t'"behind origin/${branch}"$'\t'"$(__mt_gcl_run_behind "$repo" "$branch" "$deployed_sha")"$'\n'
+      fi
     elif grep -qiE "$GCL_RUN_NOT_FOUND_REGEX" "$err_file"; then
       shown+=("$project")
       profiles+="${project}"$'\t'"service"$'\t'"${GCL_RUN_ABSENT_TEXT}"$'\n'

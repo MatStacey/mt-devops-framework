@@ -14,6 +14,9 @@
 
 GCL_RUN_PROFILE_JQ="$HOME/.bash.d/lib/jq/gcl_run_profile.jq"
 GCL_RUN_MATRIX_AWK="$HOME/.bash.d/lib/awk/kv_matrix.awk"
+GCL_RUN_COMMIT_JQ="$HOME/.bash.d/lib/jq/gcl_run_commit.jq"
+GCL_RUN_UNKNOWN_COMMIT="unknown (no SHA tag)"
+GCL_RUN_BRANCH_REGEX='^[A-Za-z0-9._/@+-]+$'
 GCL_RUN_DIFF_FLAG="⚠️"
 GCL_RUN_ABSENT_TEXT="(absent)"
 GCL_RUN_NOT_FOUND_REGEX='cannot find service|not found|NOT_FOUND'
@@ -226,37 +229,98 @@ gcl-run-describe() {
 }
 
 #######################################
+# GCP: Work out the commit a Cloud Run service was deployed from -- a
+# commit-sha label, a hex image tag, or (for a digest-pinned image) a hex tag
+# Artifact Registry lists for that digest
+# Arguments:
+#   $1 - Service JSON, $2 - project
+# Outputs:
+#   The commit SHA, or nothing when it cannot be determined
+#######################################
+__mt_gcl_run_deployed_commit() {
+  local description="$1" project="$2" found image tags
+  found=$(jq -r -f "$GCL_RUN_COMMIT_JQ" <<< "$description" | head -1)
+  case "$found" in
+    sha:*) echo "${found#sha:}" ;;
+    digest:*)
+      image="${found#digest:}"
+      tags=$(gcloud artifacts docker images list "${image%@*}" --project="$project" --include-tags \
+        --filter="version=${image#*@}" --format='value(tags)' --quiet 2> /dev/null | sed 's/[,;]/\n/g')
+      grep -m1 -E '^[0-9a-f]{7,40}$' <<< "$tags"
+      ;;
+  esac
+}
+
+#######################################
+# GCP: How far a commit is behind a branch of a local repository (no fetch)
+# Arguments:
+#   $1 - Repository path, $2 - branch, $3 - commit SHA (may be empty)
+# Outputs:
+#   0, a number of commits, "not on branch", "unknown (not in local repo)" or the unknown-SHA text
+#######################################
+__mt_gcl_run_behind() {
+  local repo="$1" branch="$2" sha="$3"
+  if [ -z "$sha" ]; then
+    echo "$GCL_RUN_UNKNOWN_COMMIT"
+    return 0
+  fi
+  if ! git -C "$repo" cat-file -e "${sha}^{commit}" 2> /dev/null; then
+    echo "unknown (not in local repo)"
+    return 0
+  fi
+  if ! git -C "$repo" merge-base --is-ancestor "$sha" "origin/${branch}" 2> /dev/null; then
+    echo "not on branch"
+    return 0
+  fi
+  git -C "$repo" rev-list --count "${sha}..origin/${branch}"
+}
+
+#######################################
 # GCP: Compare one Cloud Run service across projects (environments): image,
 # revision, service account, scaling, networking, probes, environment variable
 # names and secret references. Environment variable VALUES are never shown
 # (a literal value reads "set"; a secret reads "secret:<name>:<version>"), so
 # the output is safe to paste. Rows that differ are marked; a project without
 # the service shows (absent).
-# Usage: gcl-run-compare <service> -r <region> -p <project> -p <project> [...] [--all]
+# With --repo it also finds each deployed commit and reports how far it is
+# behind the repository's branch (local refs only; nothing is fetched).
+# Usage: gcl-run-compare <service> -r <region> -p <project> -p <project> [...] [--all] [--repo <path> [--branch <name>]]
 # Arguments:
 #   <service>              Cloud Run service name
 # Options:
 #   -r, --region <region>  Region of the service
 #   -p, --project <id>     Project to compare; repeat for each (at least two)
 #   --all                  Print every row, not only the ones that differ
+#   --repo <path>          Add commit and "behind origin/<branch>" rows from this local repository
+#                          (run mt-bulk-update --repo <path> first so its refs are current)
+#   --branch <name>        Branch to compare against (default: the repository's default branch)
 #   -h, --help             Show this help menu
 # Returns:
 #   0 on success, 1 on failure or bad usage, 5 if any project was permission denied
 # Outputs:
-#   A key x project table, differing rows marked with a warning sign
+#   A key x project table, differing rows marked with a warning sign; the behind row reads
+#   0, a number of commits, "not on branch" or "unknown (...)"
 #######################################
 gcl-run-compare() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
     mt-help "${FUNCNAME[0]}"
     return 0
   fi
-  local service="" region="" show_all=""
+  local service="" region="" show_all="" repo="" branch=""
   local -a projects=()
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -h | --help)
         mt-help "${FUNCNAME[0]}"
         return 0
+        ;;
+      --repo)
+        repo="${2:-}"
+        shift
+        ;;
+      --branch)
+        branch="${2:-}"
+        shift
         ;;
       -r | --region)
         region="${2:-}"
@@ -276,7 +340,22 @@ gcl-run-compare() {
     shift
   done
   if [ -z "$service" ] || [ -z "$region" ] || [ "${#projects[@]}" -lt 2 ]; then
-    echo "Usage: gcl-run-compare <service> -r <region> -p <project> -p <project> [...] [--all]" >&2
+    echo "Usage: gcl-run-compare <service> -r <region> -p <project> -p <project> [...] [--all] [--repo <path> [--branch <name>]]" >&2
+    return 1
+  fi
+  if [ -n "$repo" ]; then
+    git -C "$repo" rev-parse --git-dir > /dev/null 2>&1 || {
+      echo -e "${CB_RED}❌ ${repo} is not a git repository.${C_RESET}" >&2
+      return 1
+    }
+    [ -z "$branch" ] && branch=$(git -C "$repo" symbolic-ref --short refs/remotes/origin/HEAD 2> /dev/null)
+    branch="${branch#origin/}"
+    [[ "$branch" =~ $GCL_RUN_BRANCH_REGEX ]] || {
+      echo -e "${CB_RED}❌ Could not determine the branch; pass --branch.${C_RESET}" >&2
+      return 1
+    }
+  elif [ -n "$branch" ]; then
+    echo -e "${CB_RED}❌ --branch needs --repo.${C_RESET}" >&2
     return 1
   fi
   [[ "$service" =~ ^[A-Za-z0-9_-]+$ && "$region" =~ ^[a-z0-9-]+$ ]] || {
@@ -301,6 +380,12 @@ gcl-run-compare() {
     if [ "$project_rc" -eq 0 ]; then
       shown+=("$project")
       profiles+=$(jq -r --arg project "$project" -f "$GCL_RUN_PROFILE_JQ" <<< "$description")$'\n'
+      if [ -n "$repo" ]; then
+        local deployed_sha
+        deployed_sha=$(__mt_gcl_run_deployed_commit "$description" "$project")
+        [ -n "$deployed_sha" ] && profiles+="${project}"$'\t'"commit"$'\t'"${deployed_sha:0:12}"$'\n'
+        profiles+="${project}"$'\t'"behind origin/${branch}"$'\t'"$(__mt_gcl_run_behind "$repo" "$branch" "$deployed_sha")"$'\n'
+      fi
     elif grep -qiE "$GCL_RUN_NOT_FOUND_REGEX" "$err_file"; then
       shown+=("$project")
       profiles+="${project}"$'\t'"service"$'\t'"${GCL_RUN_ABSENT_TEXT}"$'\n'

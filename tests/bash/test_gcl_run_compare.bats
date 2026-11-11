@@ -30,6 +30,11 @@ if [ "$project" = "${STUB_DENY_PROJECT:-}" ]; then
   echo "ERROR: (gcloud) PERMISSION_DENIED: Permission 'run.services.get' denied" >&2
   exit 1
 fi
+if [ "$1 $2" = "artifacts docker" ]; then
+  echo "gcloud $*" >> "${CALLS:-/dev/null}"
+  echo "${STUB_DIGEST_TAGS:-latest}"
+  exit 0
+fi
 service() {
   cat << JSON
 {"metadata":{"annotations":{"run.googleapis.com/client-name":"gcloud","run.googleapis.com/ingress":"all"}},
@@ -45,8 +50,8 @@ service() {
 JSON
 }
 case "$project" in
-  dev) service "img:1" "sa-dev@x" "ONLY_DEV" "3" ;;
-  *) service "img:2" "sa-prod@x" "ONLY_PROD" "4" ;;
+  dev) service "${STUB_IMAGE_DEV:-img:1}" "sa-dev@x" "ONLY_DEV" "3" ;;
+  *) service "${STUB_IMAGE_PROD:-img:2}" "sa-prod@x" "ONLY_PROD" "4" ;;
 esac
 STUB
   chmod +x "$BATS_TEST_TMPDIR/bin/gcloud"
@@ -60,6 +65,8 @@ STUB
   # shellcheck disable=SC2034
   CB_RED="" CB_GREEN="" CB_BLUE="" CB_YELLOW="" C_RESET=""
   mt-help() { echo "help called"; }
+  CALLS="$BATS_TEST_TMPDIR/calls"
+  export CALLS
   gcl-get-user() { echo "me@example.test"; }
   gcl-auth-check() { return 0; }
 }
@@ -130,4 +137,72 @@ STUB
   run bash -c "printf 'a\tsame\tv\nb\tsame\tv\na\tdiff\tx\nb\tdiff\ty\na\tonly_a\t\n' | awk -v diff_only=1 -v flag='!' -v mark=X -f '$repo_root/.bash.d/lib/awk/kv_matrix.awk'"
   [ "$status" -eq 0 ]
   [ "$output" = "$(printf 'KEY\ta\tb\n! diff\tx\ty\n! only_a\tX\t-')" ]
+}
+
+make_repo() {
+  repo="$BATS_TEST_TMPDIR/repo"
+  mkdir -p "$repo"
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email "t@example.test"
+  git -C "$repo" config user.name "T"
+  for n in 1 2 3; do
+    echo "$n" > "$repo/f"
+    git -C "$repo" add f
+    git -C "$repo" commit -q -m "c$n"
+  done
+  head_sha=$(git -C "$repo" rev-parse HEAD)
+  old_sha=$(git -C "$repo" rev-parse HEAD~2)
+  git -C "$repo" update-ref refs/remotes/origin/main "$head_sha"
+  git -C "$repo" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main
+  git -C "$repo" checkout -q -b side "$old_sha"
+  echo side > "$repo/g"
+  git -C "$repo" add g
+  git -C "$repo" commit -q -m side
+  side_sha=$(git -C "$repo" rev-parse HEAD)
+}
+
+@test "--repo reports how far an image tagged with a commit SHA is behind the branch" {
+  make_repo
+  STUB_IMAGE_DEV="gcr.example.test/app:${old_sha:0:10}" STUB_IMAGE_PROD="gcr.example.test/app:${head_sha}" run gcl-run-compare svc -r europe-west1 -p dev -p prod --repo "$repo"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'⚠️ behind origin/main\t2\t0'* ]]
+  [[ "$output" == *$'⚠️ commit\t'"${old_sha:0:10}"$'\t'"${head_sha:0:12}"* ]]
+}
+
+@test "--repo reports a commit that is not on the branch" {
+  make_repo
+  STUB_IMAGE_DEV="gcr.example.test/app:${side_sha}" STUB_IMAGE_PROD="gcr.example.test/app:${head_sha}" run gcl-run-compare svc -r europe-west1 -p dev -p prod --repo "$repo"
+  [[ "$output" == *$'behind origin/main\tnot on branch\t0'* ]]
+}
+
+@test "--repo reports unknown for a tag that is not a commit, and for a commit missing locally" {
+  make_repo
+  STUB_IMAGE_DEV="gcr.example.test/app:latest" STUB_IMAGE_PROD="gcr.example.test/app:deadbeefcafe" run gcl-run-compare svc -r europe-west1 -p dev -p prod --repo "$repo"
+  [[ "$output" == *$'behind origin/main\tunknown (no SHA tag)\tunknown (not in local repo)'* ]]
+}
+
+@test "--repo finds the commit from a commit-sha tag listed for a digest-pinned image" {
+  make_repo
+  STUB_IMAGE_DEV="gcr.example.test/app@sha256:abc" STUB_DIGEST_TAGS="latest;${old_sha:0:10}" STUB_IMAGE_PROD="gcr.example.test/app:${head_sha}" run gcl-run-compare svc -r europe-west1 -p dev -p prod --repo "$repo"
+  [[ "$output" == *$'behind origin/main\t2\t0'* ]]
+  grep -q 'artifacts docker images list gcr.example.test/app .*--filter=version=sha256:abc' "$CALLS"
+}
+
+@test "--branch overrides the default branch" {
+  make_repo
+  git -C "$repo" update-ref refs/remotes/origin/side "$side_sha"
+  STUB_IMAGE_DEV="gcr.example.test/app:${old_sha:0:10}" STUB_IMAGE_PROD="gcr.example.test/app:${side_sha}" run gcl-run-compare svc -r europe-west1 -p dev -p prod --repo "$repo" --branch side
+  [[ "$output" == *"behind origin/side"* ]]
+}
+
+@test "without --repo the output has no commit rows" {
+  run gcl-run-compare svc -r europe-west1 -p dev -p prod --all
+  [[ "$output" != *"behind origin"* && "$output" != *$'commit\t'* ]]
+}
+
+@test "--repo errors: not a repository, and --branch without --repo" {
+  run gcl-run-compare svc -r europe-west1 -p dev -p prod --repo "$BATS_TEST_TMPDIR"
+  [ "$status" -eq 1 ]
+  run gcl-run-compare svc -r europe-west1 -p dev -p prod --branch main
+  [ "$status" -eq 1 ]
 }
