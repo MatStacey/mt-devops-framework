@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- `gcl-dataflow-describe` gains `--timeline` (job messages oldest first, marking relaunches) and `--workers` (worker VMs), both read from Cloud Logging and Compute so they work without `dataflow.jobs.get`; they accept a job ID or name.
 - Added `gcl-logging-search`: counts where a text term appears in Cloud Logging across projects, grouped by resource type and service, without printing log payloads; warns when a project hit the entry limit.
 - `bb-pipeline-run --wait` now retries a failed status check with backoff, gives up after five in a row with the API error code, and never reports success unless the pipeline completed as SUCCESSFUL.
 - Added `bb-pipeline-run`: triggers a Bitbucket pipeline on a branch or commit (default or custom pipeline, optional variables, secured values from the environment) after confirmation, and with `--wait` polls until it finishes and exits non-zero unless it succeeded.
