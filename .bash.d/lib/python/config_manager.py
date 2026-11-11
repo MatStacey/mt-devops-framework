@@ -236,6 +236,14 @@ def load_env():
             r"|generated with \[?claude|claude-session:)",
         ),
     )
+    # mt-branch-audit (20-vcs/61-branch-audit.sh) -- branch names treated as retired.
+    export(
+        "GIT_RETIRED_BRANCH_REGEX",
+        git_cfg.get(
+            "retired_branch_regex",
+            "^(master|develop|development|dev|test|testing|qa|uat|staging|stage|preprod|pre-prod|prod|production|release)$",
+        ),
+    )
 
     # mt-radar --scan-gcp (20-vcs/58-infra-gcp-scan.sh) -- regions checked
     # for resource types whose gcloud list command requires one.

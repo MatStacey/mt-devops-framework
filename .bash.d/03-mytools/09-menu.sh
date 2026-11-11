@@ -345,6 +345,8 @@ __mt_menu_bb_env() { bb-env list; }
 __mt_menu_bb_deployments() { bb-deployments; }
 __mt_menu_bb_var() { bb-var list; }
 __mt_menu_bb_pr() { __mt_menu_prompt_arg "Bitbucket PR number" bb-pr; }
+__mt_menu_bb_pr_merge_number() { bb-pr --merge "$1"; }
+__mt_menu_bb_pr_merge() { __mt_menu_prompt_arg "Bitbucket PR number to merge" __mt_menu_bb_pr_merge_number; }
 __mt_menu_conf_get() { __mt_menu_prompt_arg "Confluence page ID or URL" conf-get; }
 __mt_menu_conf_search() { __mt_menu_prompt_arg "Confluence search text" conf-search; }
 __mt_menu_html_check() { __mt_menu_prompt_arg "HTML file path" mt-html-check; }
@@ -793,10 +795,12 @@ __mt_menu_git_repos() {
     "Bulk-Update Repos (mt-bulk-update)" __mt_menu_bulk_update \
     "Bulk-Update Repos, Background (mt-bulk-update -b)" __mt_menu_bulk_update_bg \
     "Search Across All Repos (mt-grep-repos)" __mt_menu_grep_repos \
+    "Audit Retired Branches Across Repos (mt-branch-audit)" mt-branch-audit \
     "Check Repo Before Publishing (git-publish-check)" git-publish-check \
     "List Open Pull Requests (git-review-prs)" git-review-prs \
     "Diff All Uncommitted Changes incl. Untracked (git-diff-all)" git-diff-all \
     "Show Bitbucket Pull Request (bb-pr)" __mt_menu_bb_pr \
+    "Merge Bitbucket Pull Request (bb-pr --merge)" __mt_menu_bb_pr_merge \
     "List Bitbucket Pipeline Runs (bb-pipelines)" __mt_menu_bb_pipelines \
     "List Bitbucket Environments (bb-env)" __mt_menu_bb_env \
     "List Bitbucket Deployments (bb-deployments)" __mt_menu_bb_deployments \
