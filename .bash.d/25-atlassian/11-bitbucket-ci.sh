@@ -10,6 +10,8 @@ BITBUCKET_PR_TITLE_MAX=250
 BITBUCKET_PIPELINE_POLL_SECONDS=10
 BITBUCKET_PIPELINE_WAIT_TIMEOUT=1800
 BITBUCKET_EXIT_WAIT_TIMEOUT=124
+BITBUCKET_POLL_MAX_FAILURES=5
+BITBUCKET_POLL_BACKOFF_MAX_SECONDS=60
 BITBUCKET_BRANCH_REGEX='^[A-Za-z0-9._/@+-]+$'
 BITBUCKET_COMMIT_REGEX='^[0-9a-f]{7,40}$'
 BITBUCKET_PATTERN_REGEX='^[A-Za-z0-9 ._:/@+-]+$'
@@ -258,7 +260,8 @@ bb-deployments() {
 #   -h, --help               Show this help menu
 # Returns:
 #   0 on success (with --wait: the pipeline succeeded), 1 on failure, bad usage or a failed pipeline,
-#   124 if --wait timed out, mt-http's code on API failure
+#   124 if --wait timed out, mt-http's code on API failure (with --wait, after 5 failed status
+#   checks in a row; a single failed check is retried with backoff)
 # Outputs:
 #   The new pipeline's build number and UUID; with --wait, state changes on stderr and the final result
 #######################################
@@ -390,26 +393,40 @@ bb-pipeline-run() {
   echo -e "${CB_GREEN}✅ Triggered pipeline #${build} ${uuid}${C_RESET}"
   [ -z "$wait_for" ] && return 0
 
-  local started="$SECONDS" state last_state="" result encoded
+  local started="$SECONDS" state last_state="" result encoded poll_rc failures=0 delay
   encoded=$(__mt_bb_encode_uuid "$uuid")
   while true; do
-    response=$(__mt_bb_api "repositories/${repo}/pipelines/${encoded}" --raw) || return $?
-    state=$(jq -r '.state.name // "UNKNOWN"' <<< "$response")
-    if [ "$state" != "$last_state" ]; then
-      echo -e "⏳ #${build}: ${state}" >&2
-      last_state="$state"
-    fi
-    if [ "$state" = "COMPLETED" ]; then
-      result=$(jq -r '.state.result.name // "UNKNOWN"' <<< "$response")
-      echo "#${build} ${result}"
-      [ "$result" = "SUCCESSFUL" ]
-      return $?
+    poll_rc=0
+    response=$(__mt_bb_api "repositories/${repo}/pipelines/${encoded}" --raw) || poll_rc=$?
+    if [ "$poll_rc" -ne 0 ]; then
+      failures=$((failures + 1))
+      if [ "$failures" -ge "$BITBUCKET_POLL_MAX_FAILURES" ]; then
+        echo -e "${CB_RED}🚨 ${failures} status checks in a row failed; the state of pipeline #${build} is unknown.${C_RESET}" >&2
+        return "$poll_rc"
+      fi
+      echo -e "${CB_YELLOW}⚠️  Status check failed (${failures}/${BITBUCKET_POLL_MAX_FAILURES}); retrying.${C_RESET}" >&2
+      delay=$((BITBUCKET_PIPELINE_POLL_SECONDS << failures))
+      [ "$delay" -gt "$BITBUCKET_POLL_BACKOFF_MAX_SECONDS" ] && delay="$BITBUCKET_POLL_BACKOFF_MAX_SECONDS"
+    else
+      failures=0
+      delay="$BITBUCKET_PIPELINE_POLL_SECONDS"
+      state=$(jq -r '.state.name // "UNKNOWN"' <<< "$response")
+      if [ "$state" != "$last_state" ]; then
+        echo -e "⏳ #${build}: ${state}" >&2
+        last_state="$state"
+      fi
+      if [ "$state" = "COMPLETED" ]; then
+        result=$(jq -r '.state.result.name // "UNKNOWN"' <<< "$response")
+        echo "#${build} ${result}"
+        [ "$result" = "SUCCESSFUL" ]
+        return $?
+      fi
     fi
     if [ $((SECONDS - started)) -ge "$timeout" ]; then
-      echo -e "${CB_YELLOW}⌛ Gave up waiting after ${timeout}s; pipeline #${build} is ${state}.${C_RESET}" >&2
+      echo -e "${CB_YELLOW}⌛ Gave up waiting after ${timeout}s; pipeline #${build} is ${last_state:-unknown}.${C_RESET}" >&2
       return "$BITBUCKET_EXIT_WAIT_TIMEOUT"
     fi
-    sleep "$BITBUCKET_PIPELINE_POLL_SECONDS"
+    sleep "$delay"
   done
 }
 

@@ -37,6 +37,15 @@ setup() {
       prev="$arg"
     done
     [ -n "${STUB_FAIL:-}" ] && return 4
+    if [[ "$last" == */pipelines/%7Bp-1%7D && -n "${STUB_POLL_FAILS:-}" ]]; then
+      local seen
+      seen=$(wc -l < "$POLLS")
+      if [ "$seen" -lt "$STUB_POLL_FAILS" ]; then
+        echo poll >> "$POLLS"
+        echo '{"error":{"message":"There was an error processing your request"}}' >&2
+        return 4
+      fi
+    fi
     case "$last" in
       */pipelines/) echo '{"uuid":"{p-1}","build_number":61}' ;;
       */pipelines/%7Bp-1%7D)
@@ -147,4 +156,23 @@ setup() {
   [ -s "$BATS_TEST_TMPDIR/jq_argv" ]
   ! grep -q 's3cr3t-value' "$BATS_TEST_TMPDIR/jq_argv"
   grep -qF '"value":"s3cr3t-value","secured":true' "$HTTP_LOG"
+}
+
+@test "--wait retries a transient failed status check and still reports the real result" {
+  STUB_POLL_FAILS=2 STUB_STATES="COMPLETED/SUCCESSFUL" run bb-pipeline-run -r ws/r --branch main --wait --yes
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Status check failed (1/5)"* && "$output" == *"Status check failed (2/5)"* ]]
+  [[ "$output" == *"#61 SUCCESSFUL"* ]]
+}
+
+@test "--wait never exits 0 when the state stays unknown: repeated failures return the API code" {
+  STUB_POLL_FAILS=99 run bb-pipeline-run -r ws/r --branch main --wait --yes
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"state of pipeline #61 is unknown"* ]]
+  [[ "$output" != *SUCCESSFUL* ]]
+}
+
+@test "--wait times out with 124 when status checks keep failing within the allowed retries" {
+  BITBUCKET_POLL_MAX_FAILURES=99999 STUB_POLL_FAILS=99999 run bb-pipeline-run -r ws/r --branch main --wait --timeout 1 --yes
+  [ "$status" -eq 124 ]
 }
