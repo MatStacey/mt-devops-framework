@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Added `gcl-crf-describe`: summarises a Cloud Run function (state, runtime, entry point, revision, update time, source, trigger, service account, deployment labels) across projects, with `(absent)` for projects that do not have it.
 - `gcl-run-compare --repo <path> [--branch <name>]` finds the commit each environment runs (commit-sha label, hex image tag, or a tag listed for a digest-pinned image) and reports how far it is behind the branch, using local refs only.
 - Added `gcl-monitoring-inventory`: alert policies, dashboards, uptime checks, custom metric descriptors and log-based metrics for one or more projects, with independent sections so one denied section does not stop the rest.
 - `gcl-dataflow-describe` gains `--timeline` (job messages oldest first, marking relaunches) and `--workers` (worker VMs), both read from Cloud Logging and Compute so they work without `dataflow.jobs.get`; they accept a job ID or name.
