@@ -90,10 +90,10 @@ __mt_branch_audit_repo() {
 # live default branch ('git ls-remote --symref'), then counts the commits on
 # each matching branch that the default branch cannot reach. Never deletes or
 # changes anything (apart from the 'git fetch --prune' of origin, which
-# --no-fetch skips). Shallow clones are reported as errors. UNSAFE means the branch has commits unreachable from the
-# default branch; a squash- or rebase-merged branch also shows as UNSAFE even
-# though its changes landed, so treat UNSAFE as "review before deleting", not
-# as proof of unmerged work.
+# --no-fetch skips). Shallow clones are reported as errors. UNSAFE means the
+# branch has commits unreachable from the default branch; a squash- or
+# rebase-merged branch also shows as UNSAFE even though its changes landed, so
+# treat UNSAFE as "review before deleting", not as proof of unmerged work.
 # Usage: mt-branch-audit [-s work|personal] [-p provider] [-w workspace] [-pr project] [--pattern <regex>] [--no-fetch]
 # Options:
 #   -s, --scope <work|personal>   Only audit repos under this scope
