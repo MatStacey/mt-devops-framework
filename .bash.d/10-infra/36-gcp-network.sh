@@ -272,9 +272,10 @@ __mt_gcl_network_scan() {
 # With --traffic-days it also reads request counts from Cloud Monitoring (needs
 # monitoring.viewer) and adds a fifth column: the summed requests over the window for
 # forwarding rules and Cloud Run services, "0" when a matched resource served none,
-# "?" when the metric could not be read, and "n/a" for every other kind. Forwarding
-# rules that are not HTTP(S) Application Load Balancers (L4 passthrough, TCP/SSL
-# proxy) are "n/a", because the request-count metrics do not cover them.
+# "?" when the metric could not be read, and "n/a" for every other kind. Only
+# forwarding rules whose target is an HTTP(S) proxy are counted; every other rule
+# (L4 passthrough, TCP/SSL proxy, Private Service Connect endpoints) is "n/a",
+# because the request-count metrics do not cover them.
 # Usage: gcl-network-deps <network> [-p <project>] [-r <region>]... [--all-regions] [--traffic-days <n>]
 # Options:
 #   -p, --project <id>    Project that owns the network (default: the active gcloud project)

@@ -7,10 +7,9 @@
 | $fields[1] as $name
 | (if $kind == "forwarding-rule" then
      ($rules[$name] // {}) as $rule
-     | if (($rule.loadBalancingScheme == "EXTERNAL" or $rule.loadBalancingScheme == "INTERNAL")
-           and ((($rule.target // "") | test("/targetHttps?Proxies/")) | not))
-       then "n/a"
-       else served($counts.lb; $counts.lb_failed; $name) end
+     | if (($rule.target // "") | test("/targetHttps?Proxies/"))
+       then served($counts.lb; $counts.lb_failed; $name)
+       else "n/a" end
    elif $kind == "cloud-run" then served($counts.run; $counts.run_failed; $name)
    else "n/a" end) as $served
 | ($fields + [$served]) | join("\t")

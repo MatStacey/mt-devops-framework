@@ -280,9 +280,11 @@ kinds_of() { cut -f1,2 <<< "$output"; }
   [ "$(wc -l < "$METRIC_CALLS")" -eq 4 ]
 }
 
-@test "an L4 passthrough forwarding rule is n/a" {
+@test "forwarding rules that do not target an HTTP(S) proxy are n/a, whatever their scheme" {
   run --separate-stderr gcl-network-deps legacy-net --traffic-days 7
   [[ "$output" == *$'forwarding-rule\tfr3\t'*$'\tINTERNAL\tn/a'* ]]
+  [[ "$output" == *$'forwarding-rule\tfr4\t'*$'\tEXTERNAL_MANAGED\tn/a'* ]]
+  [[ "$output" == *$'forwarding-rule\tfr5\t'*$'\t-\tn/a'* ]]
 }
 
 @test "a denied metric call gives ? in that metric's rows and exit 5" {
@@ -306,4 +308,22 @@ kinds_of() { cut -f1,2 <<< "$output"; }
   done
   [ ! -f "$CALLS" ]
   [ ! -f "$METRIC_CALLS" ]
+}
+
+@test "a non-denied metric failure gives ? and exit 1" {
+  gcl-metric-read() {
+    echo "gcl-metric-read $*" >> "$METRIC_CALLS"
+    [ "$1" = "run.googleapis.com/request_count" ] && return 1
+    return 0
+  }
+  run --separate-stderr gcl-network-deps legacy-net --traffic-days 30
+  [ "$status" -eq 1 ]
+  [[ "$output" == *$'cloud-run\tsvc-a\teurope-west1\tconnector=conn-1\t?'* ]]
+}
+
+@test "the first four columns with --traffic-days are exactly the plain output" {
+  run --separate-stderr gcl-network-deps legacy-net
+  local plain="$output"
+  run --separate-stderr gcl-network-deps legacy-net --traffic-days 30
+  [ "$(cut -f1-4 <<< "$output")" = "$plain" ]
 }
