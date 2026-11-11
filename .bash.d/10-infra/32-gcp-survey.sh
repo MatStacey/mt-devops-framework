@@ -14,6 +14,8 @@
 
 GCL_RUN_PROFILE_JQ="$HOME/.bash.d/lib/jq/gcl_run_profile.jq"
 GCL_RUN_MATRIX_AWK="$HOME/.bash.d/lib/awk/kv_matrix.awk"
+GCL_CRF_PROFILE_JQ="$HOME/.bash.d/lib/jq/gcl_crf_profile.jq"
+GCL_CRF_NOT_FOUND_REGEX='not found|NOT_FOUND|does not exist'
 GCL_RUN_COMMIT_JQ="$HOME/.bash.d/lib/jq/gcl_run_commit.jq"
 GCL_RUN_UNKNOWN_COMMIT="unknown (no SHA tag)"
 GCL_RUN_BRANCH_REGEX='^[A-Za-z0-9._/@+-]+$'
@@ -485,6 +487,95 @@ gcl-pubsub-map() {
   else
     jq -r -f "$GCL_PUBSUB_TREE_JQ" <<< "$map" | __mt_strip_control_chars
   fi
+  return "$rc"
+}
+
+#######################################
+# GCP: Summarise a Cloud Run function (gen2) in one or more projects: state,
+# runtime, entry point, revision, update time, source, trigger, service
+# account, deployment-tool and commit labels. A project without the function
+# shows (absent).
+# Usage: gcl-crf-describe <function> -r <region> [-p <project>]... [--json]
+# Arguments:
+#   <function>             Function name
+# Options:
+#   -r, --region <region>  Region of the function
+#   -p, --project <id>     Project; repeatable (default: the active gcloud project)
+#   --json                 Print one JSON object per project instead of rows
+#   -h, --help             Show this help menu
+# Returns:
+#   0 on success, 1 on failure or bad usage, 5 if any project was permission denied
+# Outputs:
+#   "project<TAB>state<TAB>runtime<TAB>entryPoint<TAB>revision<TAB>updateTime<TAB>source<TAB>trigger<TAB>serviceAccount<TAB>deploymentTool<TAB>commit" rows
+#######################################
+gcl-crf-describe() {
+  if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+    mt-help "${FUNCNAME[0]}"
+    return 0
+  fi
+  local function_name="" region="" as_json=false
+  local -a projects=()
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h | --help)
+        mt-help "${FUNCNAME[0]}"
+        return 0
+        ;;
+      -r | --region)
+        region="${2:-}"
+        shift
+        ;;
+      -p | --project)
+        projects+=("${2:-}")
+        shift
+        ;;
+      --json) as_json=true ;;
+      -*)
+        echo -e "${CB_RED}❌ Unknown option: $1${C_RESET}" >&2
+        return 1
+        ;;
+      *) function_name="$1" ;;
+    esac
+    shift
+  done
+  if [ -z "$function_name" ] || [ -z "$region" ]; then
+    echo "Usage: gcl-crf-describe <function> -r <region> [-p <project>]... [--json]" >&2
+    return 1
+  fi
+  [[ "$function_name" =~ ^[A-Za-z0-9_-]+$ && "$region" =~ ^[a-z0-9-]+$ ]] || {
+    echo -e "${CB_RED}❌ Invalid function or region.${C_RESET}" >&2
+    return 1
+  }
+  local project
+  for project in "${projects[@]}"; do
+    [[ "$project" =~ $GCL_PROJECT_ID_REGEX ]] || {
+      echo -e "${CB_RED}❌ Invalid project: ${project}${C_RESET}" >&2
+      return 1
+    }
+  done
+  __mt_gcl_preflight || return $?
+  [ "${#projects[@]}" -eq 0 ] && projects=("$(gcl-get-project)")
+
+  local rc=0 description err_file project_rc
+  for project in "${projects[@]}"; do
+    err_file=$(mktemp)
+    project_rc=0
+    description=$(gcloud functions describe "$function_name" --region="$region" --project="$project" --v2 --format=json --quiet 2> "$err_file") || project_rc=$?
+    if [ "$project_rc" -eq 0 ]; then
+      jq -rc --arg project "$project" --argjson as_json "$as_json" -f "$GCL_CRF_PROFILE_JQ" <<< "$description" | __mt_strip_control_chars
+    elif grep -qiE "$GCL_CRF_NOT_FOUND_REGEX" "$err_file"; then
+      if $as_json; then
+        jq -nc --arg project "$project" '{project: $project, state: "(absent)"}'
+      else
+        printf '%s\t%s\n' "$project" "(absent)"
+      fi
+    else
+      __mt_gcl_report_failure "describing ${function_name} in ${project}" "$(cat "$err_file")"
+      project_rc=$?
+      [ "$rc" -eq 0 ] && rc="$project_rc"
+    fi
+    rm -f "$err_file"
+  done
   return "$rc"
 }
 
