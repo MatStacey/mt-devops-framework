@@ -883,7 +883,8 @@ __mt_menu_utilities_networking() {
   __mt_menu_submenu "🌐 Networking & Serving" \
     "Serve Current Directory over HTTP (mt-http-server)" mt-http-server \
     "HTTP Server Manager (mt-server-manager)" mt-server-manager \
-    "Run Internet Speed Test (mt-speedtest)" mt-speedtest
+    "Run Internet Speed Test (mt-speedtest)" mt-speedtest \
+    "List LAN Devices (net-lan-devices)" net-lan-devices
 }
 
 #######################################
