@@ -251,6 +251,8 @@ def load_env():
     export("GCP_SCAN_REGIONS", gcp_cfg.get("scan_regions", "europe-west1 europe-west2"))
     # gcl-bq-query (10-infra/33-gcp-read-only.sh) -- per-query scan cap.
     export("GCP_BQ_MAX_BYTES_BILLED", gcp_cfg.get("bq_max_bytes_billed", 10737418240))
+    # gcl-sku-price (10-infra/34-gcp-observability.sh) -- catalogue price currency.
+    export("GCL_BILLING_CURRENCY", gcp_cfg.get("billing_currency", "USD"))
 
     # Paths
     export(

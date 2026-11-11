@@ -1,0 +1,1 @@
+{"services":[{"serviceId":"RUN-1","displayName":"Cloud Run"},{"serviceId":"RUN-2","displayName":"Cloud Run Admin API"},{"serviceId":"CE-1","displayName":"Compute Engine"},{"serviceId":"CS-1","displayName":"Cloud Storage"},{"serviceId":"CSQ-1","displayName":"Cloud SQL"},{"serviceId":"CSR-1","displayName":"Cloud Source Repositories"}]}

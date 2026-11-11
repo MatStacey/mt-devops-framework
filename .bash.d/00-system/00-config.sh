@@ -860,6 +860,7 @@ mt-wizard-git() {
 # Globals:
 #   GCP_SCAN_REGIONS
 #   GCP_BQ_MAX_BYTES_BILLED
+#   GCL_BILLING_CURRENCY
 #######################################
 mt-wizard-gcp() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -876,6 +877,13 @@ mt-wizard-gcp() {
     echo -e "${CB_RED}❌ Not a valid size; keeping the current value.${C_RESET}"
   elif [ -n "$bq_max_bytes" ]; then
     python3 "$CONFIG_MANAGER" update "gcp" "bq_max_bytes_billed" "$bq_max_bytes"
+  fi
+  echo -e "${C_DIM}💡 Currency 'gcl-sku-price' quotes catalogue prices in (three-letter code).${C_RESET}"
+  read -r -p "Billing currency [${GCL_BILLING_CURRENCY:-USD}]: " billing_currency
+  if [ -n "$billing_currency" ] && [[ ! "$billing_currency" =~ ^[A-Z]{3}$ ]]; then
+    echo -e "${CB_RED}❌ Not a valid currency code; keeping the current value.${C_RESET}"
+  elif [ -n "$billing_currency" ]; then
+    python3 "$CONFIG_MANAGER" update "gcp" "billing_currency" "$billing_currency"
   fi
   echo -e "${CB_GREEN}✅ GCP config updated.${C_RESET}"
 }
