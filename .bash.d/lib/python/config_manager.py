@@ -222,6 +222,14 @@ def load_env():
     # mt-radar's own top-contributors heuristic (20-vcs/53-vcs-insight.sh) --
     # how far back its `git log` window looks, in months.
     export("CONTRIBUTOR_LOOKBACK_MONTHS", git_cfg.get("contributor_lookback_months", 12))
+    # mt-branch-audit (20-vcs/61-branch-audit.sh) -- branch names treated as retired.
+    export(
+        "GIT_RETIRED_BRANCH_REGEX",
+        git_cfg.get(
+            "retired_branch_regex",
+            "^(master|develop|development|dev|test|testing|qa|uat|staging|stage|preprod|pre-prod|prod|production|release)$",
+        ),
+    )
 
     # mt-radar --scan-gcp (20-vcs/58-infra-gcp-scan.sh) -- regions checked
     # for resource types whose gcloud list command requires one.
