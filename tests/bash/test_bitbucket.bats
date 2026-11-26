@@ -178,6 +178,62 @@ setup() {
   grep -q 'state=MERGED' "$HTTP_LOG"
 }
 
+@test "--list requests the pull request page length, never the default" {
+  run bb-pr -r ws/r --list
+  [ "$status" -eq 0 ]
+  grep -q 'pullrequests?state=OPEN&pagelen=50' "$HTTP_LOG"
+  ! grep -q 'pagelen=100' "$HTTP_LOG"
+}
+
+@test "--list --state merged also requests the pull request page length" {
+  run bb-pr -r ws/r --list --state merged
+  [ "$status" -eq 0 ]
+  grep -q 'state=MERGED&pagelen=50' "$HTTP_LOG"
+  ! grep -q 'pagelen=100' "$HTTP_LOG"
+}
+
+@test "other collections keep the default page length" {
+  run bb-pr -r ws/r --comments 9
+  [ "$status" -eq 0 ]
+  grep -q 'comments?pagelen=100' "$HTTP_LOG"
+}
+
+@test "an explicit page length overrides the default" {
+  run __mt_bb_collect "repositories/ws/r/pullrequests/9/comments" 25
+  [ "$status" -eq 0 ]
+  grep -q 'comments?pagelen=25' "$HTTP_LOG"
+  ! grep -q 'pagelen=100' "$HTTP_LOG"
+}
+
+@test "a page larger than the argument size limit is still collected" {
+  # shellcheck disable=SC2317
+  mt-http() { jq -nc '{values: [range(3) | {id: ., title: ("x" * 100000)}]}'; }
+  run __mt_bb_collect "repositories/ws/r/pullrequests" 50
+  [ "$status" -eq 0 ]
+  [ "$(jq 'length' <<< "$output")" -eq 3 ]
+}
+
+@test "--list prints every row of a page larger than the argument size limit" {
+  # shellcheck disable=SC2317
+  mt-http() {
+    echo "$*" >> "$HTTP_LOG"
+    jq -nc '{values: [range(3) | {id: ., title: "t\(.)", description: ("x" * 100000), author: {display_name: "Al"}, source: {branch: {name: "fix"}}, destination: {branch: {name: "main"}}, updated_on: "2026-10-01T10:00:00+00:00"}]}'
+  }
+  run bb-pr -r ws/r --list
+  [ "$status" -eq 0 ]
+  [ "$(wc -l <<< "$output")" -eq 3 ]
+  [[ "$output" == *"#0"$'\t'"t0"* ]]
+  [[ "$output" == *"#2"$'\t'"t2"* ]]
+  grep -q 'pagelen=50' "$HTTP_LOG"
+}
+
+@test "a page that is not JSON fails instead of printing nothing" {
+  # shellcheck disable=SC2317
+  mt-http() { echo 'not json'; }
+  run __mt_bb_collect "repositories/ws/r/pullrequests" 50
+  [ "$status" -ne 0 ]
+}
+
 @test "--list with an empty result reports it and exits 0" {
   run bb-pr -r ws/r --list --state MERGED
   [ "$status" -eq 0 ]

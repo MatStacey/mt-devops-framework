@@ -10,6 +10,7 @@ This configuration adheres to DRY principles, relies on native Bash and standalo
 
 ## 🚀 Recent Updates & Enhancements
 
+- Fixed `bb-pr --list` (and so `git-review-prs` on Bitbucket remotes) failing with HTTP 400 "Invalid pagelen": pull request lists are now fetched 50 per page, Bitbucket's limit for that endpoint, while other collections keep 100. Collecting a page larger than 128 KB no longer fails silently with an empty list, and a page that is not valid JSON now returns an error.
 - Added `net-lan-devices [--ssdp] [--timeout <s>]`: lists the devices on your local network from the ARP/neighbour table (multicast, broadcast and incomplete entries dropped) and, with `--ssdp`, the devices that answer an SSDP/UPnP search. On WSL both lookups run through the Windows host, because WSL's own network only sees its virtual switch.
 - Added `gcl-sku-price <service>`: looks up Cloud Billing catalogue prices (list prices, one row per pricing tier) by service name, with `--region`, `--match <regex>` and `--currency` (default from `gcp.billing_currency`). The service list is cached for 7 days; prices are built as exact decimal strings.
 - `gcl-network-deps --traffic-days <n>` adds a request-count column (last 1-42 days) for forwarding rules and Cloud Run services from Cloud Monitoring, so you can see which attached resources still serve traffic; other kinds show `n/a`, and a metric that cannot be read shows `?`.
