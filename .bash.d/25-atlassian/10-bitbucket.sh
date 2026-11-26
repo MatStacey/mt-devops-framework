@@ -13,7 +13,8 @@ BITBUCKET_PR_STATES=(OPEN MERGED DECLINED SUPERSEDED)
 BITBUCKET_PR_DEFAULT_STATE="OPEN"
 BITBUCKET_PR_TITLE_MAX=250
 BITBUCKET_MERGE_STRATEGIES=(merge_commit squash fast_forward)
-BITBUCKET_PR_USAGE="Usage: bb-pr [-r <workspace/repo>] (--list [--state OPEN|MERGED|DECLINED|SUPERSEDED] | [--diff|--diffstat|--comments] <pr-number>)
+BITBUCKET_ANNOTATIONS_MAX=50
+BITBUCKET_PR_USAGE="Usage: bb-pr [-r <workspace/repo>] (--list [--state OPEN|MERGED|DECLINED|SUPERSEDED] | [--diff|--diffstat|--comments|--checks] <pr-number>)
        bb-pr [-r <workspace/repo>] <pr-number> [--set-title <text>] [--set-description <@file|->]
        bb-pr [-r <workspace/repo>] --merge <pr-number> [--strategy merge_commit|squash|fast_forward] [--keep-branch] [--yes]"
 
@@ -310,6 +311,47 @@ __mt_bb_merge_pr() {
     return 0
   fi
   echo -e "${CB_YELLOW}⏳ Merge accepted and still running; check with bb-pr ${pr_number}.${C_RESET}"
+}
+
+#######################################
+# Bitbucket: Print a pull request's build statuses and the Code Insights
+# reports on its source commit, with the annotations of each failed report.
+# Reading is not gating: the check states never change the return code.
+# Arguments:
+#   $1 - workspace/repo
+#   $2 - Pull request number
+# Globals:
+#   BITBUCKET_ANNOTATIONS_MAX
+# Returns:
+#   0 when everything was read (including no checks), mt-http's code on API
+#   failure, jq's code on a malformed response
+# Outputs:
+#   Status, report and annotation rows on stdout (see bb_pr_checks.jq), with
+#   control characters removed; a "no checks" note on stderr
+#######################################
+__mt_bb_pr_checks() {
+  local repo="$1" pr_number="$2"
+  local pr_path="repositories/${repo}/pullrequests/${pr_number}"
+  local statuses pr hash reports="[]"
+  statuses=$(__mt_bb_collect "${pr_path}/statuses") || return $?
+  pr=$(__mt_bb_api "$pr_path" --raw) || return $?
+  hash=$(jq -r '.source.commit.hash // empty' <<< "$pr") || return $?
+  if [ -n "$hash" ]; then
+    reports=$(__mt_bb_collect "repositories/${repo}/commit/${hash}/reports") || return $?
+  fi
+  if [ "$statuses" = "[]" ] && [ "$reports" = "[]" ]; then
+    echo -e "ℹ️  No build statuses or Code Insights reports on PR #${pr_number}." >&2
+    return 0
+  fi
+
+  local annotations="{}" report_uuid data
+  for report_uuid in $(jq -r '.[] | select(.result == "FAILED") | .uuid' <<< "$reports"); do
+    data=$(__mt_bb_collect "repositories/${repo}/commit/${hash}/reports/$(__mt_bb_encode_uuid "$report_uuid")/annotations") || return $?
+    annotations=$(printf '%s\n%s\n' "$annotations" "$data" | jq -cs --arg id "$report_uuid" '.[0] + {($id): .[1]}') || return $?
+  done
+  printf '%s\n%s\n%s\n' "$statuses" "$reports" "$annotations" |
+    jq -rs -L "$BITBUCKET_JQ_DIR" --argjson max "$BITBUCKET_ANNOTATIONS_MAX" -f "$BITBUCKET_JQ_DIR/bb_pr_checks.jq" |
+    __mt_strip_control_chars
 }
 
 #######################################
