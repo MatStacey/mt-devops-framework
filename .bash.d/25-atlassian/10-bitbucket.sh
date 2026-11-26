@@ -6,6 +6,7 @@
 
 BITBUCKET_API_BASE="https://api.bitbucket.org/2.0"
 BITBUCKET_PAGE_LENGTH=100
+BITBUCKET_PR_PAGE_LENGTH=50
 BITBUCKET_MAX_PAGES=20
 BITBUCKET_JQ_DIR="$HOME/.bash.d/lib/jq"
 BITBUCKET_PR_STATES=(OPEN MERGED DECLINED SUPERSEDED)
@@ -77,6 +78,7 @@ __mt_bb_api() {
 # combined "values" as one JSON array.
 # Arguments:
 #   $1 - API path of the collection (query string allowed)
+#   $2 - Optional page length (default BITBUCKET_PAGE_LENGTH)
 # Returns:
 #   0 on success, non-zero if any page request fails
 # Outputs:
@@ -84,12 +86,13 @@ __mt_bb_api() {
 #######################################
 __mt_bb_collect() {
   local url="${BITBUCKET_API_BASE}/$1" separator="?" pages=0 page combined="[]"
+  local page_length="${2:-$BITBUCKET_PAGE_LENGTH}"
   [[ "$1" == *\?* ]] && separator="&"
-  url="${url}${separator}pagelen=${BITBUCKET_PAGE_LENGTH}"
+  url="${url}${separator}pagelen=${page_length}"
 
   while [ -n "$url" ] && [ "$pages" -lt "$BITBUCKET_MAX_PAGES" ]; do
     page=$(__mt_bb_api "$url" --raw) || return $?
-    combined=$(jq -c --argjson more "$(jq -c '.values // []' <<< "$page")" '. + $more' <<< "$combined")
+    combined=$(printf '%s\n%s\n' "$combined" "$page" | jq -cs '.[0] + (.[1].values // [])') || return $?
     url=$(jq -r '.next // empty' <<< "$page")
     pages=$((pages + 1))
     if [ -n "$url" ] && [[ "$url" != "${BITBUCKET_API_BASE}/"* ]]; then
@@ -143,7 +146,7 @@ __mt_bb_list_prs() {
   repo=$(__mt_bb_resolve_repo "$repo") || return 1
 
   local data
-  data=$(__mt_bb_collect "repositories/${repo}/pullrequests?state=${state}") || return $?
+  data=$(__mt_bb_collect "repositories/${repo}/pullrequests?state=${state}" "$BITBUCKET_PR_PAGE_LENGTH") || return $?
   if [ "$(jq 'length' <<< "$data")" -eq 0 ]; then
     echo -e "ℹ️  No ${state} pull requests in ${repo}." >&2
     return 0
