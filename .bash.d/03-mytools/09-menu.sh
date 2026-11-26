@@ -343,6 +343,7 @@ __mt_menu_logging_search() { __mt_menu_prompt_arg "Text to search for in Cloud L
 __mt_menu_monitoring_inventory() { gcl-monitoring-inventory; }
 __mt_menu_wif_describe() { __mt_menu_prompt_arg "Workload Identity Pool ID" gcl-wif-describe; }
 __mt_menu_bb_pipelines() { bb-pipelines; }
+__mt_menu_bb_pipelines_by_selector() { bb-pipelines --by-selector; }
 __mt_menu_bb_env() { bb-env list; }
 __mt_menu_bb_deployments() { bb-deployments; }
 __mt_menu_bb_var() { bb-var list; }
@@ -806,6 +807,7 @@ __mt_menu_git_repos() {
     "Show Bitbucket Pull Request (bb-pr)" __mt_menu_bb_pr \
     "Merge Bitbucket Pull Request (bb-pr --merge)" __mt_menu_bb_pr_merge \
     "List Bitbucket Pipeline Runs (bb-pipelines)" __mt_menu_bb_pipelines \
+    "Last Run per Pipeline (bb-pipelines --by-selector)" __mt_menu_bb_pipelines_by_selector \
     "List Bitbucket Environments (bb-env)" __mt_menu_bb_env \
     "List Bitbucket Deployments (bb-deployments)" __mt_menu_bb_deployments \
     "List Bitbucket Variables (bb-var)" __mt_menu_bb_var \

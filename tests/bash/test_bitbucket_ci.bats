@@ -38,9 +38,9 @@ setup() {
       */pipelines/%7Bnosteps%7D/steps/\?*) echo '{"values":[]}' ;;
       */steps/%7Bs3%7D/log) printf 'report https://storage.googleapis.com/b/r.html?x-goog-credential=sa%%40p.example%%2Fx&x-goog-date=20261101T000000Z&x-goog-signature=f00dcafe\n' ;;
       */steps/*/log) printf 'line1\nDB_PASSWORD=hunter2\nAuthorization: Bearer abc.def\nline4\x1b[31m\nline5\nexport API_TOKEN="q1w2"\npassword: '"'"'p3p4'"'"'\n{"password": "j5j6"}\n' ;;
-      */steps/\?*) echo '{"values":[{"uuid":"{s1}","name":"Build","state":{"result":{"name":"SUCCESSFUL"}},"duration_in_seconds":12,"started_on":"2026-10-05T10:00:00Z","completed_on":"2026-10-05T10:00:12Z"},{"uuid":"{s2}","name":"Deploy","state":{"result":{"name":"FAILED"}},"duration_in_seconds":30,"started_on":"2026-10-05T10:00:12Z","completed_on":"2026-10-05T10:00:42Z"},{"uuid":"{s3}","name":"Verify","state":{"name":"IN_PROGRESS"},"started_on":"2026-10-05T10:00:42Z","completed_on":null}]}' ;;
-      */pipelines/42) echo '{"uuid":"{p1}","build_number":42}' ;;
-      */pipelines/%7Bnosteps%7D) echo '{"state":{"name":"COMPLETED","result":{"name":"FAILED","error":{"message":"Step is empty"}}}}' ;;
+      */steps/\?*) echo '{"values":[{"uuid":"{s1}","name":"Build","state":{"result":{"name":"SUCCESSFUL"}},"duration_in_seconds":12,"started_on":"2026-10-05T10:00:00Z","completed_on":"2026-10-05T10:00:12Z"},{"uuid":"{s2}","name":"Deploy","state":{"result":{"name":"FAILED","error":{"message":"Undeclared output\tvariable"}}},"duration_in_seconds":30,"started_on":"2026-10-05T10:00:12Z","completed_on":"2026-10-05T10:00:42Z"},{"uuid":"{s3}","name":"Verify","state":{"name":"IN_PROGRESS"},"started_on":"2026-10-05T10:00:42Z","completed_on":null}]}' ;;
+      */pipelines/42) echo '{"uuid":"{p1}","build_number":42,"trigger":{"name":"PUSH"},"target":{"ref_name":"main","commit":{"hash":"0123456789abcdef"},"selector":{"type":"branches","pattern":"main"}}}' ;;
+      */pipelines/%7Bnosteps%7D) echo '{"uuid":"{nosteps}","build_number":43,"trigger":{"name":"MANUAL"},"target":{"ref_name":"main","commit":{"hash":"fedcba9876543210"},"selector":{"type":"custom","pattern":"deploy-prod"}},"state":{"name":"COMPLETED","result":{"name":"FAILED","error":{"message":"Step is empty"}}}}' ;;
       */pipelines/) echo '{"values":[{"uuid":"{p1}","build_number":42,"state":{"result":{"name":"FAILED"}},"target":{"ref_name":"main"},"creator":{"display_name":"Al"},"duration_in_seconds":95,"created_on":"t"}]}' ;;
       */environments/\?*) echo '{"values":[{"uuid":"{e1}","name":"Staging","environment_type":{"name":"Staging"}}]}' ;;
       */variables\?*) echo '{"values":[{"uuid":"{v1}","key":"PLAIN","value":"visible","secured":false},{"uuid":"{v2}","key":"SECRET","secured":true}]}' ;;
@@ -343,4 +343,121 @@ raise_pr_full_setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *FAILED* ]]
   [[ "$output" == *"Step is empty"* ]]
+}
+
+@test "the no-steps output starts with the run header" {
+  run bb-pipelines -r ws/r '{nosteps}'
+  [ "${lines[0]}" = "#43 MANUAL main fedcba987654 custom:deploy-prod" ]
+  [[ "${lines[1]}" == "No steps ran."* ]]
+  [ "$(grep -c 'pipelines/%7Bnosteps%7D$' "$HTTP_LOG")" -eq 1 ]
+}
+
+@test "a run's step table starts with a header line from one pipeline GET" {
+  run bb-pipelines -r ws/r 42
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = "#42 PUSH main 0123456789ab branches:main" ]
+  [ "$(grep -c 'pipelines/42$' "$HTTP_LOG")" -eq 1 ]
+}
+
+@test "--log prints no header" {
+  run bb-pipelines -r ws/r 42 --log 1
+  [[ "$output" != *"#42 PUSH"* ]]
+}
+
+@test "a failed step's error message is the 8th column, - when there is none" {
+  run bb-pipelines -r ws/r 42
+  [[ "$output" == *$'\t{s2}\tUndeclared output variable'* ]]
+  [[ "$output" == *$'\t{s1}\t-'* ]]
+  [ "$(awk -F'\t' 'NR > 1 { print NF }' <<< "$output" | sort -u)" = "8" ]
+}
+
+# Serves the pipelines list from a fixture, regardless of query.
+stub_run_list() {
+  RUN_LIST_FIXTURE="$BATS_TEST_DIRNAME/fixtures/bb_pipelines/$1"
+  export RUN_LIST_FIXTURE
+  # shellcheck disable=SC2317
+  mt-http() {
+    echo "$*" >> "$HTTP_LOG"
+    case "$*" in
+      *page=2*) command cat "$BATS_TEST_DIRNAME/fixtures/bb_pipelines/scan_page2.json" ;;
+      *) command cat "$RUN_LIST_FIXTURE" ;;
+    esac
+  }
+}
+
+@test "the run list shows each selector type in a 7th column" {
+  stub_run_list runs_by_type.json
+  run bb-pipelines -r ws/r
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'#10\tSUCCESSFUL\t60s\tmain\tAl\t2026-10-10T10:00:00Z\tcustom:deploy-prod'* ]]
+  [[ "$output" == *$'\tbranches:main'* ]]
+  [[ "$output" == *$'\ttags:v*'* ]]
+  [[ "$output" == *$'\tpull-requests:**'* ]]
+  [[ "$output" == *$'\tdefault'* ]]
+  [[ "$output" == *$'\tbranches:release (imported: shared-build)'* ]]
+  [[ "$output" == *$'#4\tCOMPLETED\t1s\tstaging\tAl\t2026-10-04T10:00:00Z\t-'* ]]
+  [ "$(awk -F'\t' '{ print NF }' <<< "$output" | sort -u)" = "7" ]
+}
+
+@test "--selector filters on the server by selector pattern" {
+  stub_run_list runs_by_type.json
+  run bb-pipelines -r ws/r --selector deploy-prod
+  [ "$status" -eq 0 ]
+  grep -q -- '-q target.selector.pattern=deploy-prod' "$HTTP_LOG"
+}
+
+@test "--selector with an invalid value exits 1 without a request" {
+  run bb-pipelines -r ws/r --selector 'bad;value'
+  [ "$status" -eq 1 ]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "--by-selector prints the newest run of each selector over two pages, stalest first" {
+  stub_run_list scan_page1.json
+  run bb-pipelines -r ws/r --by-selector -n 6
+  [ "$status" -eq 0 ]
+  [ "${#lines[@]}" -eq 4 ]
+  [ "${lines[0]}" = $'-\t#2\tCOMPLETED\t2026-10-02T10:00:00Z' ]
+  [ "${lines[1]}" = $'custom:nightly\t#3\tSUCCESSFUL\t2026-10-03T10:00:00Z' ]
+  [ "${lines[2]}" = $'custom:deploy-prod\t#29\tFAILED\t2026-10-29T10:00:00Z' ]
+  [ "${lines[3]}" = $'branches:main\t#30\tSUCCESSFUL\t2026-10-30T10:00:00Z' ]
+  grep -q 'page=1' "$HTTP_LOG"
+  grep -q 'page=2' "$HTTP_LOG"
+}
+
+@test "--by-selector warns when the scan stops before the oldest run" {
+  stub_run_list scan_page1.json
+  run --separate-stderr bb-pipelines -r ws/r --by-selector -n 2
+  [ "$status" -eq 0 ]
+  [[ "$stderr" == *"older runs may exist"* ]]
+  [ "$(grep -c 'pagelen=2' "$HTTP_LOG")" -eq 1 ]
+  [ "${#lines[@]}" -eq 2 ]
+}
+
+@test "--by-selector without -n scans the default 300 runs, 100 per page" {
+  stub_run_list scan_page1.json
+  run bb-pipelines -r ws/r --by-selector
+  [ "$status" -eq 0 ]
+  grep -q 'pagelen=100' "$HTTP_LOG"
+}
+
+@test "--by-selector cannot be combined with a build, --log or --wait" {
+  run bb-pipelines -r ws/r --by-selector 42
+  [ "$status" -eq 1 ]
+  run bb-pipelines -r ws/r --by-selector 42 --wait
+  [ "$status" -eq 1 ]
+  run bb-pipelines -r ws/r --selector deploy-prod 42 --log 1
+  [ "$status" -eq 1 ]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "--by-selector rejects a scan size above the maximum" {
+  run bb-pipelines -r ws/r --by-selector -n 2001
+  [ "$status" -eq 1 ]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "the header shows a pull-request run's source branch" {
+  run jq -r -L "$HOME/.bash.d/lib/jq" -f "$HOME/.bash.d/lib/jq/bb_pipeline_header.jq" <<< '{"build_number":7,"trigger":{"name":"PULLREQUEST_CREATED"},"target":{"source":"feat/x","commit":{"hash":"abc"},"selector":{"type":"pull-requests","pattern":"**"}}}'
+  [ "$output" = "#7 PULLREQUEST_CREATED feat/x abc pull-requests:**" ]
 }

@@ -18,6 +18,8 @@ BITBUCKET_VAR_KEY_REGEX='^[A-Za-z_][A-Za-z0-9_]*$'
 BITBUCKET_ENV_TYPES=("Test" "Staging" "Production")
 BITBUCKET_REDACT_SED="$HOME/.bash.d/lib/sed/redact_log.sed"
 BITBUCKET_PR_CLOSE_SOURCE_DEFAULT=true
+BITBUCKET_SELECTOR_SCAN_DEFAULT=300
+BITBUCKET_SELECTOR_SCAN_MAX=2000
 
 #######################################
 # Bitbucket: Percent-encode the braces of a UUID for use in an API path
@@ -33,6 +35,26 @@ __mt_bb_encode_uuid() {
 }
 
 #######################################
+# Bitbucket: Fetch a pipeline object by build number or UUID, in one GET
+# Arguments:
+#   $1 - workspace/repo, $2 - build number or UUID (braces optional)
+# Returns:
+#   0 and the pipeline JSON on stdout, 1 if no such pipeline exists,
+#   mt-http's code on API failure
+#######################################
+__mt_bb_get_pipeline() {
+  local repo="$1" ref="$2" path found
+  path="$ref"
+  [[ "$ref" =~ ^[0-9]+$ ]] || path=$(__mt_bb_encode_uuid "$ref")
+  found=$(__mt_bb_api "repositories/${repo}/pipelines/${path}" --raw) || return $?
+  if [ -z "$(jq -r '.uuid // empty' <<< "$found")" ]; then
+    echo -e "${CB_RED}🚨 No pipeline ${ref}.${C_RESET}" >&2
+    return 1
+  fi
+  echo "$found"
+}
+
+#######################################
 # Bitbucket: Resolve a pipeline build number or UUID to an encoded UUID
 # Arguments:
 #   $1 - workspace/repo, $2 - build number or UUID
@@ -45,13 +67,43 @@ __mt_bb_resolve_pipeline() {
     __mt_bb_encode_uuid "$ref"
     return 0
   fi
-  found=$(__mt_bb_api "repositories/${repo}/pipelines/${ref}" --raw) || return $?
-  found=$(jq -r '.uuid // empty' <<< "$found")
-  if [ -z "$found" ]; then
-    echo -e "${CB_RED}🚨 No pipeline with build number ${ref}.${C_RESET}" >&2
-    return 1
+  found=$(__mt_bb_get_pipeline "$repo" "$ref") || return $?
+  __mt_bb_encode_uuid "$(jq -r '.uuid' <<< "$found")"
+}
+
+#######################################
+# Bitbucket: Fetch the newest pipeline runs, newest first, page by page.
+# Arguments:
+#   $1 - workspace/repo
+#   $2 - Number of runs to scan
+#   $3 - Optional selector pattern to filter on (server-side)
+# Returns:
+#   0 on success, mt-http's code on API failure, jq's code on a bad page
+# Outputs:
+#   JSON array of at most $2 runs on stdout; a warning on stderr when older
+#   runs exist beyond the scan
+#######################################
+__mt_bb_scan_pipelines() {
+  local repo="$1" count="$2" selector="$3"
+  local page_length="$BITBUCKET_PAGE_LENGTH"
+  [ "$count" -lt "$page_length" ] && page_length="$count"
+  local -a filter=()
+  [ -n "$selector" ] && filter=(-q "target.selector.pattern=${selector}")
+
+  local page_number=1 page runs="[]" fetched=0 next=""
+  while [ "$fetched" -lt "$count" ]; do
+    page=$(__mt_bb_api "repositories/${repo}/pipelines/" --raw -q "pagelen=${page_length}" -q "sort=-created_on" \
+      -q "page=${page_number}" "${filter[@]}") || return $?
+    runs=$(printf '%s\n%s\n' "$runs" "$page" | jq -cs '.[0] + (.[1].values // [])') || return $?
+    fetched=$(jq 'length' <<< "$runs")
+    next=$(jq -r '.next // empty' <<< "$page")
+    [ -z "$next" ] && break
+    page_number=$((page_number + 1))
+  done
+  if [ -n "$next" ] || [ "$fetched" -gt "$count" ]; then
+    echo -e "${CB_YELLOW}⚠️  Scanned the newest ${count} runs; older runs may exist (raise -n, up to ${BITBUCKET_SELECTOR_SCAN_MAX}).${C_RESET}" >&2
   fi
-  __mt_bb_encode_uuid "$found"
+  jq -c --argjson n "$count" '.[0:$n]' <<< "$runs"
 }
 
 #######################################
@@ -193,13 +245,19 @@ __mt_bb_wait_existing_pipeline() {
 #######################################
 # Bitbucket: List recent pipeline runs, show a run's steps, or print a
 # step's log tail with credentials redacted
-# Usage: bb-pipelines [-r <workspace/repo>] [-n <count>] [<build#|uuid> [--log <step#|uuid>] [--tail <lines>]]
+# Usage: bb-pipelines [-r <workspace/repo>] [-n <count>] [--selector <pattern>] [<build#|uuid> [--log <step#|uuid>] [--tail <lines>]]
+# Usage: bb-pipelines [-r <w/r>] [-n <count>] [--selector <pattern>] --by-selector
 # Usage: bb-pipelines [-r <w/r>] (<build#|uuid> | --commit <sha>) --wait [--timeout <s>]
 # Arguments:
 #   <build#|uuid>        Pipeline build number or UUID (omit to list recent runs)
 # Options:
 #   -r, --repo <w/r>     Repository (default: the current directory's Bitbucket remote)
-#   -n, --count <n>      Number of runs to list (default: 10)
+#   -n, --count <n>      Number of runs to list (default: 10), or with --by-selector,
+#                        the newest runs to scan (default: 300, at most 2000)
+#   --selector <pattern> List only runs whose selector pattern matches exactly (filtered
+#                        by Bitbucket); not with <build#|uuid>
+#   --by-selector        Print the latest run of each selector, stalest first; not with
+#                        <build#|uuid>, --log or --wait
 #   --log <step>         Print the log of a step, by 1-based number or UUID
 #   --tail <lines>       Lines of log to keep (default: 100)
 #   --wait               Wait for the run to finish, then print its step table
@@ -212,15 +270,21 @@ __mt_bb_wait_existing_pipeline() {
 #   pipeline or missing credentials, 124 if --wait timed out, mt-http's code on API failure
 #   (with --wait, after 5 failed polls in a row)
 # Outputs:
-#   Runs as "#build<TAB>state<TAB>duration<TAB>branch<TAB>creator<TAB>created" lines,
-#   steps as "n<TAB>result<TAB>name<TAB>duration<TAB>started_on<TAB>completed_on<TAB>uuid"
-#   lines (- when not yet set); logs as redacted text; with --wait, state changes on
-#   stderr, then "#build RESULT" and the step table on stdout
+#   Runs as "#build<TAB>state<TAB>duration<TAB>branch<TAB>creator<TAB>created<TAB>selector"
+#   lines; a selector is "<type>:<pattern>", "default" or "-", plus " (imported: <name>)"
+#   for a pipeline imported from another repository. A run's steps follow a
+#   "#build trigger ref commit selector" header line, as
+#   "n<TAB>result<TAB>name<TAB>duration<TAB>started_on<TAB>completed_on<TAB>uuid<TAB>error"
+#   lines (- when not yet set); logs as redacted text; --by-selector as
+#   "selector<TAB>#build<TAB>state<TAB>created" lines, with a warning on stderr when
+#   older runs exist beyond the scan; with --wait, state changes on stderr, then
+#   "#build RESULT" and the step table on stdout
 # Example: bb-pipelines --commit "$(git rev-parse HEAD)" --wait --timeout 900
+# Example: bb-pipelines --by-selector -n 1000
 #######################################
 bb-pipelines() {
-  local repo="" count="$BITBUCKET_PIPELINES_DEFAULT_COUNT" ref="" log_step="" tail_lines="$BITBUCKET_LOG_DEFAULT_TAIL"
-  local wait_for="" commit="" timeout="$BITBUCKET_PIPELINE_WAIT_TIMEOUT" timeout_set=""
+  local repo="" count="$BITBUCKET_PIPELINES_DEFAULT_COUNT" count_set="" ref="" log_step="" tail_lines="$BITBUCKET_LOG_DEFAULT_TAIL"
+  local wait_for="" commit="" timeout="$BITBUCKET_PIPELINE_WAIT_TIMEOUT" timeout_set="" selector="" by_selector=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
       -h | --help)
@@ -233,8 +297,14 @@ bb-pipelines() {
         ;;
       -n | --count)
         count="${2:-}"
+        count_set="1"
         shift
         ;;
+      --selector)
+        selector="${2:-}"
+        shift
+        ;;
+      --by-selector) by_selector="1" ;;
       --log)
         log_step="${2:-}"
         shift
@@ -287,6 +357,21 @@ bb-pipelines() {
       return 1
     fi
   fi
+  if { [ -n "$selector" ] || [ -n "$by_selector" ]; } && { [ -n "$ref" ] || [ -n "$log_step" ] || [ -n "$wait_for" ]; }; then
+    echo "Usage: bb-pipelines [-r <w/r>] [-n <count>] [--selector <pattern>] [--by-selector] (not with <build#|uuid>, --log or --wait)" >&2
+    return 1
+  fi
+  if [ -n "$selector" ] && [[ ! "$selector" =~ $BITBUCKET_PATTERN_REGEX ]]; then
+    echo -e "${CB_RED}❌ Invalid --selector '${selector}'.${C_RESET}" >&2
+    return 1
+  fi
+  if [ -n "$by_selector" ]; then
+    [ -z "$count_set" ] && count="$BITBUCKET_SELECTOR_SCAN_DEFAULT"
+    if [ "$count" -lt 1 ] || [ "$count" -gt "$BITBUCKET_SELECTOR_SCAN_MAX" ]; then
+      echo -e "${CB_RED}❌ With --by-selector, -n must be 1-${BITBUCKET_SELECTOR_SCAN_MAX}.${C_RESET}" >&2
+      return 1
+    fi
+  fi
   repo=$(__mt_bb_resolve_repo "$repo") || return 1
   if [ -n "$wait_for" ]; then
     __mt_bb_wait_existing_pipeline "$repo" "$ref" "$commit" "$timeout"
@@ -294,19 +379,27 @@ bb-pipelines() {
   fi
 
   local data
+  if [ -n "$by_selector" ]; then
+    data=$(__mt_bb_scan_pipelines "$repo" "$count" "$selector") || return $?
+    jq -r -L "$BITBUCKET_JQ_DIR" -f "$BITBUCKET_JQ_DIR/bb_pipelines_by_selector.jq" <<< "$data" | __mt_strip_control_chars
+    return 0
+  fi
   if [ -z "$ref" ]; then
-    data=$(__mt_bb_api "repositories/${repo}/pipelines/" --raw -q "pagelen=${count}" -q "sort=-created_on") || return $?
-    jq -r -f "$BITBUCKET_JQ_DIR/bb_pipelines_list.jq" <<< "$data" | __mt_strip_control_chars
+    local -a filter=()
+    [ -n "$selector" ] && filter=(-q "target.selector.pattern=${selector}")
+    data=$(__mt_bb_api "repositories/${repo}/pipelines/" --raw -q "pagelen=${count}" -q "sort=-created_on" "${filter[@]}") || return $?
+    jq -r -L "$BITBUCKET_JQ_DIR" -f "$BITBUCKET_JQ_DIR/bb_pipelines_list.jq" <<< "$data" | __mt_strip_control_chars
     return 0
   fi
 
-  local pipeline_uuid steps
-  pipeline_uuid=$(__mt_bb_resolve_pipeline "$repo" "$ref") || return $?
+  local pipeline pipeline_uuid steps
+  pipeline=$(__mt_bb_get_pipeline "$repo" "$ref") || return $?
+  pipeline_uuid=$(__mt_bb_encode_uuid "$(jq -r '.uuid' <<< "$pipeline")")
   steps=$(__mt_bb_collect "repositories/${repo}/pipelines/${pipeline_uuid}/steps/") || return $?
 
+  [ -z "$log_step" ] && jq -r -L "$BITBUCKET_JQ_DIR" -f "$BITBUCKET_JQ_DIR/bb_pipeline_header.jq" <<< "$pipeline" | __mt_strip_control_chars
   if [ "$steps" = "[]" ]; then
-    data=$(__mt_bb_api "repositories/${repo}/pipelines/${pipeline_uuid}" --raw) || return $?
-    jq -r -f "$BITBUCKET_JQ_DIR/bb_pipeline_no_steps.jq" <<< "$data" | __mt_strip_control_chars
+    jq -r -f "$BITBUCKET_JQ_DIR/bb_pipeline_no_steps.jq" <<< "$pipeline" | __mt_strip_control_chars
     return 0
   fi
   if [ -z "$log_step" ]; then

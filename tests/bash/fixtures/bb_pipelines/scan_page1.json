@@ -1,0 +1,50 @@
+{
+  "values": [
+    {
+      "build_number": 30,
+      "state": {
+        "result": {
+          "name": "SUCCESSFUL"
+        }
+      },
+      "target": {
+        "selector": {
+          "type": "branches",
+          "pattern": "main"
+        }
+      },
+      "created_on": "2026-10-30T10:00:00Z"
+    },
+    {
+      "build_number": 29,
+      "state": {
+        "result": {
+          "name": "FAILED"
+        }
+      },
+      "target": {
+        "selector": {
+          "type": "custom",
+          "pattern": "deploy-prod"
+        }
+      },
+      "created_on": "2026-10-29T10:00:00Z"
+    },
+    {
+      "build_number": 28,
+      "state": {
+        "result": {
+          "name": "SUCCESSFUL"
+        }
+      },
+      "target": {
+        "selector": {
+          "type": "branches",
+          "pattern": "main"
+        }
+      },
+      "created_on": "2026-10-28T10:00:00Z"
+    }
+  ],
+  "next": "https://api.bitbucket.org/2.0/repositories/ws/r/pipelines/?page=2"
+}

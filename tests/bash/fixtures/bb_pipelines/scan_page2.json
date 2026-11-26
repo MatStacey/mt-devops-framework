@@ -1,0 +1,44 @@
+{
+  "values": [
+    {
+      "build_number": 27,
+      "state": {
+        "result": {
+          "name": "SUCCESSFUL"
+        }
+      },
+      "target": {
+        "selector": {
+          "type": "custom",
+          "pattern": "deploy-prod"
+        }
+      },
+      "created_on": "2026-10-27T10:00:00Z"
+    },
+    {
+      "build_number": 3,
+      "state": {
+        "result": {
+          "name": "SUCCESSFUL"
+        }
+      },
+      "target": {
+        "selector": {
+          "type": "custom",
+          "pattern": "nightly"
+        }
+      },
+      "created_on": "2026-10-03T10:00:00Z"
+    },
+    {
+      "build_number": 2,
+      "state": {
+        "name": "COMPLETED"
+      },
+      "target": {
+        "ref_name": "x"
+      },
+      "created_on": "2026-10-02T10:00:00Z"
+    }
+  ]
+}
