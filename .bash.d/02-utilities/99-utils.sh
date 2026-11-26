@@ -31,6 +31,18 @@ __get_prompt() {
 }
 
 #######################################
+# System: Check whether a controlling terminal can be opened, so a prompt
+# reading from /dev/tty can be skipped silently when there is none (agents,
+# CI, cron). Stdin is not checked: it can be a pipe while a terminal is
+# still attached.
+# Returns:
+#   0 if /dev/tty can be opened, 1 otherwise
+#######################################
+__mt_has_tty() {
+  { : < /dev/tty; } 2> /dev/null
+}
+
+#######################################
 # System: Audit VCS root for unorganized files and directories
 #######################################
 mt-vcs-audit() {

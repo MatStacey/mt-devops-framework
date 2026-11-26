@@ -562,6 +562,11 @@ __git_raise_pr_handle_dead_pr() {
     git push origin "$current_branch"
     __git_raise_pr_dead_pr_action="done"
   elif [ "$pr_state" = "MERGED" ] || [ "$pr_state" = "CLOSED" ]; then
+    if ! __mt_has_tty; then
+      echo -e "${CB_YELLOW}⚠️  This branch has a ${pr_state} PR. Run git-raise-pr from a terminal to recycle it, or check out a new branch.${C_RESET}"
+      __git_raise_pr_dead_pr_action="error"
+      return
+    fi
     echo -e "${CB_YELLOW}⚠️  This branch has a ${pr_state} PR (Dead Branch).${C_RESET}"
     read -r -p "Would you like to delete this branch locally and checkout a new one? [Y/n] " -n 1 < /dev/tty || REPLY="n"
     echo
@@ -607,6 +612,23 @@ __git_raise_pr_push_branch() {
 }
 
 #######################################
+# Git: Ask [Y/n] whether to open a Pull Request in the browser,
+# defaulting to yes on Enter. No terminal or a failed read means no,
+# without a prompt. Returns success/failure rather than taking a URL
+# directly so callers can defer computing the URL (e.g. an extra `gh`
+# API call) until the user has actually confirmed they want it.
+# Returns:
+#   0 if the user confirmed (or accepted the default), 1 otherwise
+#######################################
+__git_raise_pr_confirm_open_browser() {
+  __mt_has_tty || return 1
+  local REPLY
+  read -r -p "🌐 View Pull Request in browser? [Y/n] " -n 1 REPLY < /dev/tty || REPLY="n"
+  echo
+  [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ] || [ -z "$REPLY" ]
+}
+
+#######################################
 # Git: Create the PR via GitHub CLI, or open the appropriate web compare URL
 # for GitHub/GitLab/Bitbucket when 'gh' isn't available.
 # GitHub rejects PR titles over 256 characters outright -- a hand-typed
@@ -617,22 +639,6 @@ __git_raise_pr_push_branch() {
 # Globals (read, set by git-raise-pr):
 #   is_github, target_branch, pr_title, pr_body, origin_url, current_branch
 #######################################
-#######################################
-# Git: Ask [Y/n] whether to open a Pull Request in the browser,
-# defaulting to yes on Enter or a failed read (e.g. no /dev/tty
-# available). Returns success/failure rather than taking a URL directly
-# so callers can defer computing the URL (e.g. an extra `gh` API call)
-# until the user has actually confirmed they want it.
-# Returns:
-#   0 if the user confirmed (or accepted the default), 1 otherwise
-#######################################
-__git_raise_pr_confirm_open_browser() {
-  local REPLY
-  read -r -p "🌐 View Pull Request in browser? [Y/n] " -n 1 REPLY < /dev/tty || REPLY="n"
-  echo
-  [ "$REPLY" = "y" ] || [ "$REPLY" = "Y" ] || [ -z "$REPLY" ]
-}
-
 __git_raise_pr_create_or_open() {
   if [ "$is_github" = true ] && command -v gh > /dev/null 2>&1; then
     echo -e "${CB_BLUE}🛠️  Creating Pull Request via GitHub CLI...${C_RESET}"
