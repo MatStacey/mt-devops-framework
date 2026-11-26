@@ -1,0 +1,162 @@
+{
+  "values": [
+    {
+      "build_number": 10,
+      "state": {
+        "result": {
+          "name": "SUCCESSFUL"
+        }
+      },
+      "duration_in_seconds": 60,
+      "target": {
+        "ref_name": "main",
+        "selector": {
+          "type": "custom",
+          "pattern": "deploy-prod"
+        }
+      },
+      "trigger": {
+        "name": "MANUAL"
+      },
+      "creator": {
+        "display_name": "Al"
+      },
+      "created_on": "2026-10-10T10:00:00Z"
+    },
+    {
+      "build_number": 9,
+      "state": {
+        "result": {
+          "name": "FAILED"
+        }
+      },
+      "duration_in_seconds": 30,
+      "target": {
+        "ref_name": "main",
+        "selector": {
+          "type": "branches",
+          "pattern": "main"
+        }
+      },
+      "trigger": {
+        "name": "PUSH"
+      },
+      "creator": {
+        "display_name": "Al"
+      },
+      "created_on": "2026-10-09T10:00:00Z"
+    },
+    {
+      "build_number": 8,
+      "state": {
+        "result": {
+          "name": "SUCCESSFUL"
+        }
+      },
+      "duration_in_seconds": 20,
+      "target": {
+        "ref_name": "v1.2.0",
+        "selector": {
+          "type": "tags",
+          "pattern": "v*"
+        }
+      },
+      "trigger": {
+        "name": "PUSH"
+      },
+      "creator": {
+        "display_name": "Bo"
+      },
+      "created_on": "2026-10-08T10:00:00Z"
+    },
+    {
+      "build_number": 7,
+      "state": {
+        "result": {
+          "name": "SUCCESSFUL"
+        }
+      },
+      "duration_in_seconds": 40,
+      "target": {
+        "source": "feat/x",
+        "destination": "main",
+        "selector": {
+          "type": "pull-requests",
+          "pattern": "**"
+        }
+      },
+      "trigger": {
+        "name": "PULLREQUEST_CREATED"
+      },
+      "creator": {
+        "display_name": "Bo"
+      },
+      "created_on": "2026-10-07T10:00:00Z"
+    },
+    {
+      "build_number": 6,
+      "state": {
+        "result": {
+          "name": "SUCCESSFUL"
+        }
+      },
+      "duration_in_seconds": 50,
+      "target": {
+        "ref_name": "main",
+        "selector": {
+          "type": "default"
+        }
+      },
+      "trigger": {
+        "name": "SCHEDULE"
+      },
+      "creator": {
+        "display_name": "Al"
+      },
+      "created_on": "2026-10-06T10:00:00Z"
+    },
+    {
+      "build_number": 5,
+      "state": {
+        "result": {
+          "name": "SUCCESSFUL"
+        }
+      },
+      "duration_in_seconds": 70,
+      "target": {
+        "ref_name": "main",
+        "selector": {
+          "type": "branches",
+          "pattern": "release",
+          "imported_from": {
+            "pipelineName": "shared-build"
+          }
+        }
+      },
+      "trigger": {
+        "name": "PUSH"
+      },
+      "creator": {
+        "display_name": "Al"
+      },
+      "created_on": "2026-10-05T10:00:00Z"
+    },
+    {
+      "build_number": 4,
+      "state": {
+        "name": "COMPLETED"
+      },
+      "duration_in_seconds": 1,
+      "target": {
+        "ref_name": "staging"
+      },
+      "trigger": {
+        "name": "PUSH"
+      },
+      "creator": {
+        "display_name": "Al"
+      },
+      "created_on": "2026-10-04T10:00:00Z"
+    }
+  ]
+}
