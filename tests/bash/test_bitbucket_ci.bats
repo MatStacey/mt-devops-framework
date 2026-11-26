@@ -36,6 +36,7 @@ setup() {
     [ -n "${STUB_FAIL:-}" ] && return 4
     case "$last" in
       */pipelines/%7Bnosteps%7D/steps/\?*) echo '{"values":[]}' ;;
+      */steps/%7Bs3%7D/log) printf 'report https://storage.googleapis.com/b/r.html?x-goog-credential=sa%%40p.example%%2Fx&x-goog-date=20261101T000000Z&x-goog-signature=f00dcafe\n' ;;
       */steps/*/log) printf 'line1\nDB_PASSWORD=hunter2\nAuthorization: Bearer abc.def\nline4\x1b[31m\nline5\nexport API_TOKEN="q1w2"\npassword: '"'"'p3p4'"'"'\n{"password": "j5j6"}\n' ;;
       */steps/\?*) echo '{"values":[{"uuid":"{s1}","name":"Build","state":{"result":{"name":"SUCCESSFUL"}},"duration_in_seconds":12,"started_on":"2026-10-05T10:00:00Z","completed_on":"2026-10-05T10:00:12Z"},{"uuid":"{s2}","name":"Deploy","state":{"result":{"name":"FAILED"}},"duration_in_seconds":30,"started_on":"2026-10-05T10:00:12Z","completed_on":"2026-10-05T10:00:42Z"},{"uuid":"{s3}","name":"Verify","state":{"name":"IN_PROGRESS"},"started_on":"2026-10-05T10:00:42Z","completed_on":null}]}' ;;
       */pipelines/42) echo '{"uuid":"{p1}","build_number":42}' ;;
@@ -94,6 +95,47 @@ setup() {
   [[ "$output" != *p3p4* ]]
   [[ "$output" != *j5j6* ]]
   [[ "$output" == *'API_TOKEN="***"'* ]]
+}
+
+@test "signed URL credentials are redacted in step logs" {
+  run bb-pipelines -r ws/r 42 --log 3
+  [ "$status" -eq 0 ]
+  [[ "$output" != *f00dcafe* ]]
+  [[ "$output" != *p.example* ]]
+  [[ "$output" == *"x-goog-credential=***&x-goog-date=20261101T000000Z&x-goog-signature=***"* ]]
+}
+
+@test "GCS V4 signed URL: signature and credential masked, path, date and expiry kept" {
+  run sed -E -f "$BITBUCKET_REDACT_SED" <<< 'https://storage.googleapis.com/b/o.xml?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=sa%40p.example%2F20261101%2Fauto&X-Goog-Date=20261101T000000Z&X-Goog-Expires=600&X-Goog-SignedHeaders=host&X-Goog-Signature=abc123'
+  [ "$output" = 'https://storage.googleapis.com/b/o.xml?X-Goog-Algorithm=GOOG4-RSA-SHA256&X-Goog-Credential=***&X-Goog-Date=20261101T000000Z&X-Goog-Expires=600&X-Goog-SignedHeaders=host&X-Goog-Signature=***' ]
+}
+
+@test "GCS V4 signed URL in lowercase is masked the same way" {
+  run sed -E -f "$BITBUCKET_REDACT_SED" <<< 'https://storage.googleapis.com/b/o.xml?x-goog-algorithm=GOOG4-RSA-SHA256&x-goog-credential=sa%40p.example%2Fx&x-goog-date=20261101T000000Z&x-goog-expires=600&x-goog-signedheaders=host&x-goog-signature=abc123'
+  [ "$output" = 'https://storage.googleapis.com/b/o.xml?x-goog-algorithm=GOOG4-RSA-SHA256&x-goog-credential=***&x-goog-date=20261101T000000Z&x-goog-expires=600&x-goog-signedheaders=host&x-goog-signature=***' ]
+}
+
+@test "S3 presigned URL: credential, security token and signature masked" {
+  run sed -E -f "$BITBUCKET_REDACT_SED" <<< 'https://bkt.s3.example/k?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=AKIDEXAMPLE%2F20261101&X-Amz-Date=20261101T000000Z&X-Amz-Expires=600&X-Amz-Security-Token=FQoGtok&X-Amz-SignedHeaders=host&X-Amz-Signature=deadbeef'
+  [[ "$output" != *AKIDEXAMPLE* ]]
+  [[ "$output" != *FQoGtok* ]]
+  [[ "$output" != *deadbeef* ]]
+  [[ "$output" == *"X-Amz-Credential=***&X-Amz-Date=20261101T000000Z&X-Amz-Expires=600&"* ]]
+}
+
+@test "GCS V2 signed URL: access id and signature masked, expiry kept" {
+  run sed -E -f "$BITBUCKET_REDACT_SED" <<< 'https://storage.googleapis.com/b/o?GoogleAccessId=sa@p.example&Expires=1700000000&Signature=c2ln%3D'
+  [ "$output" = 'https://storage.googleapis.com/b/o?GoogleAccessId=***&Expires=1700000000&Signature=***' ]
+}
+
+@test "two signed URLs on one line are both masked" {
+  run sed -E -f "$BITBUCKET_REDACT_SED" <<< 'a https://x/o?X-Goog-Signature=s1&X-Goog-Date=d1 b https://y/o?X-Goog-Signature=s2&X-Goog-Date=d2'
+  [ "$output" = 'a https://x/o?X-Goog-Signature=***&X-Goog-Date=d1 b https://y/o?X-Goog-Signature=***&X-Goog-Date=d2' ]
+}
+
+@test "Signature= outside a query string is left alone" {
+  run sed -E -f "$BITBUCKET_REDACT_SED" <<< 'Signature=abc is plain'
+  [ "$output" = 'Signature=abc is plain' ]
 }
 
 @test "an unknown step number is an error" {
