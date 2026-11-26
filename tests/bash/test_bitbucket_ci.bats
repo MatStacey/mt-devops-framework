@@ -224,6 +224,33 @@ setup() {
   [ "$status" -eq 1 ]
 }
 
+@test "PR creation closes the source branch on merge by default" {
+  run __mt_bb_create_pull_request ws/r feat main "T" "B"
+  [ "$status" -eq 0 ]
+  grep -q '"close_source_branch":true' "$HTTP_LOG"
+}
+
+@test "PR creation with close_source false keeps the source branch" {
+  run __mt_bb_create_pull_request ws/r feat main "T" "B" false
+  [ "$status" -eq 0 ]
+  grep -q '"close_source_branch":false' "$HTTP_LOG"
+}
+
+@test "PR creation rejects a close_source that is not true or false without a request" {
+  run __mt_bb_create_pull_request ws/r feat main "T" "B" yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"close_source must be true or false"* ]]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "an already-open PR is returned without a POST or a PUT" {
+  STUB_EXISTING_PR=1 run __mt_bb_create_pull_request ws/r feat main "T" "B" false
+  [ "$status" -eq 0 ]
+  [ "$output" = "https://bitbucket.org/ws/r/pull-requests/5" ]
+  run grep -qE -- '-d |-X PUT|close_source_branch' "$HTTP_LOG"
+  [ "$status" -eq 1 ]
+}
+
 @test "PR creation failure returns 1 so git-raise-pr can fall back" {
   STUB_FAIL=1 run __mt_bb_create_pull_request ws/r feat main "T" "B"
   [ "$status" -eq 1 ]
@@ -253,6 +280,53 @@ raise_pr_setup() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"pull-requests/6"* ]]
   [ "$(cat "$opened_log")" = "https://bitbucket.org/ws/r/pull-requests/6" ]
+}
+
+# Runs git-raise-pr end to end on a Bitbucket remote with every step before
+# PR creation stubbed; the create helper logs the close_source it receives.
+raise_pr_full_setup() {
+  raise_pr_setup
+  close_log="$BATS_TEST_TMPDIR/close_source"
+  # shellcheck disable=SC2317
+  __mt_git_default_branch() { echo main; }
+  # shellcheck disable=SC2317
+  git() {
+    [ "$*" = "branch --show-current" ] && echo feat
+    return 0
+  }
+  # shellcheck disable=SC2317
+  __git_raise_pr_sync_with_target() { return 0; }
+  # shellcheck disable=SC2317,SC2034
+  __git_raise_pr_handle_dead_pr() { is_github=false origin_url="git@bitbucket.org:ws/r.git"; }
+  # shellcheck disable=SC2317
+  __git_raise_pr_push_branch() { return 0; }
+  # shellcheck disable=SC2317
+  __mt_bb_create_pull_request() {
+    echo "$6" > "$close_log"
+    echo "https://bitbucket.org/ws/r/pull-requests/6"
+  }
+}
+
+@test "git-raise-pr closes the Bitbucket source branch by default" {
+  raise_pr_full_setup
+  run git-raise-pr -t T -m B
+  [ "$status" -eq 0 ]
+  [ "$(cat "$close_log")" = "true" ]
+}
+
+@test "git-raise-pr -k keeps the Bitbucket source branch" {
+  raise_pr_full_setup
+  run git-raise-pr -k -t T -m B
+  [ "$status" -eq 0 ]
+  [ "$(cat "$close_log")" = "false" ]
+}
+
+@test "git-raise-pr rejects an unknown option" {
+  raise_pr_full_setup
+  run git-raise-pr -z
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"[-k]"* ]]
+  [ ! -f "$close_log" ]
 }
 
 @test "git-raise-pr falls back to the browser compare URL when the API fails" {

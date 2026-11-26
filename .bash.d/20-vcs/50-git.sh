@@ -637,7 +637,8 @@ __git_raise_pr_confirm_open_browser() {
 # fail PR creation over it. The full original title is never lost, it's
 # preserved as the first line of the PR body.
 # Globals (read, set by git-raise-pr):
-#   is_github, target_branch, pr_title, pr_body, origin_url, current_branch
+#   is_github, target_branch, pr_title, pr_body, origin_url, current_branch,
+#   pr_close_source (Bitbucket only: "true" or "false"; empty = BITBUCKET_PR_CLOSE_SOURCE_DEFAULT)
 #######################################
 __git_raise_pr_create_or_open() {
   if [ "$is_github" = true ] && command -v gh > /dev/null 2>&1; then
@@ -706,7 +707,7 @@ ${pr_body}"
       local bitbucket_repo bitbucket_pr_url
       echo -e "${CB_BLUE}🛠️  Creating Pull Request via Bitbucket API...${C_RESET}"
       bitbucket_repo=$(__mt_bb_resolve_repo)
-      if bitbucket_pr_url=$(__mt_bb_create_pull_request "$bitbucket_repo" "$current_branch" "$target_branch" "$pr_title" "$pr_body") && [ -n "$bitbucket_pr_url" ]; then
+      if bitbucket_pr_url=$(__mt_bb_create_pull_request "$bitbucket_repo" "$current_branch" "$target_branch" "$pr_title" "$pr_body" "$pr_close_source") && [ -n "$bitbucket_pr_url" ]; then
         echo -e "${CB_GREEN}✅ Pull Request ready:${C_RESET}"
         echo "$bitbucket_pr_url"
         __git_raise_pr_confirm_open_browser && __open_url "$bitbucket_pr_url"
@@ -744,11 +745,13 @@ ${pr_body}"
 # Git: Push current branch and raise a Pull Request (GitHub/GitLab/Bitbucket).
 # GitHub uses the gh CLI; Bitbucket uses the API when credentials are set
 # (reusing an already-open PR for the branch); everything else opens the browser.
-# Usage: git-raise-pr [-b target_branch] [-t pr_title] [-m pr_body]
+# Usage: git-raise-pr [-b target_branch] [-t pr_title] [-m pr_body] [-k]
 # Options:
 #   -b <branch>   Target branch to merge into (defaults to default branch)
 #   -t <title>    Pull Request title
 #   -m <message>  Pull Request body or description
+#   -k            Bitbucket only: keep the source branch after merge (default: close it).
+#                 Ignored on GitHub, where branch deletion is a repository setting
 #######################################
 git-raise-pr() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -756,16 +759,17 @@ git-raise-pr() {
     return 0
   fi
 
-  local target_branch="" pr_title="" pr_body=""
+  local target_branch="" pr_title="" pr_body="" pr_close_source=true
 
   local OPTIND opt
-  while getopts "b:t:m:" opt; do
+  while getopts "b:t:m:k" opt; do
     case ${opt} in
       b) target_branch="$OPTARG" ;;
       t) pr_title="$OPTARG" ;;
       m) pr_body="$OPTARG" ;;
+      k) pr_close_source=false ;;
       \?)
-        echo "Usage: git-raise-pr [-b <target_branch>] [-t <pr_title>] [-m <pr_body>]" >&2
+        echo "Usage: git-raise-pr [-b <target_branch>] [-t <pr_title>] [-m <pr_body>] [-k]" >&2
         return 1
         ;;
     esac
