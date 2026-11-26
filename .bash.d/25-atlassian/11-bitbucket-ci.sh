@@ -17,6 +17,7 @@ BITBUCKET_PATTERN_REGEX='^[A-Za-z0-9 ._:/@+-]+$'
 BITBUCKET_VAR_KEY_REGEX='^[A-Za-z_][A-Za-z0-9_]*$'
 BITBUCKET_ENV_TYPES=("Test" "Staging" "Production")
 BITBUCKET_REDACT_SED="$HOME/.bash.d/lib/sed/redact_log.sed"
+BITBUCKET_PR_CLOSE_SOURCE_DEFAULT=true
 
 #######################################
 # Bitbucket: Percent-encode the braces of a UUID for use in an API path
@@ -738,16 +739,25 @@ bb-var() {
 
 #######################################
 # Bitbucket: Create a pull request through the API, or report the existing
-# open one for the same branches.
+# open one for the same branches. An existing PR is returned unchanged: its
+# close-source-branch setting is not updated.
 # Arguments:
 #   $1 - workspace/repo, $2 - source branch, $3 - destination branch,
 #   $4 - title (empty = last commit subject), $5 - description
+#   $6 - close_source: "true" deletes the source branch on merge, "false"
+#        keeps it (default BITBUCKET_PR_CLOSE_SOURCE_DEFAULT)
 # Returns:
-#   0 and the PR URL on stdout when created or already open, 1 on any failure
-#   (callers fall back to opening the browser)
+#   0 and the PR URL on stdout when created or already open, 1 on an invalid
+#   close_source (no request is made) or any failure (callers fall back to
+#   opening the browser)
 #######################################
 __mt_bb_create_pull_request() {
   local repo="$1" source="$2" dest="$3" title="$4" description="$5"
+  local close_source="${6:-$BITBUCKET_PR_CLOSE_SOURCE_DEFAULT}"
+  if [ "$close_source" != true ] && [ "$close_source" != false ]; then
+    echo -e "${CB_RED}❌ close_source must be true or false, got '${close_source}'.${C_RESET}" >&2
+    return 1
+  fi
   [ -z "$title" ] && title=$(git log -1 --format=%s)
   title="${title:0:BITBUCKET_PR_TITLE_MAX}"
 
@@ -761,8 +771,8 @@ __mt_bb_create_pull_request() {
   fi
 
   local body body_file created rc=0
-  body=$(jq -nc --arg title "$title" --arg desc "$description" --arg src "$source" --arg dst "$dest" \
-    '{title: $title, description: $desc, source: {branch: {name: $src}}, destination: {branch: {name: $dst}}}')
+  body=$(jq -nc --arg title "$title" --arg desc "$description" --arg src "$source" --arg dst "$dest" --argjson close "$close_source" \
+    '{title: $title, description: $desc, source: {branch: {name: $src}}, destination: {branch: {name: $dst}}, close_source_branch: $close}')
   body_file=$(__mt_bb_body_file "$body") || return 1
   created=$(__mt_bb_api "repositories/${repo}/pullrequests" -H "Content-Type: application/json" -d "@${body_file}" --raw) || rc=$?
   rm -rf "$(dirname "$body_file")"
