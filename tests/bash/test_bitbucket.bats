@@ -442,3 +442,106 @@ setup() {
   [ "$status" -eq 1 ]
   [ -z "$(ls -A "$scratch")" ]
 }
+
+# Serves --checks data from fixtures: statuses, the PR (with a source
+# commit), its reports and the annotations of report {r2}.
+stub_checks() {
+  CHECKS_DIR="$BATS_TEST_DIRNAME/fixtures/bb_pr_checks"
+  export CHECKS_DIR
+  # shellcheck disable=SC2317
+  mt-http() {
+    local last="${*: -1}"
+    echo "$*" >> "$HTTP_LOG"
+    case "$last" in
+      */statuses*) command cat "${STUB_STATUSES_FILE:-$CHECKS_DIR/statuses.json}" ;;
+      */reports/%7Br2%7D/annotations*) command cat "${STUB_ANNOTATIONS_FILE:-$CHECKS_DIR/annotations_r2.json}" ;;
+      */commit/abc123def456/reports*) command cat "${STUB_REPORTS_FILE:-$CHECKS_DIR/reports.json}" ;;
+      */pullrequests/9) echo '{"id":9,"source":{"commit":{"hash":"abc123def456"}}}' ;;
+      *) return 4 ;;
+    esac
+  }
+}
+
+@test "--checks prints statuses, reports and the failed report's annotations by severity" {
+  stub_checks
+  run bb-pr -r ws/r --checks 9
+  [ "$status" -eq 0 ]
+  [ "${lines[0]}" = $'status\tSUCCESSFUL\tBuild\tAll good\thttps://ci.example.test/build/1' ]
+  [[ "${lines[1]}" == $'status\tFAILED\tLint\t2 errors '* ]]
+  [ "${lines[2]}" = $'report\tPASSED\tUnit tests\tTEST\thttps://reports.example.test/r1' ]
+  [ "${lines[3]}" = $'report\tFAILED\tStatic analysis\tBUG\thttps://reports.example.test/r2?id=7' ]
+  [[ "${lines[4]}" == $'  CRITICAL\tsrc/b.py:10\tbad '* ]]
+  [ "${lines[5]}" = $'  MEDIUM\tsrc/c.py:5\tmeh' ]
+  [ "${lines[6]}" = $'  LOW\tsrc/a.py:3\tminor' ]
+  [ "${#lines[@]}" -eq 7 ]
+}
+
+@test "--checks requests annotations only for failed reports" {
+  stub_checks
+  run bb-pr -r ws/r --checks 9
+  grep -q 'reports/%7Br2%7D/annotations' "$HTTP_LOG"
+  run grep -q '%7Br1%7D' "$HTTP_LOG"
+  [ "$status" -eq 1 ]
+}
+
+@test "--checks strips URL userinfo and terminal escapes" {
+  stub_checks
+  run bb-pr -r ws/r --checks 9
+  [[ "$output" != *s3cret* ]]
+  [[ "$output" != *"user:pw"* ]]
+  [[ "$output" == *"https://ci.example.test/lint/1"* ]]
+  [[ "$output" != *$'\033'* ]]
+  [[ "$output" != *$'\007'* ]]
+}
+
+@test "--checks caps annotations per report and says how many were left out" {
+  stub_checks
+  STUB_ANNOTATIONS_FILE="$BATS_TEST_TMPDIR/annotations_60.json"
+  export STUB_ANNOTATIONS_FILE
+  jq -n '{values: [range(60) | {severity: "HIGH", path: "f.py", line: ., summary: "s\(.)"}]}' > "$STUB_ANNOTATIONS_FILE"
+  run bb-pr -r ws/r --checks 9
+  [ "$status" -eq 0 ]
+  [ "$(grep -c $'^  HIGH\t' <<< "$output")" -eq 50 ]
+  [[ "${lines[-1]}" == "  … +10 more" ]]
+}
+
+@test "--checks with no statuses and no reports says so and exits 0" {
+  stub_checks
+  STUB_STATUSES_FILE="$BATS_TEST_TMPDIR/empty.json" STUB_REPORTS_FILE="$BATS_TEST_TMPDIR/empty.json"
+  export STUB_STATUSES_FILE STUB_REPORTS_FILE
+  echo '{"values":[]}' > "$BATS_TEST_TMPDIR/empty.json"
+  run --separate-stderr bb-pr -r ws/r --checks 9
+  [ "$status" -eq 0 ]
+  [ -z "$output" ]
+  [ "$stderr" = "ℹ️  No build statuses or Code Insights reports on PR #9." ]
+}
+
+@test "--checks returns 0 even when a status failed" {
+  stub_checks
+  run bb-pr -r ws/r --checks 9
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'status\tFAILED'* ]]
+}
+
+@test "--checks surfaces an API failure" {
+  stub_checks
+  # shellcheck disable=SC2317
+  mt-http() { return 4; }
+  run bb-pr -r ws/r --checks 9
+  [ "$status" -eq 4 ]
+}
+
+@test "--checks with --diff or --list is a usage error without a request" {
+  run bb-pr -r ws/r --checks --diff 9
+  [ "$status" -eq 1 ]
+  run bb-pr -r ws/r --list --checks
+  [ "$status" -eq 1 ]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "two read modes together are a usage error" {
+  run bb-pr -r ws/r --diff --diffstat 9
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"Usage: bb-pr"* ]]
+  [ ! -f "$HTTP_LOG" ]
+}

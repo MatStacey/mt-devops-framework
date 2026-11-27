@@ -348,6 +348,8 @@ __mt_menu_bb_env() { bb-env list; }
 __mt_menu_bb_deployments() { bb-deployments; }
 __mt_menu_bb_var() { bb-var list; }
 __mt_menu_bb_pr() { __mt_menu_prompt_arg "Bitbucket PR number" bb-pr; }
+__mt_menu_bb_pr_checks_number() { bb-pr --checks "$1"; }
+__mt_menu_bb_pr_checks() { __mt_menu_prompt_arg "Bitbucket PR number" __mt_menu_bb_pr_checks_number; }
 __mt_menu_bb_pr_merge_number() { bb-pr --merge "$1"; }
 __mt_menu_bb_pr_merge() { __mt_menu_prompt_arg "Bitbucket PR number to merge" __mt_menu_bb_pr_merge_number; }
 __mt_menu_conf_get() { __mt_menu_prompt_arg "Confluence page ID or URL" conf-get; }
@@ -805,6 +807,7 @@ __mt_menu_git_repos() {
     "List Open Pull Requests (git-review-prs)" git-review-prs \
     "Diff All Uncommitted Changes incl. Untracked (git-diff-all)" git-diff-all \
     "Show Bitbucket Pull Request (bb-pr)" __mt_menu_bb_pr \
+    "Show Bitbucket PR Checks (bb-pr --checks)" __mt_menu_bb_pr_checks \
     "Merge Bitbucket Pull Request (bb-pr --merge)" __mt_menu_bb_pr_merge \
     "List Bitbucket Pipeline Runs (bb-pipelines)" __mt_menu_bb_pipelines \
     "Last Run per Pipeline (bb-pipelines --by-selector)" __mt_menu_bb_pipelines_by_selector \

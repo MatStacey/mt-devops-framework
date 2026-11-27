@@ -1,0 +1,22 @@
+{
+  "values": [
+    {
+      "severity": "LOW",
+      "path": "src/a.py",
+      "line": 3,
+      "summary": "minor"
+    },
+    {
+      "severity": "CRITICAL",
+      "path": "src/b.py",
+      "line": 10,
+      "summary": "bad \u001b]0;pwned\u0007thing"
+    },
+    {
+      "severity": "MEDIUM",
+      "path": "src/c.py",
+      "line": 5,
+      "summary": "meh"
+    }
+  ]
+}

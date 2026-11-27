@@ -22,19 +22,6 @@ BITBUCKET_SELECTOR_SCAN_DEFAULT=300
 BITBUCKET_SELECTOR_SCAN_MAX=2000
 
 #######################################
-# Bitbucket: Percent-encode the braces of a UUID for use in an API path
-# Arguments:
-#   $1 - UUID, with or without braces
-# Outputs:
-#   Encoded UUID on stdout
-#######################################
-__mt_bb_encode_uuid() {
-  local uuid="$1"
-  uuid="${uuid//\{/%7B}"
-  echo "${uuid//\}/%7D}"
-}
-
-#######################################
 # Bitbucket: Fetch a pipeline object by build number or UUID, in one GET
 # Arguments:
 #   $1 - workspace/repo, $2 - build number or UUID (braces optional)

@@ -1,0 +1,18 @@
+{
+  "values": [
+    {
+      "uuid": "{r1}",
+      "result": "PASSED",
+      "title": "Unit tests",
+      "report_type": "TEST",
+      "link": "https://reports.example.test/r1"
+    },
+    {
+      "uuid": "{r2}",
+      "result": "FAILED",
+      "title": "Static analysis",
+      "report_type": "BUG",
+      "link": "https://user:pw@reports.example.test/r2?id=7"
+    }
+  ]
+}
