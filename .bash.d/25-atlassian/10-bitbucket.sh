@@ -75,6 +75,19 @@ __mt_bb_api() {
 }
 
 #######################################
+# Bitbucket: Percent-encode the braces of a UUID for use in an API path
+# Arguments:
+#   $1 - UUID, with or without braces
+# Outputs:
+#   Encoded UUID on stdout
+#######################################
+__mt_bb_encode_uuid() {
+  local uuid="$1"
+  uuid="${uuid//\{/%7B}"
+  echo "${uuid//\}/%7D}"
+}
+
+#######################################
 # Bitbucket: Fetch every page of a paginated collection and print the
 # combined "values" as one JSON array.
 # Arguments:
@@ -356,8 +369,8 @@ __mt_bb_pr_checks() {
 
 #######################################
 # Bitbucket: List a repository's pull requests, show one pull request's
-# metadata, diff, diffstat or comments, edit its title/description, or merge it
-# Usage: bb-pr [-r <workspace/repo>] (--list [--state OPEN|MERGED|DECLINED|SUPERSEDED] | [--diff|--diffstat|--comments] <pr-number>)
+# metadata, diff, diffstat, comments or checks, edit its title/description, or merge it
+# Usage: bb-pr [-r <workspace/repo>] (--list [--state OPEN|MERGED|DECLINED|SUPERSEDED] | [--diff|--diffstat|--comments|--checks] <pr-number>)
 # Usage: bb-pr [-r <workspace/repo>] <pr-number> [--set-title <text>] [--set-description <@file|->]
 # Usage: bb-pr [-r <workspace/repo>] --merge <pr-number> [--strategy merge_commit|squash|fast_forward] [--keep-branch] [--yes]
 # Arguments:
@@ -369,6 +382,9 @@ __mt_bb_pr_checks() {
 #   --diff               Print the full unified diff
 #   --diffstat           Print status, lines added/removed and path per file
 #   --comments           Print every comment with its file and line
+#   --checks             Print build statuses and Code Insights reports, with the annotations
+#                        of failed reports (at most 50 each, most severe first); only one of
+#                        --diff, --diffstat, --comments and --checks is accepted
 #   --set-title <text>   Set the title of an open pull request (max 250 characters)
 #   --set-description <@file|->
 #                        Set the description from a file (@path) or stdin (-); literal text is
@@ -380,15 +396,20 @@ __mt_bb_pr_checks() {
 #   -h, --help           Show this help menu
 # Returns:
 #   0 on success, 1 on bad usage, missing credentials or a refusal (PR not open, build statuses
-#   not all successful, no confirmation), mt-http's code on API failure
+#   not all successful, no confirmation), mt-http's code on API failure. --checks returns 0
+#   whenever everything was read, whatever the check states (--merge is the gate)
 # Outputs:
-#   Summary, diff, diffstat, comments or list on stdout, with terminal control
+#   Summary, diff, diffstat, comments, checks or list on stdout, with terminal control
 #   characters removed. --list prints: #<id> <title> <source -> destination>
 #   <author> <updated date>, tab-separated; an empty result is reported on stderr.
+#   --checks prints "status<TAB>state<TAB>name<TAB>description<TAB>url" rows, then
+#   "report<TAB>result<TAB>title<TAB>type<TAB>link" rows, each failed report followed by
+#   "  severity<TAB>path:line<TAB>summary" rows and "  … +<n> more" past the cap; URLs
+#   lose any user:password@. With no checks at all, a note goes to stderr.
 #   --set-* and --merge print a one-line result.
 #######################################
 bb-pr() {
-  local repo="" mode="summary" pr_number="" list_mode=0 state=""
+  local repo="" mode="summary" read_modes=0 pr_number="" list_mode=0 state=""
   local merge_mode=0 strategy="" keep_branch="" assume_yes="" set_title="" set_description=""
   while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -400,9 +421,10 @@ bb-pr() {
         repo="${2:-}"
         shift
         ;;
-      --diff) mode="diff" ;;
-      --diffstat) mode="diffstat" ;;
-      --comments) mode="comments" ;;
+      --diff | --diffstat | --comments | --checks)
+        mode="${1#--}"
+        read_modes=$((read_modes + 1))
+        ;;
       --list) list_mode=1 ;;
       --merge) merge_mode=1 ;;
       --keep-branch) keep_branch="1" ;;
@@ -429,6 +451,10 @@ bb-pr() {
     shift
   done
 
+  if [ "$read_modes" -gt 1 ]; then
+    echo "$BITBUCKET_PR_USAGE" >&2
+    return 1
+  fi
   local edit_mode=0 read_mode_given=0
   { [ -n "$set_title" ] || [ -n "$set_description" ]; } && edit_mode=1
   [ "$mode" != "summary" ] && read_mode_given=1
@@ -495,6 +521,9 @@ bb-pr() {
     comments)
       data=$(__mt_bb_collect "${pr_path}/comments") || return $?
       jq -r -f "$BITBUCKET_JQ_DIR/bb_pr_comments.jq" <<< "$data" | __mt_strip_control_chars
+      ;;
+    checks)
+      __mt_bb_pr_checks "$repo" "$pr_number"
       ;;
   esac
 }
