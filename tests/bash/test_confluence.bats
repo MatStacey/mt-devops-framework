@@ -278,3 +278,27 @@ put_requests() {
   [[ "$output" == *"renders with macro errors"* ]]
   [ "$(put_requests)" -eq 1 ]
 }
+
+@test "conf-put maps a 409 from the real mt-http to exit 6" {
+  unset -f mt-http
+  # shellcheck disable=SC1091
+  source "$repo_root/.bash.d/02-utilities/39-http-client.sh"
+  mkdir -p "$BATS_TEST_TMPDIR/bin"
+  cat > "$BATS_TEST_TMPDIR/bin/curl" << 'STUB'
+#!/usr/bin/env bash
+cat > /dev/null
+out="" status=200 body='{"title":"T","status":"current","version":{"number":4},"body":{"storage":{"value":"<p>a</p>"}}}'
+for arg in "$@"; do
+  [ "$prev" = "--output" ] && out="$arg"
+  [ "$arg" = "PUT" ] && status=409 body='{"errors":[{"status":409,"code":"CONFLICT"}]}'
+  prev="$arg"
+done
+printf '%s' "$body" > "$out"
+printf '%s' "$status"
+STUB
+  chmod +x "$BATS_TEST_TMPDIR/bin/curl"
+  __MT_CONFLUENCE_GATEWAY_URL="https://gateway.example.test"
+  PATH="$BATS_TEST_TMPDIR/bin:$PATH" run conf-put 12345 "@$BODY_FILE" --yes
+  [ "$status" -eq 6 ]
+  [[ "$output" == *"Someone else saved the page first"* ]]
+}
