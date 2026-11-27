@@ -95,6 +95,44 @@ manager doesn't ship a recent enough `bats`, vendor it locally instead of
 skipping the check: `git clone https://github.com/bats-core/bats-core.git
 && bats-core/install.sh /some/local/dir`.
 
+## Releases
+
+Every merge to `main` is released automatically: `release.yml` reads the
+Conventional Commit messages since the last tag and bumps the version
+(`fix:` -> patch, `feat:` -> minor, anything else -> patch).
+
+A commit marked as breaking -- a `!` after the type (`feat!:`) or a
+`BREAKING CHANGE:` footer -- would bump the **major** version, so from `v0.x`
+it would release `v1.0.0`. The `Block Unintended Major Release` step stops
+that before any tag is pushed, unless the `ALLOW_MAJOR_RELEASE` repository
+variable is `true`.
+
+**Cutting an intended major release:**
+
+```bash
+gh variable set ALLOW_MAJOR_RELEASE --body true
+# merge the PR whose commit carries the BREAKING CHANGE: footer, and wait for the release
+gh variable delete ALLOW_MAJOR_RELEASE
+```
+
+**If an unintended breaking marker is already on `main`:** the release job
+fails on that merge, and on every later merge too, because the marked commit
+stays in the history since the last tag. Recover in one of two ways:
+
+- If the major release was intended after all, set `ALLOW_MAJOR_RELEASE`
+  as above and re-run the failed `Build and Release` job, then delete the
+  variable.
+- Otherwise, tag the offending merge commit with the next patch version, so
+  later releases are calculated from after it. The guard's error message
+  prints the exact command, for example:
+
+  ```bash
+  git tag v0.148.1 <merge-commit-sha> && git push origin v0.148.1
+  ```
+
+  That tag has no GitHub Release of its own; the next merge releases as
+  normal.
+
 ## Backlog: capturing workflow gaps
 
 The goal is for this framework to be the default way anyone on the team runs

@@ -109,6 +109,26 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Preview Next Version
+        id: tag_preview
+        uses: mathieudutour/github-tag-action@af99e60ce8132224b8e6ebab5023449fe256ed46 # v7.0.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          default_bump: patch
+          tag_prefix: v
+          dry_run: true
+
+      - name: Block Unintended Major Release
+        if: steps.tag_preview.outputs.release_type == 'major' && vars.ALLOW_MAJOR_RELEASE != 'true'
+        env:
+          NEW_TAG: ${{ steps.tag_preview.outputs.new_tag }}
+          PREVIOUS_TAG: ${{ steps.tag_preview.outputs.previous_tag }}
+        run: |
+          previous="${PREVIOUS_TAG#v}"
+          next_patch="v${previous%.*}.$((${previous##*.} + 1))"
+          echo "::error::This merge would release ${NEW_TAG} (major). Remove the '!' or 'BREAKING CHANGE' marker, or set the ALLOW_MAJOR_RELEASE repo variable for an intended major release. If the commit is already on main and the major release was not intended, tag it with the next patch version so later releases calculate from after it: git tag ${next_patch} ${GITHUB_SHA} && git push origin ${next_patch}"
+          exit 1
+
       - name: Calculate SemVer and Push Tag
         id: tag_version
         uses: mathieudutour/github-tag-action@af99e60ce8132224b8e6ebab5023449fe256ed46 # v7.0.0
