@@ -306,3 +306,12 @@ deployer WILDCARD_POOL+SECRETS" ]
   [[ "$output" == *$'key=fresh1 created='*$'\t-'* ]]
   [[ "$stderr" == *"✅ No findings."* ]]
 }
+
+@test "keys: a key whose creation date cannot be read is UNKNOWN_AGE, not clean" {
+  printf '[{"name":"k/odd1","validAfterTime":"not-a-date","validBeforeTime":"2099-01-01T00:00:00Z","disabled":false}]' > "$FIXTURES/keys_runner.json"
+  run --separate-stderr gcl-sa-audit -p proj-b --check keys
+  [ "$status" -eq 0 ]
+  [[ "$output" == *$'key=odd1 created=not-a-date expires=2099-01-01\tUNKNOWN_AGE'* ]]
+  [[ "$stderr" != *"✅"* ]]
+  [[ "$stderr" == *"1 findings across 1 service accounts in 1 projects"* ]]
+}

@@ -320,7 +320,8 @@ __mt_gcl_sa_audit_summary() {
 #            number), MISSING_INVOKER (an --expected-invoker that is absent).
 #   keys     Every user-managed key of every service account, by ID and
 #            dates. Codes: NO_EXPIRY, OLD_KEY (older than
-#            gcp.sa_key_max_age_days), DISABLED; "-" when none apply.
+#            gcp.sa_key_max_age_days), UNKNOWN_AGE (creation date
+#            unreadable), DISABLED; "-" when none apply.
 # Usage: gcl-sa-audit [-p <project>]... [--check <wif|invoker|keys>]... [--expected-pool <pool-id>] [--expected-invoker <sa-email>]... [--json]
 # Options:
 #   -p, --project <id>             Project to audit; repeatable (default: the active gcloud project)

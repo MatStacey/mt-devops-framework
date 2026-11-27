@@ -7,7 +7,7 @@
 #   $max_age_days  keys created longer ago than this are OLD_KEY
 #   $now           current time, epoch seconds
 
-def codes: {no_expiry: "NO_EXPIRY", old: "OLD_KEY", disabled: "DISABLED", none: "-"};
+def codes: {no_expiry: "NO_EXPIRY", old: "OLD_KEY", unknown_age: "UNKNOWN_AGE", disabled: "DISABLED", none: "-"};
 # epoch: seconds since 1970 for an RFC 3339 UTC time, or null if unparseable.
 def epoch: try (sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) catch null;
 def day: .[0:10];
@@ -26,7 +26,10 @@ def day: .[0:10];
     } as $base
   | ([
       (select($never) | codes.no_expiry),
-      (($key.validAfterTime // "" | epoch) as $created | select($created != null and ($now - $created) > ($max_age_days * 86400)) | codes.old),
+      (($key.validAfterTime // "" | epoch) as $created
+        | if $created == null then codes.unknown_age
+          elif ($now - $created) > ($max_age_days * 86400) then codes.old
+          else empty end),
       (select($key.disabled == true) | codes.disabled)
     ] | if length == 0 then [codes.none] else . end)[]
   | $base + {finding: .}
