@@ -18,7 +18,10 @@ setup() {
   SECRETS_MANAGER="$BATS_TEST_TMPDIR/secrets_stub.py"
   printf 'import sys\nopen(sys.argv[0] + ".called", "w").write(" ".join(sys.argv[1:]))\n' > "$SECRETS_MANAGER"
   HTTP_LOG="$BATS_TEST_TMPDIR/http.log"
-  export SECRETS_MANAGER HTTP_LOG
+  PUT_REQUEST="$BATS_TEST_TMPDIR/put_request.json"
+  BODY_FILE="$BATS_TEST_TMPDIR/body.xhtml"
+  printf '<p>marker-body-7f3a</p>' > "$BODY_FILE"
+  export SECRETS_MANAGER HTTP_LOG PUT_REQUEST BODY_FILE
 
   # shellcheck disable=SC2317
   mt-http() {
@@ -27,7 +30,24 @@ setup() {
     [ -n "${STUB_FAIL:-}" ] && [[ "$last" != *tenant_info ]] && return 4
     case "$last" in
       *tenant_info) echo '{"cloudId":"cloud-abc"}' ;;
-      */pages/*) printf '{"title":"Networking","body":{"storage":{"value":"<h2>Overview</h2><p>Redis &amp; VPC\\u001b[31m</p><ul><li>one</li><li>two</li></ul>"}}}' ;;
+      */pages/*)
+        if [[ "$*" == *"-X PUT"* ]]; then
+          local arg prev=""
+          for arg in "$@"; do
+            [ "$prev" = "-d" ] && cp "${arg#@}" "$PUT_REQUEST"
+            prev="$arg"
+          done
+          if [ -n "${STUB_PUT_STATUS:-}" ]; then
+            echo "🚨 HTTP ${STUB_PUT_STATUS}" >&2
+            return 4
+          fi
+          echo '{"version":{"number":5},"_links":{"base":"https://acme.atlassian.net/wiki","webui":"/spaces/ENG/pages/12345/Networking"}}'
+        elif [[ "$*" == *body-format=view* ]]; then
+          printf '{"body":{"view":{"value":"<p>ok</p>%s"}}}' "${STUB_VIEW_EXTRA:-}"
+        else
+          printf '{"title":"Networking","status":"%s","version":{"number":4,"createdAt":"2026-11-01T09:00:00Z","authorId":"acct-1"},"body":{"storage":{"value":"<h2>Overview</h2><p>Redis &amp; VPC\\u001b[31m</p><ul><li>one</li><li>two</li></ul>"}}}' "${STUB_PAGE_STATUS:-current}"
+        fi
+        ;;
       */direct-children*cursor=2*) echo '{"results":[{"type":"page","id":"3","title":"Third"}]}' ;;
       */direct-children*) echo '{"results":[{"type":"page","id":"1","title":"First"},{"type":"folder","id":"2","title":"Sub"}],"_links":{"next":"/wiki/api/v2/folders/99/direct-children?cursor=2"}}' ;;
       */search) echo '{"results":[{"content":{"type":"page","id":"7"},"title":"Hit","resultGlobalContainer":{"title":"Docs"}}]}' ;;
@@ -65,7 +85,7 @@ setup() {
 @test "conf-get prints the title and converted text" {
   run conf-get 12345
   [ "$status" -eq 0 ]
-  [[ "$output" == *"# Networking"* ]]
+  [[ "$output" == *"# Networking (version 4)"* ]]
   [[ "$output" == *"## Overview"* ]]
   [[ "$output" == *"Redis & VPC"* ]]
   [[ "$output" == *"- one"* ]]
@@ -121,4 +141,140 @@ setup() {
   STUB_FAIL=1 run conf-get 12345
   [ "$status" -eq 4 ]
   [ ! -f "$SECRETS_MANAGER.called" ]
+}
+
+# Runs a command in a fresh bash with the real module, __mt_has_tty and this
+# file's mt-http stub, for cases that need no terminal or a terminal stdin.
+write_driver() {
+  declare -f mt-http > "$BATS_TEST_TMPDIR/stub.bash"
+  DRIVER="$BATS_TEST_TMPDIR/driver.bash"
+  {
+    echo "source '$repo_root/.bash.d/02-utilities/39-http-client.sh'"
+    echo "source '$repo_root/.bash.d/02-utilities/99-utils.sh'"
+    echo "source '$repo_root/.bash.d/25-atlassian/20-confluence.sh'"
+    echo "source '$BATS_TEST_TMPDIR/stub.bash'"
+    echo 'eval "$1"'
+  } > "$DRIVER"
+}
+
+put_requests() {
+  grep -c -- "-X PUT" "$HTTP_LOG" 2> /dev/null || true
+}
+
+@test "conf-put --yes sends version n+1 with the message, title and file body" {
+  run conf-put 12345 "@$BODY_FILE" -m "Sync from repo" --yes
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.version.number' "$PUT_REQUEST")" = "5" ]
+  [ "$(jq -r '.version.message' "$PUT_REQUEST")" = "Sync from repo" ]
+  [ "$(jq -r '.title' "$PUT_REQUEST")" = "Networking" ]
+  [ "$(jq -r '.status' "$PUT_REQUEST")" = "current" ]
+  [ "$(jq -r '.body.representation' "$PUT_REQUEST")" = "storage" ]
+  [ "$(jq -r '.body.value' "$PUT_REQUEST")" = "<p>marker-body-7f3a</p>" ]
+  [[ "$output" == *$'https://acme.atlassian.net/wiki/spaces/ENG/pages/12345/Networking\t5'* ]]
+  [[ "$output" == *'Update "Networking" v4 → v5'* ]]
+}
+
+@test "conf-put never puts the page body on a command line" {
+  run conf-put 12345 "@$BODY_FILE" --yes
+  [ "$status" -eq 0 ]
+  [ "$(grep -c "marker-body-7f3a" "$HTTP_LOG")" -eq 0 ]
+  grep -q -- "-X PUT -H Content-Type: application/json -d @" "$HTTP_LOG"
+}
+
+@test "conf-put uses the default version message" {
+  run conf-put 12345 "@$BODY_FILE" --yes
+  [ "$(jq -r '.version.message' "$PUT_REQUEST")" = "Updated with conf-put" ]
+}
+
+@test "conf-put --title changes the title" {
+  run conf-put 12345 "@$BODY_FILE" --title "New" --yes
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.title' "$PUT_REQUEST")" = "New" ]
+}
+
+@test "conf-put reads the body from piped stdin" {
+  write_driver
+  run bash "$DRIVER" 'echo "<p>piped</p>" | conf-put 12345 - --yes'
+  [ "$status" -eq 0 ]
+  [ "$(jq -r '.body.value' "$PUT_REQUEST")" = "<p>piped</p>" ]
+}
+
+@test "conf-put --expect-version that no longer matches exits 6 without a PUT" {
+  run conf-put 12345 "@$BODY_FILE" --expect-version 3 --yes
+  [ "$status" -eq 6 ]
+  [[ "$output" == *"version 4"* ]]
+  [[ "$output" == *"2026-11-01T09:00:00Z"* ]]
+  [[ "$output" == *"acct-1"* ]]
+  [ "$(put_requests)" -eq 0 ]
+}
+
+@test "conf-put --expect-version that matches goes ahead" {
+  run conf-put 12345 "@$BODY_FILE" --expect-version 4 --yes
+  [ "$status" -eq 0 ]
+  [ "$(put_requests)" -eq 1 ]
+}
+
+@test "conf-put maps a 409 on the PUT to exit 6" {
+  STUB_PUT_STATUS=409 run conf-put 12345 "@$BODY_FILE" --yes
+  [ "$status" -eq 6 ]
+  [[ "$output" == *"Someone else saved the page first"* ]]
+}
+
+@test "conf-put adds the scope hint to a 403" {
+  STUB_PUT_STATUS=403 run conf-put 12345 "@$BODY_FILE" --yes
+  [ "$status" -eq 4 ]
+  [[ "$output" == *"write:page:confluence"* ]]
+}
+
+@test "conf-put rejects bad input before any request" {
+  printf '' > "$BATS_TEST_TMPDIR/empty.xhtml"
+  local args
+  for args in "12345 @$BATS_TEST_TMPDIR/missing.xhtml" "12345 @$BATS_TEST_TMPDIR/empty.xhtml" \
+    "12345 <p>literal</p>" "12345 @$BODY_FILE --expect-version abc" "12345 @$BODY_FILE --expect-version 0" \
+    "12345" "12345 @$BODY_FILE extra" "12345 @$BODY_FILE --bogus"; do
+    # shellcheck disable=SC2086
+    run conf-put $args --yes
+    [ "$status" -eq 1 ] || {
+      echo "args: $args -> $status"
+      return 1
+    }
+  done
+  run conf-put 12345 "@$BODY_FILE" --yes -m
+  [ "$status" -eq 1 ]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "conf-put names the accepted body forms when given literal text" {
+  run conf-put 12345 "<p>literal</p>" --yes
+  [[ "$output" == *"@<file> or - (stdin)"* ]]
+}
+
+@test "conf-put refuses - when stdin is a terminal" {
+  write_driver
+  run script -qec "bash '$DRIVER' 'conf-put 12345 - --yes; echo rc=\$?'" /dev/null
+  [[ "$output" == *"Pipe the page body in"* ]]
+  [[ "$output" == *"rc=1"* ]]
+  [ ! -f "$HTTP_LOG" ]
+}
+
+@test "conf-put without a terminal and without --yes exits 1 with no PUT" {
+  write_driver
+  run setsid -w bash "$DRIVER" "conf-put 12345 @$BODY_FILE" < /dev/null
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"pass --yes"* ]]
+  [ "$(put_requests)" -eq 0 ]
+}
+
+@test "conf-put refuses a page that is not current" {
+  STUB_PAGE_STATUS=draft run conf-put 12345 "@$BODY_FILE" --yes
+  [ "$status" -eq 1 ]
+  [[ "$output" == *"draft"* ]]
+  [ "$(put_requests)" -eq 0 ]
+}
+
+@test "conf-put exits 7 when the updated page renders with macro errors" {
+  STUB_VIEW_EXTRA='<img class=\"wysiwyg-unknown-macro\" src=\"x\" />' run conf-put 12345 "@$BODY_FILE" --yes
+  [ "$status" -eq 7 ]
+  [[ "$output" == *"renders with macro errors"* ]]
+  [ "$(put_requests)" -eq 1 ]
 }
