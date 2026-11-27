@@ -253,6 +253,16 @@ def load_env():
     export("GCP_BQ_MAX_BYTES_BILLED", gcp_cfg.get("bq_max_bytes_billed", 10737418240))
     # gcl-sku-price (10-infra/34-gcp-observability.sh) -- catalogue price currency.
     export("GCL_BILLING_CURRENCY", gcp_cfg.get("billing_currency", "USD"))
+    # gcl-sa-audit (10-infra/37-gcp-sa-audit.sh) -- space-separated claim
+    # expressions whose attribute.* mappings count as BROAD_ATTRIBUTE.
+    export(
+        "GCP_WIF_BROAD_CLAIMS",
+        gcp_cfg.get(
+            "wif_broad_claims",
+            "assertion.repository_owner assertion.repository_owner_id "
+            "assertion.workspaceUuid assertion.namespace_path assertion.namespace_id",
+        ),
+    )
 
     # Paths
     export(

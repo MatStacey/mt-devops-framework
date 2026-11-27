@@ -1,0 +1,1 @@
+{"bindings":[{"role":"roles/iam.workloadIdentityUser","members":["principal://iam.googleapis.com/projects/111/locations/global/workloadIdentityPools/ci-pool/subject/repo:acme/app:ref:refs/heads/main","serviceAccount:proj-a.svc.id.goog[ns/ksa]"]}],"etag":"x"}

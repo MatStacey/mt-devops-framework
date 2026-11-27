@@ -1,0 +1,1 @@
+[{"name":"projects/111/locations/global/workloadIdentityPools/ci-pool/providers/repo-ci","state":"ACTIVE","attributeMapping":{"google.subject":"assertion.sub","attribute.repository_owner":"assertion.repository_owner"},"attributeCondition":"assertion.repository_owner == \"acme\"","oidc":{"issuerUri":"https://token.actions.githubusercontent.com"}}]

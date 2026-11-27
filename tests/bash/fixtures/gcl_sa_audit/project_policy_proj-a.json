@@ -1,0 +1,1 @@
+{"bindings":[{"role":"roles/secretmanager.secretAccessor","members":["serviceAccount:deployer@proj-a.iam.gserviceaccount.com"]},{"role":"roles/viewer","members":["serviceAccount:builder@proj-a.iam.gserviceaccount.com"]}],"etag":"x"}

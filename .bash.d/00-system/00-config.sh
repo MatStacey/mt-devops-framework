@@ -861,6 +861,7 @@ mt-wizard-git() {
 #   GCP_SCAN_REGIONS
 #   GCP_BQ_MAX_BYTES_BILLED
 #   GCL_BILLING_CURRENCY
+#   GCP_WIF_BROAD_CLAIMS
 #######################################
 mt-wizard-gcp() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -885,6 +886,10 @@ mt-wizard-gcp() {
   elif [ -n "$billing_currency" ]; then
     python3 "$CONFIG_MANAGER" update "gcp" "billing_currency" "$billing_currency"
   fi
+  echo -e "${C_DIM}💡 Claims 'gcl-sa-audit' treats as broad (BROAD_ATTRIBUTE). Space-separated.${C_RESET}"
+  local wif_broad_claims
+  read -r -p "WIF broad claims [${GCP_WIF_BROAD_CLAIMS:-$GCL_WIF_DEFAULT_BROAD_CLAIMS}]: " wif_broad_claims
+  [ -n "$wif_broad_claims" ] && python3 "$CONFIG_MANAGER" update "gcp" "wif_broad_claims" "$wif_broad_claims"
   echo -e "${CB_GREEN}✅ GCP config updated.${C_RESET}"
 }
 

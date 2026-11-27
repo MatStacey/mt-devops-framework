@@ -121,6 +121,11 @@ gcp:
   # Currency gcl-sku-price quotes Cloud Billing catalogue prices in
   # (three-letter code; --currency overrides it per call).
   billing_currency: USD
+  # Claims gcl-sa-audit treats as broad: a workloadIdentityUser member on an
+  # attribute mapped from one of these (e.g. a whole GitHub org, Bitbucket
+  # workspace or GitLab group) is reported as BROAD_ATTRIBUTE. Space-separated;
+  # add your own identity provider's claims.
+  wif_broad_claims: "assertion.repository_owner assertion.repository_owner_id assertion.workspaceUuid assertion.namespace_path assertion.namespace_id"
 
 server:
   default_port: 8000
