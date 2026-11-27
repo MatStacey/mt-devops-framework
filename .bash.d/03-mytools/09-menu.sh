@@ -392,6 +392,26 @@ __mt_menu_helm_repo_add() {
 }
 
 #######################################
+# System: Prompt for a Confluence page then a body file and pass both to
+# conf-put, which still asks before writing -- wrapped since
+# __mt_menu_submenu commands can't take inline arguments
+#######################################
+__mt_menu_conf_put() {
+  local page_ref body_path
+  read -r -p "Confluence page ID or URL: " page_ref < /dev/tty
+  if [ -z "$page_ref" ]; then
+    echo -e "${CB_YELLOW}⚠️  Cancelled.${C_RESET}"
+    return 0
+  fi
+  read -r -p "File with the new body (storage format): " body_path < /dev/tty
+  if [ -z "$body_path" ]; then
+    echo -e "${CB_YELLOW}⚠️  Cancelled.${C_RESET}"
+    return 0
+  fi
+  conf-put "$page_ref" "@${body_path}"
+}
+
+#######################################
 # System: Interactive picker for local-only commands defined under
 # 40-private/ or lib/private/ -- these are per-machine additions never
 # shipped with or synced to the framework repo (see .syncignore), so
@@ -815,6 +835,7 @@ __mt_menu_git_repos() {
     "List Bitbucket Deployments (bb-deployments)" __mt_menu_bb_deployments \
     "List Bitbucket Variables (bb-var)" __mt_menu_bb_var \
     "Read Confluence Page (conf-get)" __mt_menu_conf_get \
+    "Update Confluence Page (conf-put)" __mt_menu_conf_put \
     "Search Confluence (conf-search)" __mt_menu_conf_search
 }
 
