@@ -149,7 +149,9 @@ __mt_gcl_sa_audit_run() {
   fi
   local total
   total=$(jq 'length' <<< "$findings")
-  if [ "$total" -eq 0 ]; then
+  if [ "$total" -eq 0 ] && [ "$rc" -ne 0 ]; then
+    echo -e "${CB_YELLOW}⚠️  No findings in what could be read; some projects or policies were unreadable (see above)${C_RESET}" >&2
+  elif [ "$total" -eq 0 ]; then
     echo -e "${CB_GREEN}✅ No findings.${C_RESET}" >&2
   else
     echo -e "${CB_YELLOW}⚠️  ${total} findings across ${accounts} service accounts in $# projects${C_RESET}" >&2

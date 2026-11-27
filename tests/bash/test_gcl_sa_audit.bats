@@ -168,3 +168,11 @@ deployer WILDCARD_POOL+SECRETS" ]
   [[ "$output" == *"PLACEHOLDER_SUBJECT"* ]]
   [[ "$output" != *$'\033'* ]]
 }
+
+@test "no findings with an unreadable project warns instead of giving the all-clear" {
+  run --separate-stderr gcl-sa-audit -p proj-denied -p proj-b
+  [ "$status" -eq 5 ]
+  [ -z "$output" ]
+  [[ "$stderr" != *"✅"* ]]
+  [[ "$stderr" == *"⚠️  No findings in what could be read; some projects or policies were unreadable (see above)"* ]]
+}
