@@ -1,0 +1,1 @@
+[{"name":"projects/111/locations/global/workloadIdentityPools/loose-pool/providers/any","state":"ACTIVE","attributeMapping":{"google.subject":"assertion.sub"},"oidc":{"issuerUri":"https://token.actions.githubusercontent.com"}}]

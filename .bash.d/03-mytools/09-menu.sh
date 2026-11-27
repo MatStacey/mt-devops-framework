@@ -716,7 +716,8 @@ __mt_menu_gcp_iam() {
   __mt_menu_submenu "🛡️  IAM & Org Policies" \
     "Show IAM Bindings (gcp-iam-show)" gcp-iam-show \
     "List Org Policies (gcl-org-policies)" gcl-org-policies \
-    "List Service Accounts (gcl-iam-ls)" __mt_menu_gcl_iam_ls
+    "List Service Accounts (gcl-iam-ls)" __mt_menu_gcl_iam_ls \
+    "Audit Service Account Trust (gcl-sa-audit)" gcl-sa-audit
 }
 
 #######################################

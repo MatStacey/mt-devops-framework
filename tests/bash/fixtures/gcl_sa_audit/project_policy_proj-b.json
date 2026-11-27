@@ -1,0 +1,1 @@
+{"bindings":[{"role":"roles/viewer","members":["serviceAccount:runner@proj-b.iam.gserviceaccount.com"]}],"etag":"x"}
