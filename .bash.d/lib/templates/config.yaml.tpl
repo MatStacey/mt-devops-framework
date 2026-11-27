@@ -126,6 +126,9 @@ gcp:
   # workspace or GitLab group) is reported as BROAD_ATTRIBUTE. Space-separated;
   # add your own identity provider's claims.
   wif_broad_claims: "assertion.repository_owner assertion.repository_owner_id assertion.workspaceUuid assertion.namespace_path assertion.namespace_id"
+  # Age in days after which gcl-sa-audit reports a user-managed service
+  # account key as OLD_KEY.
+  sa_key_max_age_days: 90
 
 server:
   default_port: 8000

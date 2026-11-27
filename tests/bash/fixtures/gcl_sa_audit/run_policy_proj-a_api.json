@@ -1,0 +1,1 @@
+{"bindings":[{"role":"roles/run.invoker","members":["serviceAccount:deployer@proj-a.iam.gserviceaccount.com","serviceAccount:caller@proj-b.iam.gserviceaccount.com","serviceAccount:999-compute@developer.gserviceaccount.com","serviceAccount:222-compute@developer.gserviceaccount.com"]},{"role":"roles/run.developer","members":["allUsers"]}],"etag":"x"}

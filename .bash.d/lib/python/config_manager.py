@@ -263,6 +263,8 @@ def load_env():
             "assertion.workspaceUuid assertion.namespace_path assertion.namespace_id",
         ),
     )
+    # gcl-sa-audit --check keys -- user-managed keys older than this are OLD_KEY.
+    export("GCP_SA_KEY_MAX_AGE_DAYS", gcp_cfg.get("sa_key_max_age_days", 90))
 
     # Paths
     export(

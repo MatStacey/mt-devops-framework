@@ -862,6 +862,7 @@ mt-wizard-git() {
 #   GCP_BQ_MAX_BYTES_BILLED
 #   GCL_BILLING_CURRENCY
 #   GCP_WIF_BROAD_CLAIMS
+#   GCP_SA_KEY_MAX_AGE_DAYS
 #######################################
 mt-wizard-gcp() {
   if [[ "$1" == "-h" || "$1" == "--help" ]]; then
@@ -890,6 +891,14 @@ mt-wizard-gcp() {
   local wif_broad_claims
   read -r -p "WIF broad claims [${GCP_WIF_BROAD_CLAIMS:-$GCL_WIF_DEFAULT_BROAD_CLAIMS}]: " wif_broad_claims
   [ -n "$wif_broad_claims" ] && python3 "$CONFIG_MANAGER" update "gcp" "wif_broad_claims" "$wif_broad_claims"
+  echo -e "${C_DIM}💡 Age in days after which 'gcl-sa-audit' reports a service account key as OLD_KEY.${C_RESET}"
+  local sa_key_max_age_days
+  read -r -p "Service account key max age (days) [${GCP_SA_KEY_MAX_AGE_DAYS:-$GCL_SA_KEY_DEFAULT_MAX_AGE_DAYS}]: " sa_key_max_age_days
+  if [ -n "$sa_key_max_age_days" ] && [[ ! "$sa_key_max_age_days" =~ ^[1-9][0-9]*$ ]]; then
+    echo -e "${CB_RED}❌ Not a positive whole number; keeping the current value.${C_RESET}"
+  elif [ -n "$sa_key_max_age_days" ]; then
+    python3 "$CONFIG_MANAGER" update "gcp" "sa_key_max_age_days" "$sa_key_max_age_days"
+  fi
   echo -e "${CB_GREEN}✅ GCP config updated.${C_RESET}"
 }
 

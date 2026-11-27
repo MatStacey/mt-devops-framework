@@ -1,0 +1,1 @@
+[{"name":"projects/proj-a/serviceAccounts/builder@proj-a.iam.gserviceaccount.com/keys/bbb222","validAfterTime":"__RECENT__","validBeforeTime":"2099-01-01T00:00:00Z","disabled":false},{"name":"projects/proj-a/serviceAccounts/builder@proj-a.iam.gserviceaccount.com/keys/ccc333","validAfterTime":"__RECENT__","validBeforeTime":"2099-01-01T00:00:00Z","disabled":true}]
